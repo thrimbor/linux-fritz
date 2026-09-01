@@ -1,0 +1,894 @@
+/*
+ * vim: tabstop=8 : noexpandtab
+ */
+#ifndef _AR7240_H
+#define _AR7240_H
+
+#include <linux/compiler.h>
+#include <asm/addrspace.h>
+
+#ifdef CONFIG_MACH_HORNET
+#include "hornet.h"
+#endif
+
+
+#define ath_reg_t    ar7240_reg_t
+
+#define ath_reg_rd    ar7240_reg_rd
+#define ath_reg_wr_nf    ar7240_reg_wr_nf
+#define ath_reg_wr    ar7240_reg_wr
+
+#define ath_reg_rmw_set    ar7240_reg_rmw_set
+#define ath_reg_rmw_clear    ar7240_reg_rmw_clear
+/*
+ * Address map
+ */
+#define ATH_PCI_MEM_BASE		AR7240_PCI_MEM_BASE
+#define ATH_APB_BASE			AR7240_APB_BASE
+#define ATH_GE0_BASE			AR7240_GE0_BASE
+#define ATH_GE1_BASE			AR7240_GE1_BASE
+#define ATH_USB_OHCI_BASE		AR7240_USB_OHCI_BASE
+#define ATH_USB_EHCI_BASE		AR7240_USB_EHCI_BASE
+#define ATH_SPI_BASE			AR7240_SPI_BASE
+
+/*
+ * Added the PCI LCL RESET register from u-boot
+ * ar7240_soc.h so that we can query the PCI LCL RESET
+ * register for the presence of WLAN H/W.
+ */
+#define ATH_PCI_LCL_BASE		AR7240_PCI_LCL_BASE
+#define ATH_PCI_LCL_APP		AR7240_PCI_LCL_APP
+#define ATH_PCI_LCL_RESET		AR7240_PCI_LCL_RESET
+
+/*
+ * APB block
+ */
+#define ATH_DDR_CTL_BASE		AR7240_DDR_CTL_BASE
+#define ATH_CPU_BASE			AR7240_CPU_BASE
+#define ATH_UART_BASE		AR7240_UART_BASE
+#define ATH_USB_CONFIG_BASE		AR7240_USB_CONFIG_BASE
+#define ATH_GPIO_BASE		AR7240_GPIO_BASE
+#define ATH_PLL_BASE			AR7240_PLL_BASE
+#define ATH_RESET_BASE		AR7240_RESET_BASE
+#define ATH_DMA_BASE			AR7240_DMA_BASE
+#define ATH_SLIC_BASE		AR7240_SLIC_BASE
+#define ATH_STEREO_BASE		AR7240_STEREO_BASE
+#define ATH_PCI_CTLR_BASE		AR7240_PCI_CTLR_BASE
+
+
+/*
+ * RESET block
+ */
+
+#define ATH_RESET_EXT		AR7240_RESET_EXT
+#define ATH_RESET_FULL_CHIP		AR7240_RESET_FULL_CHIP
+#define ATH_RESET_CPU_NMI		AR7240_RESET_CPU_NMI
+#define ATH_RESET_CPU_COLD		AR7240_RESET_CPU_COLD
+#define ATH_RESET_GE1_MAC		AR7240_RESET_GE1_MAC
+#define ATH_RESET_PCIE_PHY_SHIFT	AR7240_RESET_PCIE_PHY_SERIAL
+#define ATH_RESET_GE0_MAC		AR7240_RESET_GE0_MAC
+#define ATH_RESET_ETH_MACPHY		AR7240_RESET_ETH_MACPHY
+#define ATH_RESET_PCIE_PHY		AR7240_RESET_PCIE_PHY
+#define ATH_RESET_PCIE		AR7240_RESET_PCIE
+#define ATH_RESET_USB_HOST		AR7240_RESET_USB_HOST
+
+/*
+ * DDR block
+ */
+#define ATH_DDR_CONFIG		AR7240_DDR_CONFIG
+#define ATH_DDR_CONFIG2		AR7240_DDR_CONFIG2
+#define ATH_DDR_MODE			AR7240_DDR_MODE
+#define ATH_DDR_EXT_MODE		AR7240_DDR_EXT_MODE
+#define ATH_DDR_CONTROL		AR7240_DDR_CONTROL
+#define ATH_DDR_REFRESH		AR7240_DDR_REFRESH
+#define ATH_DDR_RD_DATA_THIS_CYCLE	AR7240_DDR_RD_DATA_THIS_CYCLE
+#define ATH_DDR_TAP_CONTROL0		AR7240_DDR_TAP_CONTROL0
+#define ATH_DDR_TAP_CONTROL1		AR7240_DDR_TAP_CONTROL1
+#define ATH_DDR_TAP_CONTROL2		AR7240_DDR_TAP_CONTROL2
+#define ATH_DDR_TAP_CONTROL3		AR7240_DDR_TAP_CONTROL3
+
+/*
+ * DDR Config values
+ */
+#define ATH_DDR_CONFIG_16BIT		AR7240_DDR_CONFIG_16BIT
+#define ATH_DDR_CONFIG_PAGE_OPEN	AR7240_DDR_CONFIG_PAGE_OPEN
+#define ATH_DDR_CONFIG_CAS_LAT_SHIFT	AR7240_DDR_CONFIG_CAS_LAT_SHIFT
+#define ATH_DDR_CONFIG_TMRD_SHIFT	AR7240_DDR_CONFIG_TMRD_SHIFT
+#define ATH_DDR_CONFIG_TRFC_SHIFT	AR7240_DDR_CONFIG_TRFC_SHIFT
+#define ATH_DDR_CONFIG_TRRD_SHIFT	AR7240_DDR_CONFIG_TRRD_SHIFT
+#define ATH_DDR_CONFIG_TRP_SHIFT	AR7240_DDR_CONFIG_TRP_SHIFT
+#define ATH_DDR_CONFIG_TRCD_SHIFT	AR7240_DDR_CONFIG_TRCD_SHIFT
+#define ATH_DDR_CONFIG_TRAS_SHIFT	AR7240_DDR_CONFIG_TRAS_SHIFT
+
+#define ATH_DDR_CONFIG2_BL2		AR7240_DDR_CONFIG2_BL2
+#define ATH_DDR_CONFIG2_BL4		AR7240_DDR_CONFIG2_BL4
+#define ATH_DDR_CONFIG2_BL8		AR7240_DDR_CONFIG2_BL8
+
+#define ATH_DDR_CONFIG2_BT_IL	AR7240_DDR_CONFIG2_BT_IL
+#define ATH_DDR_CONFIG2_CNTL_OE_EN	AR7240_DDR_CONFIG2_CNTL_OE_EN
+#define ATH_DDR_CONFIG2_PHASE_SEL	AR7240_DDR_CONFIG2_PHASE_SEL
+#define ATH_DDR_CONFIG2_DRAM_CKE	AR7240_DDR_CONFIG2_DRAM_CKE
+#define ATH_DDR_CONFIG2_TWR_SHIFT	AR7240_DDR_CONFIG2_TWR_SHIFT
+#define ATH_DDR_CONFIG2_TRTW_SHIFT	AR7240_DDR_CONFIG2_TRTW_SHIFT
+#define ATH_DDR_CONFIG2_TRTP_SHIFT	AR7240_DDR_CONFIG2_TRTP_SHIFT
+#define ATH_DDR_CONFIG2_TWTR_SHIFT	AR7240_DDR_CONFIG2_TWTR_SHIFT
+#define ATH_DDR_CONFIG2_HALF_WIDTH_L	AR7240_DDR_CONFIG2_HALF_WIDTH_L
+
+#define ATH_DDR_TAP_DEFAULT		AR7240_DDR_TAP_DEFAULT
+
+/*
+ * DDR block, gmac flushing
+ */
+#define ATH_DDR_GE0_FLUSH		AR7240_DDR_GE0_FLUSH
+#define ATH_DDR_GE1_FLUSH		AR7240_DDR_GE1_FLUSH
+#define ATH_DDR_USB_FLUSH		AR7240_DDR_USB_FLUSH
+#define ATH_DDR_PCIE_FLUSH		AR7240_DDR_PCIE_FLUSH
+
+#define ATH_EEPROM_GE0_MAC_ADDR	AR7240_EEPROM_GE0_MAC_ADDR
+#define ATH_EEPROM_GE1_MAC_ADDR	AR7240_EEPROM_GE1_MAC_ADDR
+
+/*
+ * PLL block/CPU
+ */
+
+#define ATH_PLL_CONFIG		AR7240_PLL_CONFIG
+
+
+#define ATH_ETH_PLL_CONFIG		AR7240_ETH_PLL_CONFIG
+#define ATH_PCIE_PLL_CONFIG          AR7240_PCIE_PLL_CONFIG
+#define ATH_ETH_XMII_CONFIG		AR7240_PLL_BASE+0x2c
+#define ATH_AUDIO_PLL_CONFIG		AR7240_AUDIO_PLL_CONFIG
+
+#define ATH_ETH_INT0_CLK		AR7240_ETH_INT0_CLK
+#define ATH_ETH_INT1_CLK		AR7240_ETH_INT1_CLK
+
+
+/*
+ * USB block
+ */
+#define ATH_USB_FLADJ_VAL		AR7240_USB_FLADJ_VAL
+#define ATH_USB_CONFIG		AR7240_USB_CONFIG
+#define ATH_USB_WINDOW		AR7240_USB_WINDOW
+#define ATH_USB_MODE			AR7240_USB_MODE
+
+/*
+ * PCI block
+ */
+#define ATH_PCI_WINDOW		AR7240_PCI_WINDOW
+#define ATH_PCI_WINDOW0_OFFSET	AR7240_PCI_WINDOW0_OFFSET
+#define ATH_PCI_WINDOW1_OFFSET	AR7240_PCI_WINDOW1_OFFSET
+#define ATH_PCI_WINDOW2_OFFSET	AR7240_PCI_WINDOW2_OFFSET
+#define ATH_PCI_WINDOW3_OFFSET	AR7240_PCI_WINDOW3_OFFSET
+#define ATH_PCI_WINDOW4_OFFSET	AR7240_PCI_WINDOW4_OFFSET
+#define ATH_PCI_WINDOW5_OFFSET	AR7240_PCI_WINDOW5_OFFSET
+#define ATH_PCI_WINDOW6_OFFSET	AR7240_PCI_WINDOW6_OFFSET
+#define ATH_PCI_WINDOW7_OFFSET	AR7240_PCI_WINDOW7_OFFSET
+
+#define ATH_PCI_WINDOW0_VAL		AR7240_PCI_WINDOW0_VAL
+#define ATH_PCI_WINDOW1_VAL		AR7240_PCI_WINDOW1_VAL
+#define ATH_PCI_WINDOW2_VAL		AR7240_PCI_WINDOW2_VAL
+#define ATH_PCI_WINDOW3_VAL		AR7240_PCI_WINDOW3_VAL
+#define ATH_PCI_WINDOW4_VAL		AR7240_PCI_WINDOW4_VAL
+#define ATH_PCI_WINDOW5_VAL		AR7240_PCI_WINDOW5_VAL
+#define ATH_PCI_WINDOW6_VAL		AR7240_PCI_WINDOW6_VAL
+#define ATH_PCI_WINDOW7_VAL		AR7240_PCI_WINDOW7_VAL
+
+#define ath_write_pci_window    ar7240_write_pci_window
+
+/*
+ * CRP. To access the host controller config and status registers
+ */
+#define ATH_PCI_CRP			AR7240_PCI_CRP
+#define ATH_PCI_DEV_CFGBASE		AR7240_PCI_DEV_CFGBASE
+#define ATH_PCI_CRP_AD_CBE		AR7240_PCI_CRP_AD_CBE
+#define ATH_PCI_CRP_WRDATA		AR7240_PCI_CRP_WRDATA
+#define ATH_PCI_CRP_RDDATA		AR7240_PCI_CRP_RDDATA
+#define ATH_PCI_ERROR		AR7240_PCI_ERROR
+#define ATH_PCI_ERROR_ADDRESS	AR7240_PCI_ERROR_ADDRESS
+#define ATH_PCI_AHB_ERROR		AR7240_PCI_AHB_ERROR
+#define ATH_PCI_AHB_ERROR_ADDRESS	AR7240_PCI_AHB_ERROR_ADDRESS
+
+#define ATH_CRP_CMD_WRITE		AR7240_CRP_CMD_WRITE
+#define ATH_CRP_CMD_READ		AR7240_CRP_CMD_READ
+
+/*
+ * PCI CFG. To generate config cycles
+ */
+#define ATH_PCI_CFG_AD		AR7240_PCI_CFG_AD
+#define ATH_PCI_CFG_CBE		AR7240_PCI_CFG_CBE
+#define ATH_PCI_CFG_WRDATA		AR7240_PCI_CFG_WRDATA
+#define ATH_PCI_CFG_RDDATA		AR7240_PCI_CFG_RDDATA
+#define ATH_CFG_CMD_READ		AR7240_CFG_CMD_READ
+#define ATH_CFG_CMD_WRITE		AR7240_CFG_CMD_WRITE
+
+#define ATH_PCI_IDSEL_ADLINE_START	AR7240_PCI_IDSEL_ADLINE_START
+
+
+/*
+ * gpio configs
+ */
+#define ATH_GPIO_OE			AR7240_GPIO_OE
+#define ATH_GPIO_IN			AR7240_GPIO_IN
+#define ATH_GPIO_OUT			AR7240_GPIO_OUT
+#define ATH_GPIO_SET			AR7240_GPIO_SET
+#define ATH_GPIO_CLEAR		AR7240_GPIO_CLEAR
+#define ATH_GPIO_INT_ENABLE		AR7240_GPIO_INT_ENABLE
+#define ATH_GPIO_INT_TYPE		AR7240_GPIO_INT_TYPE
+#define ATH_GPIO_INT_POLARITY	AR7240_GPIO_INT_POLARITY
+#define ATH_GPIO_INT_PENDING		AR7240_GPIO_INT_PENDING
+#define ATH_GPIO_INT_MASK		AR7240_GPIO_INT_MASK
+#define ATH_GPIO_IN_ETH_SWITCH_LED	AR7240_GPIO_IN_ETH_SWITCH_LED
+#define ATH_GPIO_OUT_FUNCTION0	AR7240_GPIO_OUT_FUNCTION0
+#define ATH_GPIO_OUT_FUNCTION1	AR7240_GPIO_OUT_FUNCTION1
+#define ATH_GPIO_OUT_FUNCTION2	AR7240_GPIO_OUT_FUNCTION2
+#define ATH_GPIO_OUT_FUNCTION3	AR7240_GPIO_OUT_FUNCTION3
+#define ATH_GPIO_OUT_FUNCTION4	AR7240_GPIO_OUT_FUNCTION4
+#define ATH_GPIO_OUT_FUNCTION5	AR7240_GPIO_OUT_FUNCTION5
+#define ATH_GPIO_IN_ENABLE0		AR7240_GPIO_IN_ENABLE0
+#define ATH_GPIO_IN_ENABLE1		AR7240_GPIO_IN_ENABLE1
+#define ATH_GPIO_IN_ENABLE2		AR7240_GPIO_IN_ENABLE2
+#define ATH_GPIO_IN_ENABLE3		AR7240_GPIO_IN_ENABLE3
+#define ATH_GPIO_IN_ENABLE4		AR7240_GPIO_IN_ENABLE4
+#define ATH_GPIO_IN_ENABLE5		AR7240_GPIO_IN_ENABLE5
+#define ATH_GPIO_IN_ENABLE6		AR7240_GPIO_IN_ENABLE6
+#define ATH_GPIO_IN_ENABLE7		AR7240_GPIO_IN_ENABLE7
+#define ATH_GPIO_IN_ENABLE8		AR7240_GPIO_IN_ENABLE8
+#define ATH_GPIO_IN_ENABLE9		AR7240_GPIO_IN_ENABLE9
+#define ATH_GPIO_FUNCTIONS		AR7240_GPIO_FUNCTIONS
+#define ATH_GPIO_FUNCTION_2		AR7240_GPIO_FUNCTION_2
+#define ATH_GPIO_FUNC_ZERO		AR7240_GPIO_FUNC_ZERO
+
+/*
+ * IRQ Map.
+ * There are 4 conceptual ICs in the system. We generally give a block of 16
+ * irqs to each IC.
+ *	CPU :    0 - 0xf
+ *	MISC: 0x10 - 0x1f
+ *	GPIO: 0x20 - 0x2f
+ *	PCI : 0x30 - 0x40
+ *
+ */
+#define ATH_CPU_IRQ_BASE		AR7240_CPU_IRQ_BASE
+#define ATH_MISC_IRQ_BASE		AR7240_MISC_IRQ_BASE
+#define ATH_GPIO_IRQ_BASE		AR7240_GPIO_IRQ_BASE
+#define ATH_GPIO_IRQ_COUNT		AR7240_GPIO_IRQ_COUNT
+#define ATH_PCI_IRQ_BASE		AR7240_PCI_IRQ_BASE
+
+/*
+ * Interrupts connected to the Misc->GPIO line
+ */
+#define ATH_GPIO_IRQn(_gpio)		AR7240_GPIO_IRQn(_gpio)
+
+//#define MIPS_CPU_IRQ_BASE		AR7240_CPU_IRQ_BASE
+
+/*
+ * The IPs. Connected to CPU (hardware IP's; the first two are software)
+ */
+#define ATH_CPU_IRQ_WLAN		AR7240_CPU_IRQ_BASE+2
+#define ATH_CPU_IRQ_PCI		AR7240_CPU_IRQ_PCI
+#define ATH_CPU_IRQ_USB		AR7240_CPU_IRQ_USB
+#define ATH_CPU_IRQ_GE0		AR7240_CPU_IRQ_GE0
+#define ATH_CPU_IRQ_GE1		AR7240_CPU_IRQ_GE1
+#define ATH_CPU_IRQ_MISC		AR7240_CPU_IRQ_MISC
+#define ATH_CPU_IRQ_TIMER		AR7240_CPU_IRQ_TIMER
+
+/*
+ * Interrupts connected to the CPU->Misc line.
+ */
+#define ATH_MISC_IRQ_TIMER		AR7240_MISC_IRQ_TIMER
+#define ATH_MISC_IRQ_ERROR		AR7240_MISC_IRQ_ERROR
+#define ATH_MISC_IRQ_GPIO		AR7240_MISC_IRQ_GPIO
+#define ATH_MISC_IRQ_UART		AR7240_MISC_IRQ_UART
+#define ATH_MISC_IRQ_WATCHDOG	AR7240_MISC_IRQ_WATCHDOG
+#define ATH_MISC_IRQ_PERF_COUNTER	AR7240_MISC_IRQ_PERF_COUNTER
+#define ATH_MISC_IRQ_USB_OHCI	AR7240_MISC_IRQ_USB_OHCI
+#define ATH_MISC_IRQ_DMA		AR7240_MISC_IRQ_DMA
+#define ATH_MISC_IRQ_ENET_LINK	AR7240_MISC_IRQ_ENET_LINK
+
+#define ATH_MISC_IRQ_COUNT		AR7240_MISC_IRQ_COUNT
+
+static inline void ath_gpio_irq_init(int irq_base) { ar7240_gpio_irq_init(irq_base); }
+
+static inline void ath_misc_enable_irq (unsigned int mask) { ar7240_misc_enable_irq (mask); }
+static inline void ath_misc_disable_irq (unsigned int mask) { ar7240_misc_disable_irq (mask); }
+
+static inline unsigned int ath_misc_get_irq_mask (void) { ar7240_misc_get_irq_mask (); }
+static inline unsigned int ath_misc_get_irq_status (void) { ar7240_misc_get_irq_status (); }
+
+
+/* Interrupts connected to CPU->PCI */
+#ifdef CONFIG_PERICOM
+#	define ATH_PRI_BUS_NO	AR7240_PRI_BUS_NO
+#	define ATH_PORT0_BUS_NO	AR7240_PORT0_BUS_NO
+#	define ATH_PORT1_BUS_NO	AR7240_PORT1_BUS_NO
+#	define ATH_PCI_IRQ_DEV0	AR7240_PCI_IRQ_DEV0
+#	define ATH_PCI_IRQ_DEV1	AR7240_PCI_IRQ_DEV1
+#	define ATH_PCI_IRQ_COUNT	AR7240_PCI_IRQ_COUNT
+#else
+#	define ATH_PCI_IRQ_DEV0	AR7240_PCI_IRQ_DEV0
+#	define ATH_PCI_IRQ_COUNT	AR7240_PCI_IRQ_COUNT
+#endif /* CONFIG_PERICOM */
+
+static inline void ath_pci_irq_init(int irq_base) { ar7240_pci_irq_init(irq_base); } /* ??? */
+
+/*
+ * GPIO Function Enables
+ */
+#define ATH_GPIO_FUNCTION_STEREO_EN	AR7240_GPIO_FUNCTION_STEREO_EN
+#define ATH_GPIO_FUNCTION_SLIC_EN	AR7240_GPIO_FUNCTION_SLIC_EN
+
+#if 0
+#define ATH_GPIO_FUNCTION_SPI_CS_1_EN	AR7240_GPIO_FUNCTION_SPI_CS_1_EN
+#define ATH_GPIO_FUNCTION_SPI_CS_0_EN	AR7240_GPIO_FUNCTION_SPI_CS_0_EN
+#define ATH_GPIO_FUNCTION_UART_EN		AR7240_GPIO_FUNCTION_UART_EN
+#endif
+
+#define ATH_GPIO_FUNCTION_OVERCURRENT_EN		AR7240_GPIO_FUNCTION_OVERCURRENT_EN
+#define ATH_GPIO_FUNCTION_USB_CLK_CORE_EN		AR7240_GPIO_FUNCTION_USB_CLK_CORE_EN
+#define ATH_GPIO_FUNCTION_WMAC_LED			AR7240_GPIO_FUNCTION_WMAC_LED
+#define ATH_GPIO_FUNCTION_STEREO_EN			AR7240_GPIO_FUNCTION_STEREO_EN
+#define ATH_GPIO_FUNCTION_SLIC_EN			AR7240_GPIO_FUNCTION_SLIC_EN
+#define ATH_GPIO_FUNCTION_SPDIF2TCK_EN		AR7240_GPIO_FUNCTION_SPDIF2TCK_EN
+#define ATH_GPIO_FUNCTION_SPDIF_EN			AR7240_GPIO_FUNCTION_SPDIF_EN
+#define ATH_GPIO_FUNCTION_I2S_GPIO_18_22_EN		AR7240_GPIO_FUNCTION_I2S_GPIO_18_22_EN
+#define ATH_GPIO_FUNCTION_I2S_REFCLKEN		AR7240_GPIO_FUNCTION_I2S_REFCLKEN
+#define ATH_GPIO_FUNCTION_I2S_MCKEN			AR7240_GPIO_FUNCTION_I2S_MCKEN
+#define ATH_GPIO_FUNCTION_I2S0_EN			AR7240_GPIO_FUNCTION_I2S0_EN
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED_DUPL_EN	AR7240_GPIO_FUNCTION_ETH_SWITCH_LED_DUPL_EN
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED_COLL	AR7240_GPIO_FUNCTION_ETH_SWITCH_LED_COLL
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED_ACTV	AR7240_GPIO_FUNCTION_ETH_SWITCH_LED_ACTV
+#define ATH_GPIO_FUNCTION_PLL_SHIFT_EN		AR7240_GPIO_FUNCTION_PLL_SHIFT_EN
+#define ATH_GPIO_FUNCTION_EXT_MDIO_SEL		AR7240_GPIO_FUNCTION_EXT_MDIO_SEL
+#define ATH_GPIO_FUNCTION_CLK_OBS6_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS6_ENABLE
+#define ATH_GPIO_FUNCTION_CLK_OBS0_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS0_ENABLE
+#define ATH_GPIO_FUNCTION_SPI_EN			AR7240_GPIO_FUNCTION_SPI_EN
+#define ATH_GPIO_FUNCTION_DDR_DQOE_EN		AR7240_GPIO_FUNCTION_DDR_DQOE_EN
+#define ATH_GPIO_FUNCTION_PCIEPHY_TST_EN		AR7240_GPIO_FUNCTION_PCIEPHY_TST_EN
+#define ATH_GPIO_FUNCTION_S26_UART_DISABLE		AR7240_GPIO_FUNCTION_S26_UART_DISABLE
+#define ATH_GPIO_FUNCTION_SPI_CS_1_EN		AR7240_GPIO_FUNCTION_SPI_CS_1_EN
+#define ATH_GPIO_FUNCTION_SPI_CS_0_EN		AR7240_GPIO_FUNCTION_SPI_CS_0_EN
+#define ATH_GPIO_FUNCTION_CLK_OBS5_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS5_ENABLE
+#define ATH_GPIO_FUNCTION_CLK_OBS4_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS4_ENABLE
+#define ATH_GPIO_FUNCTION_CLK_OBS3_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS3_ENABLE
+#define ATH_GPIO_FUNCTION_CLK_OBS2_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS2_ENABLE
+#define ATH_GPIO_FUNCTION_CLK_OBS1_ENABLE		AR7240_GPIO_FUNCTION_CLK_OBS1_ENABLE
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED4_EN		AR7240_GPIO_FUNCTION_ETH_SWITCH_LED4_EN
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED3_EN		AR7240_GPIO_FUNCTION_ETH_SWITCH_LED3_EN
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED2_EN		AR7240_GPIO_FUNCTION_ETH_SWITCH_LED2_EN
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED1_EN		AR7240_GPIO_FUNCTION_ETH_SWITCH_LED1_EN
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED0_EN		AR7240_GPIO_FUNCTION_ETH_SWITCH_LED0_EN
+#define ATH_GPIO_FUNCTION_UART_RTS_CTS_EN		AR7240_GPIO_FUNCTION_UART_RTS_CTS_EN
+#define ATH_GPIO_FUNCTION_UART_EN			AR7240_GPIO_FUNCTION_UART_EN
+#define ATH_GPIO_FUNCTION_2_EN_I2WS_ON_0		AR7240_GPIO_FUNCTION_2_EN_I2WS_ON_0
+#define ATH_GPIO_FUNCTION_2_EN_I2SCK_ON_1		AR7240_GPIO_FUNCTION_2_EN_I2SCK_ON_1
+#define ATH_GPIO_FUNCTION_2_I2S_ON_LED		AR7240_GPIO_FUNCTION_2_I2S_ON_LED
+#define ATH_GPIO_FUNCTION_SRIF_ENABLE		AR7240_GPIO_FUNCTION_SRIF_ENABLE
+#define ATH_GPIO_FUNCTION_JTAG_DISABLE		AR7240_GPIO_FUNCTION_JTAG_DISABLE
+#define ATH_GPIO_FUNCTION_ETH_SWITCH_LED1_EN		AR7240_GPIO_FUNCTION_ETH_SWITCH_LED1_EN
+
+#define ATH_GPIO_OE_EN(x)				AR7240_GPIO_OE_EN(x)
+#define ATH_GPIO_IN_ENABLE4_SLIC_PCM_FS_IN(x)	AR7240_GPIO_IN_ENABLE4_SLIC_PCM_FS_IN(x)
+#define ATH_GPIO_IN_ENABLE4_SLIC_DATA_IN(x)		AR7240_GPIO_IN_ENABLE4_SLIC_DATA_IN(x)
+#define ATH_GPIO_OUT_FUNCTION3_ENABLE_GPIO_15(x)	AR7240_GPIO_OUT_FUNCTION3_ENABLE_GPIO_15(x)
+#define ATH_GPIO_OUT_FUNCTION3_ENABLE_GPIO_14(x)	AR7240_GPIO_OUT_FUNCTION3_ENABLE_GPIO_14(x)
+#define ATH_GPIO_OUT_FUNCTION3_ENABLE_GPIO_13(x)	AR7240_GPIO_OUT_FUNCTION3_ENABLE_GPIO_13(x)
+#define ATH_GPIO_OUT_FUNCTION3_ENABLE_GPIO_12(x)	AR7240_GPIO_OUT_FUNCTION3_ENABLE_GPIO_12(x)
+#define ATH_GPIO_OUT_FUNCTION2_ENABLE_GPIO_11(x)	AR7240_GPIO_OUT_FUNCTION2_ENABLE_GPIO_11(x)
+#define ATH_GPIO_OUT_FUNCTION2_ENABLE_GPIO_10(x)	AR7240_GPIO_OUT_FUNCTION2_ENABLE_GPIO_10(x)
+#define ATH_GPIO_OUT_FUNCTION2_ENABLE_GPIO_9(x)	AR7240_GPIO_OUT_FUNCTION2_ENABLE_GPIO_9(x)
+#define ATH_GPIO_OUT_FUNCTION2_ENABLE_GPIO_8(x)	AR7240_GPIO_OUT_FUNCTION2_ENABLE_GPIO_8(x)
+#define ATH_GPIO_OUT_FUNCTION1_ENABLE_GPIO_7(x)	AR7240_GPIO_OUT_FUNCTION1_ENABLE_GPIO_7(x)
+#define ATH_GPIO_OUT_FUNCTION1_ENABLE_GPIO_6(x)	AR7240_GPIO_OUT_FUNCTION1_ENABLE_GPIO_6(x)
+#define ATH_GPIO_OUT_FUNCTION1_ENABLE_GPIO_5(x)	AR7240_GPIO_OUT_FUNCTION1_ENABLE_GPIO_5(x)
+#define ATH_GPIO_OUT_FUNCTION1_ENABLE_GPIO_4(x)	AR7240_GPIO_OUT_FUNCTION1_ENABLE_GPIO_4(x)
+#define ATH_GPIO_OUT_FUNCTION0_ENABLE_GPIO_3(x)	AR7240_GPIO_OUT_FUNCTION0_ENABLE_GPIO_3(x)
+#define ATH_GPIO_OUT_FUNCTION0_ENABLE_GPIO_2(x)	AR7240_GPIO_OUT_FUNCTION0_ENABLE_GPIO_2(x)
+#define ATH_GPIO_IN_ENABLE1_I2SEXT_MCLK(x)		AR7240_GPIO_IN_ENABLE1_I2SEXT_MCLK(x)
+#define ATH_GPIO_IN_ENABLE0_UART_SIN(x)		AR7240_GPIO_IN_ENABLE0_UART_SIN(x)
+#define ATH_GPIO_IN_ENABLE0_SPI_DATA_IN(x)		AR7240_GPIO_IN_ENABLE0_SPI_DATA_IN(x)
+
+/*
+ * GPIO Access & Control
+ */
+static inline void ath_gpio_init(void) { ar7240_gpio_init(); }
+static inline void ath_gpio_down(void) { ar7240_gpio_down(); }
+static inline void ath_gpio_up(void) { ar7240_gpio_up(); }
+
+/*
+ * GPIO Helper Functions
+ */
+static inline void ath_gpio_enable_slic(void) { ar7240_gpio_enable_slic(); }
+
+/* enable UART block, takes away GPIO 10 and 9 */
+static inline void ath_gpio_enable_uart(void) { ar7240_gpio_enable_uart(); }
+
+/* enable STEREO block, takes away GPIO 11,8,7, and 6 */
+static inline void ath_gpio_enable_stereo(void) { ar7240_gpio_enable_stereo(); }
+
+/* allow CS0/CS1 to be controlled via SPI register, takes away GPIO0/GPIO1 */
+static inline void ath_gpio_enable_spi_cs1_cs0(void) { ar7240_gpio_enable_spi_cs1_cs0(); }
+
+/* allow GPIO0/GPIO1 to be used as SCL/SDA for software based i2c */
+static inline void ath_gpio_enable_i2c_on_gpio_0_1(void) { ar7240_gpio_enable_i2c_on_gpio_0_1(); }
+
+/*
+ * GPIO General Functions
+ */
+static inline void ath_gpio_drive_low(unsigned int mask) { ar7240_gpio_drive_low(mask); }
+static inline void ath_gpio_drive_high(unsigned int mask) { ar7240_gpio_drive_high(mask); }
+
+static inline unsigned int ath_gpio_float_high_test(unsigned int mask) { ar7240_gpio_float_high_test(mask); }
+
+/*
+ * Software support of i2c on gpio 0/1
+ */
+static inline int ath_i2c_raw_write_bytes_to_addr(int addr, unsigned char *buffer, int count) { ar7240_i2c_raw_write_bytes_to_addr(addr, buffer, count); }
+static inline int ath_i2c_raw_read_bytes_from_addr(int addr, unsigned char *buffer, int count) { ar7240_i2c_raw_read_bytes_from_addr(addr, buffer, count); }
+
+/* SPI, SLIC and GPIO are all multiplexed on gpio pins */
+#define ATH_SPI_FS		AR7240_SPI_FS
+#define ATH_SPI_READ		AR7240_SPI_READ
+#define ATH_SPI_CLOCK	AR7240_SPI_CLOCK
+#define ATH_SPI_WRITE	AR7240_SPI_WRITE
+#define ATH_SPI_RD_STATUS	AR7240_SPI_RD_STATUS
+#define ATH_SPI_SHIFT_DO	AR7240_SPI_SHIFT_DO
+#define ATH_SPI_SHIFT_CNT	AR7240_SPI_SHIFT_CNT
+#define ATH_SPI_SHIFT_DI	AR7240_SPI_SHIFT_DI
+#define ATH_SPI_D0_HIGH	AR7240_SPI_D0_HIGH
+#define ATH_SPI_CLK_HIGH	AR7240_SPI_CLK_HIGH
+
+#define ATH_SPI_CS_ENABLE_0	AR7240_SPI_CS_ENABLE_0
+#define ATH_SPI_CS_ENABLE_1	AR7240_SPI_CS_ENABLE_1
+#define ATH_SPI_CS_ENABLE_2	AR7240_SPI_CS_ENABLE_2
+//#define ATH_SPI_CS_DIS	AR7240_SPI_CS_DIS
+#define ATH_SPI_CS_DIS	AR7240_SPI_CS_DIS
+
+
+/*
+ * SOC
+ */
+#define ATH_SPI_CMD_WRITE_SR		AR7240_SPI_CMD_WRITE_SR
+#define ATH_SPI_CMD_WREN		AR7240_SPI_CMD_WREN
+#define ATH_SPI_CMD_RD_STATUS	AR7240_SPI_CMD_RD_STATUS
+#define ATH_SPI_CMD_FAST_READ	AR7240_SPI_CMD_FAST_READ
+#define ATH_SPI_CMD_PAGE_PROG	AR7240_SPI_CMD_PAGE_PROG
+#define ATH_SPI_CMD_SECTOR_ERASE	AR7240_SPI_CMD_SECTOR_ERASE
+
+/* Functions to access SPI through software. Example:
+ *
+ * ar7240_spi_down(); ---------------------- disable others from accessing SPI bus taking semaphore
+ * ar7240_spi_enable_soft_access(); -------- disable HW control of SPI
+ *
+ * <board specific chip select routine>
+ *
+ * <read/write SPI using using custom routine or general purposeflash routines
+ * Custom routine may use:
+ *
+ *	ar7240_spi_raw_output_u8(unsigned char)
+ *	ar7240_spi_raw_output_u32(unsigned int)
+ *	ar7240_spi_raw_input_u32()
+ *
+ * General purpose flash routines:
+ *	ar7240_spi_flash_read_page(unsigned int addr, unsigned char *data, int len);
+ *	ar7240_spi_flash_write_page(unsigned int addr, unsigned char *data, int len);
+ *	ar7240_spi_flash_sector_erase(unsigned int addr);
+ * >
+ *
+ * <board specific chip deselect routine>
+ *
+ * ar7240_spi_disable_soft_acess(); ------- enable HW control of SPI bus
+ * ar7240_spi_up(); ----------------------- enable others to access SPI bus releasing semaphore
+ */
+static inline void ath_spi_init(void) { ar7240_spi_init(); }
+static inline void ath_spi_down(void) { ar7240_spi_down(); }
+static inline void ath_spi_up(void) { ar7240_spi_up(); }
+
+static inline void ath_spi_enable_soft_access(void) { ar7240_spi_enable_soft_access(); }
+
+static inline void ath_spi_disable_soft_access(void) { ar7240_spi_disable_soft_access(); }
+
+static inline void ath_spi_raw_output_u8(unsigned char val) { ar7240_spi_raw_output_u8(val); }
+static inline void ath_spi_raw_output_u32(unsigned int val) { ar7240_spi_raw_output_u32(val); }
+static inline unsigned int ath_spi_raw_input_u8(void) { ar7240_spi_raw_input_u8(); }
+static inline unsigned int ath_spi_raw_input_u32(void) { ar7240_spi_raw_input_u32(); }
+
+#define ATH_SPI_SECTOR_SIZE	AR7240_SPI_SECTOR_SIZE
+
+static inline void ath_spi_flash_read_page(unsigned int addr, unsigned char *data, int len) { ar7240_spi_flash_read_page(addr, data, len); }
+static inline void ath_spi_flash_write_page(unsigned int addr, unsigned char *data, int len) { ar7240_spi_flash_write_page(addr, data, len); }
+static inline void ath_spi_flash_sector_erase(unsigned int addr) { ar7240_spi_flash_sector_erase(addr); }
+
+/*
+ * Allow access to cs0-2 when GPIO Function enables cs0-2 through SPI register.
+ */
+static inline void ath_spi_enable_cs0(void) { ar7240_spi_enable_cs0(); }
+
+static inline void ath_spi_enable_cs1(void) { ar7240_spi_enable_cs1(); }
+
+static inline void ath_spi_disable_cs(void) { ar7240_spi_disable_cs(); }
+
+/*
+ * Example usage to access BOOT flash
+ */
+static inline void ath_spi_flash_cs0_sector_erase(unsigned int addr) { ar7240_spi_flash_cs0_sector_erase(addr); }
+
+static inline void ath_spi_flash_cs0_write_page(unsigned int addr, unsigned char *data, int len) { ar7240_spi_flash_cs0_write_page(addr, data, len); }
+
+/*
+ * Reset block
+ */
+#define ATH_GENERAL_TMR		AR7240_GENERAL_TMR
+#define ATH_GENERAL_TMR_RELOAD	AR7240_GENERAL_TMR_RELOAD
+#define ATH_WATCHDOG_TMR_CONTROL	AR7240_WATCHDOG_TMR_CONTROL
+#define ATH_WATCHDOG_TMR		AR7240_WATCHDOG_TMR
+#define ATH_MISC_INT_STATUS		AR7240_MISC_INT_STATUS
+#define ATH_MISC_INT_MASK		AR7240_MISC_INT_MASK
+
+#define ATH_PCI_INT_STATUS		AR7240_PCI_INT_STATUS
+#define ATH_PCI_INT_MASK		AR7240_PCI_INT_MASK
+#define ATH_PCI_INT_A_L		AR7240_PCI_INT_A_L
+#define ATH_PCI_INT_B_L		AR7240_PCI_INT_B_L
+#define ATH_PCI_INT_C_L		AR7240_PCI_INT_C_L
+#define ATH_GLOBAL_INT_STATUS	AR7240_GLOBAL_INT_STATUS
+#define ATH_RESET			AR7240_RESET
+#define ATH_OBSERVATION_ENABLE	AR7240_OBSERVATION_ENABLE
+
+#define ATH_BOOTSTRAP_REG		(AR7240_RESET_BASE + 0xb0)
+#define ATH_REF_CLK_40			(1 << 4) /* 0 - 25MHz	1 - 40 MHz */
+#define ATH_DDR_WIDTH_32		(1 << 3)
+
+#define ATH_PCIE_WMAC_INT_STATUS	AR7240_PCIE_WMAC_INT_STATUS
+
+
+#define ATH_WD_ACT_MASK		AR7240_WD_ACT_MASK
+#define ATH_WD_ACT_NONE		AR7240_WD_ACT_NONE
+#define ATH_WD_ACT_GP_INTR		AR7240_WD_ACT_GP_INTR
+#define ATH_WD_ACT_NMI		AR7240_WD_ACT_NMI
+#define ATH_WD_ACT_RESET		AR7240_WD_ACT_RESET
+
+#define ATH_WD_LAST_SHIFT		AR7240_WD_LAST_SHIFT
+#define ATH_WD_LAST_MASK		AR7240_WD_LAST_MASK
+
+
+
+/*
+ * Performace counters
+ */
+#define ATH_PERF0_COUNTER		AR7240_PERF0_COUNTER
+#define ATH_PERF1_COUNTER		AR7240_PERF1_COUNTER
+
+/*
+ * SLIC/STEREO DMA Size Configurations
+ */
+#define ATH_DMA_BUF_SIZE_4X2		AR7240_DMA_BUF_SIZE_4X2
+#define ATH_DMA_BUF_SIZE_8X2		AR7240_DMA_BUF_SIZE_8X2
+#define ATH_DMA_BUF_SIZE_16X2	AR7240_DMA_BUF_SIZE_16X2
+#define ATH_DMA_BUF_SIZE_32X2	AR7240_DMA_BUF_SIZE_32X2
+#define ATH_DMA_BUF_SIZE_64X2	AR7240_DMA_BUF_SIZE_64X2
+#define ATH_DMA_BUF_SIZE_128X2	AR7240_DMA_BUF_SIZE_128X2
+#define ATH_DMA_BUF_SIZE_256X2	AR7240_DMA_BUF_SIZE_256X2
+#define ATH_DMA_BUF_SIZE_512X2	AR7240_DMA_BUF_SIZE_512X2
+
+/*
+ * SLIC/STEREO DMA Assignments
+ */
+#define ATH_DMA_CHAN_SLIC0_RX	AR7240_DMA_CHAN_SLIC0_RX
+#define ATH_DMA_CHAN_SLIC1_RX	AR7240_DMA_CHAN_SLIC1_RX
+#define ATH_DMA_CHAN_STEREO_RX	AR7240_DMA_CHAN_STEREO_RX
+#define ATH_DMA_CHAN_SLIC0_TX	AR7240_DMA_CHAN_SLIC0_TX
+#define ATH_DMA_CHAN_SLIC1_TX	AR7240_DMA_CHAN_SLIC1_TX
+#define ATH_DMA_CHAN_STEREO_TX	AR7240_DMA_CHAN_STEREO_TX
+
+/* Low-level routines */
+static inline void ath_dma_addr_wr(int chan, unsigned int val) { ar7240_dma_addr_wr(chan, val); }
+static inline void ath_dma_config_wr(int chan, unsigned int val) { ar7240_dma_config_wr(chan, val); }
+static inline void ath_dma_update_wr(int chan, unsigned int val) { ar7240_dma_update_wr(chan, val); }
+
+static inline unsigned int ath_dma_addr_rd(int chan) { ar7240_dma_addr_rd(chan); }
+static inline unsigned int ath_dma_config_rd(int chan) { ar7240_dma_config_rd(chan); }
+
+/* Use this routine to configure DMA access. Example:
+ *
+ * ar7240_dma_config_buffer( AR7240_DMA_CHAN_SLIC0_TX,
+ *				< address of buffer >,
+ *				AR7240_DMA_BUF_SIZE_512X2
+ */
+static inline void ath_dma_config_buffer(int chan, void *buffer, int sizeCfg) { ar7240_dma_config_buffer(chan, buffer, sizeCfg); }
+
+/*
+ * MBOX register definitions
+ */
+#define ATH_MBOX_FIFO			AR7240_MBOX_FIFO
+#define ATH_MBOX_FIFO_STATUS			AR7240_MBOX_FIFO_STATUS
+#define ATH_MBOX_SLIC_FIFO_STATUS		AR7240_MBOX_SLIC_FIFO_STATUS
+#define ATH_MBOX_DMA_POLICY			AR7240_MBOX_DMA_POLICY
+#define ATH_MBOX_SLIC_DMA_POLICY		AR7240_MBOX_SLIC_DMA_POLICY
+#define ATH_MBOX_DMA_RX_DESCRIPTOR_BASE0	AR7240_MBOX_DMA_RX_DESCRIPTOR_BASE0
+#define ATH_MBOX_DMA_RX_CONTROL0		AR7240_MBOX_DMA_RX_CONTROL0
+#define ATH_MBOX_DMA_TX_DESCRIPTOR_BASE0	AR7240_MBOX_DMA_TX_DESCRIPTOR_BASE0
+#define ATH_MBOX_DMA_TX_CONTROL0		AR7240_MBOX_DMA_TX_CONTROL0
+#define ATH_MBOX_DMA_RX_DESCRIPTOR_BASE1	AR7240_MBOX_DMA_RX_DESCRIPTOR_BASE1
+#define ATH_MBOX_DMA_RX_CONTROL1		AR7240_MBOX_DMA_RX_CONTROL1
+#define ATH_MBOX_DMA_TX_DESCRIPTOR_BASE1	AR7240_MBOX_DMA_TX_DESCRIPTOR_BASE1
+#define ATH_MBOX_DMA_TX_CONTROL1		AR7240_MBOX_DMA_TX_CONTROL1
+#define ATH_MBOX_FRAME			AR7240_MBOX_FRAME
+#define ATH_MBOX_SLIC_FRAME			AR7240_MBOX_SLIC_FRAME
+#define ATH_MBOX_FIFO_TIMEOUT		AR7240_MBOX_FIFO_TIMEOUT
+#define ATH_MBOX_INT_STATUS			AR7240_MBOX_INT_STATUS
+#define ATH_MBOX_SLIC_INT_STATUS		AR7240_MBOX_SLIC_INT_STATUS
+#define ATH_MBOX_INT_ENABLE			AR7240_MBOX_INT_ENABLE
+#define ATH_MBOX_SLIC_INT_ENABLE		AR7240_MBOX_SLIC_INT_ENABLE
+#define ATH_MBOX_FIFO_RESET			AR7240_MBOX_FIFO_RESET
+#define ATH_MBOX_SLIC_FIFO_RESET		AR7240_MBOX_SLIC_FIFO_RESET
+
+/*
+ * MBOX Enables
+ */
+#define ATH_MBOX_DMA_POLICY_RX_QUANTUM		AR7240_MBOX_DMA_POLICY_RX_QUANTUM
+#define ATH_MBOX_DMA_POLICY_TX_QUANTUM		AR7240_MBOX_DMA_POLICY_TX_QUANTUM
+#define ATH_MBOX_DMA_POLICY_TX_FIFO_THRESH(x)	AR7240_MBOX_DMA_POLICY_TX_FIFO_THRESH(x)
+
+/*
+ * SLIC register definitions
+ */
+#define ATH_SLIC_STATUS			AR7240_SLIC_STATUS
+#define ATH_SLIC_CNTRL			AR7240_SLIC_CNTRL
+#define ATH_SLIC_SLOT0_NUM			AR7240_SLIC_SLOT0_NUM
+#define ATH_SLIC_SLOT1_NUM			AR7240_SLIC_SLOT1_NUM
+#define ATH_SLIC_SAM_POS			AR7240_SLIC_SAM_POS
+#define ATH_SLIC_FREQ_DIV			AR7240_SLIC_FREQ_DIV
+
+/*
+ * SLIC Control bits
+ */
+#define ATH_SLIC_CNTRL_ENABLE		AR7240_SLIC_CNTRL_ENABLE
+#define ATH_SLIC_CNTRL_SLOT0_ENABLE		AR7240_SLIC_CNTRL_SLOT0_ENABLE
+#define ATH_SLIC_CNTRL_SLOT1_ENABLE		AR7240_SLIC_CNTRL_SLOT1_ENABLE
+#define ATH_SLIC_CNTRL_IRQ_ENABLE		AR7240_SLIC_CNTRL_IRQ_ENABLE
+
+/*
+ * SLIC Helper Functions
+ */
+static inline unsigned int ath_slic_status_rd(void) { ar7240_slic_status_rd(); }
+static inline unsigned int ath_slic_cntrl_rd(void) { ar7240_slic_cntrl_rd(); }
+
+static inline void ath_slic_cntrl_wr(unsigned int val) { ar7240_slic_cntrl_wr(val); }
+static inline void ath_slic_0_slot_pos_wr(unsigned int val) { ar7240_slic_0_slot_pos_wr(val); }
+static inline void ath_slic_1_slot_pos_wr(unsigned int val) { ar7240_slic_1_slot_pos_wr(val); }
+static inline void ath_slic_freq_div_wr(unsigned int val) { ar7240_slic_freq_div_wr(val); }
+static inline void ath_slic_sample_pos_wr(unsigned int val) { ar7240_slic_sample_pos_wr(val); }
+
+static inline void ath_slic_setup(int _sam, int _s0n, int _s1n) { ar7240_slic_setup(_sam, _s0n, _s1n); }
+
+/*
+ * STEREO register definitions
+ */
+#define ATH_STEREO_CONFIG			AR7240_STEREO_CONFIG
+#define ATH_STEREO_VOLUME			AR7240_STEREO_VOLUME
+#define ATH_STEREO_MCLK			AR7240_STEREO_MCLK
+
+/*
+ * Stereo Configuration Bits
+ */
+#define ATH_STEREO_CONFIG_SPDIF_ENABLE		AR7240_STEREO_CONFIG_SPDIF_ENABLE
+#define ATH_STEREO_CONFIG_ENABLE			AR7240_STEREO_CONFIG_ENABLE
+#define ATH_STEREO_CONFIG_RESET			AR7240_STEREO_CONFIG_RESET
+#define ATH_STEREO_CONFIG_DELAY			AR7240_STEREO_CONFIG_DELAY
+#define ATH_STEREO_CONFIG_PCM_SWAP			AR7240_STEREO_CONFIG_PCM_SWAP
+#define ATH_STEREO_CONFIG_MIC_WORD_SIZE		AR7240_STEREO_CONFIG_MIC_WORD_SIZE
+#define ATH_STEREO_CONFIG_MODE(x)			AR7240_STEREO_CONFIG_MODE(x)
+#define ATH_STEREO_MODE_STEREO			AR7240_STEREO_MODE_STEREO
+#define ATH_STEREO_MODE_LEFT				AR7240_STEREO_MODE_LEFT
+#define ATH_STEREO_MODE_RIGHT			AR7240_STEREO_MODE_RIGHT
+#define ATH_STEREO_CONFIG_DATA_WORD_SIZE(x)		AR7240_STEREO_CONFIG_DATA_WORD_SIZE(x)
+#define ATH_STEREO_CONFIG_I2S_32B_WORD		AR7240_STEREO_CONFIG_I2S_32B_WORD
+#define ATH_STEREO_CONFIG_I2S_MCLK_SEL		AR7240_STEREO_CONFIG_I2S_MCLK_SEL
+#define ATH_STEREO_CONFIG_SAMPLE_CNT_CLEAR_TYPE	AR7240_STEREO_CONFIG_SAMPLE_CNT_CLEAR_TYPE
+#define ATH_STEREO_CONFIG_MASTER			AR7240_STEREO_CONFIG_MASTER
+#define ATH_STEREO_CONFIG_PSEDGE(x)			AR7240_STEREO_CONFIG_PSEDGE(x)
+
+/*
+ * Word sizes to use with common configurations:
+ */
+#define ATH_STEREO_WS_8B		AR7240_STEREO_WS_8B
+#define ATH_STEREO_WS_16B		AR7240_STEREO_WS_16B
+#define ATH_STEREO_WS_24B		AR7240_STEREO_WS_24B
+#define ATH_STEREO_WS_32B		AR7240_STEREO_WS_32B
+
+/*
+ * Slic Configuration Bits
+ */
+#define ATH_SLIC_SLOT_SEL(x)					AR7240_SLIC_SLOT_SEL(x)
+#define ATH_SLIC_CLOCK_CTRL_DIV(x)				AR7240_SLIC_CLOCK_CTRL_DIV(x)
+#define ATH_SLIC_CTRL_CLK_EN					AR7240_SLIC_CTRL_CLK_EN
+#define ATH_SLIC_CTRL_MASTER					AR7240_SLIC_CTRL_MASTER
+#define ATH_SLIC_CTRL_EN					AR7240_SLIC_CTRL_EN
+#define ATH_SLIC_TX_SLOTS1_EN(x)				AR7240_SLIC_TX_SLOTS1_EN(x)
+#define ATH_SLIC_TX_SLOTS2_EN(x)				AR7240_SLIC_TX_SLOTS2_EN(x)
+#define ATH_SLIC_RX_SLOTS1_EN(x)				AR7240_SLIC_RX_SLOTS1_EN(x)
+#define ATH_SLIC_RX_SLOTS2_EN(x)				AR7240_SLIC_RX_SLOTS2_EN(x)
+#define ATH_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS_EXTEND	AR7240_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS_EXTEND
+#define ATH_SLIC_TIMING_CTRL_DATAOEN_ALWAYS			AR7240_SLIC_TIMING_CTRL_DATAOEN_ALWAYS
+#define ATH_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS(x)		AR7240_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS(x)
+#define ATH_SLIC_TIMING_CTRL_TXDATA_FS_SYNC(x)		AR7240_SLIC_TIMING_CTRL_TXDATA_FS_SYNC(x)
+#define ATH_SLIC_TIMING_CTRL_LONG_FSCLKS(x)			AR7240_SLIC_TIMING_CTRL_LONG_FSCLKS(x)
+#define ATH_SLIC_TIMING_CTRL_FS_POS				AR7240_SLIC_TIMING_CTRL_FS_POS
+#define ATH_SLIC_TIMING_CTRL_LONG_FS				AR7240_SLIC_TIMING_CTRL_LONG_FS
+#define ATH_SLIC_INTR_MASK(x)				AR7240_SLIC_INTR_MASK(x)
+#define ATH_SLIC_SWAP_RX_DATA				AR7240_SLIC_SWAP_RX_DATA
+#define ATH_SLIC_SWAP_TX_DATA				AR7240_SLIC_SWAP_TX_DATA
+
+#define ATH_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS_2_NGEDGE	AR7240_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS_2_NGEDGE
+#define ATH_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS_1_NGEDGE	AR7240_SLIC_TIMING_CTRL_RXDATA_SAMPLE_POS_1_NGEDGE
+#define ATH_SLIC_TIMING_CTRL_TXDATA_FS_SYNC_NXT_PSEDGE	AR7240_SLIC_TIMING_CTRL_TXDATA_FS_SYNC_NXT_PSEDGE
+#define ATH_SLIC_TIMING_CTRL_TXDATA_FS_SYNC_NXT_NGEDGE	AR7240_SLIC_TIMING_CTRL_TXDATA_FS_SYNC_NXT_NGEDGE
+#define ATH_SLIC_TIMING_CTRL_LONG_FSCLKS_1BIT		AR7240_SLIC_TIMING_CTRL_LONG_FSCLKS_1BIT
+#define ATH_SLIC_TIMING_CTRL_LONG_FSCLKS_8BIT		AR7240_SLIC_TIMING_CTRL_LONG_FSCLKS_8BIT
+#define ATH_SLIC_INTR_STATUS_NO_INTR				AR7240_SLIC_INTR_STATUS_NO_INTR
+#define ATH_SLIC_INTR_STATUS_UNEXP_FRAME			AR7240_SLIC_INTR_STATUS_UNEXP_FRAME
+#define ATH_SLIC_INTR_MASK_RESET				AR7240_SLIC_INTR_MASK_RESET
+#define ATH_SLIC_INTR_MASK_0					AR7240_SLIC_INTR_MASK_0
+#define ATH_SLIC_INTR_MASK_1					AR7240_SLIC_INTR_MASK_1
+#define ATH_SLIC_INTR_MASK_2					AR7240_SLIC_INTR_MASK_2
+#define ATH_SLIC_INTR_MASK_3					AR7240_SLIC_INTR_MASK_3
+#define ATH_SLIC_INTR_MASK_4					AR7240_SLIC_INTR_MASK_4
+
+/*
+ * Audio data is little endian so 16b values must be swapped in the DMA buffers.
+ */
+static inline int ath_stereo_sample_16b_cvt(unsigned int _v) { ar7240_stereo_sample_16b_cvt(_v); }
+
+/* Low level read/write of configuration */
+static inline void ath_stereo_config_wr(unsigned int val) { ar7240_stereo_config_wr(val); }
+static inline void ath_stereo_volume_wr(unsigned int val) { ar7240_stereo_volume_wr(val); }
+
+static inline unsigned int ath_stereo_config_rd(void) { ar7240_stereo_config_rd(); }
+static inline unsigned int ath_stereo_volume_rd(void) { ar7240_stereo_volume_rd(); }
+
+/*
+ * Common configurations for stereo block
+ */
+#define ATH_STEREO_CFG_MASTER_STEREO_FS32_48KHZ(ws) AR7240_STEREO_CFG_MASTER_STEREO_FS32_48KHZ(ws)
+	AR7240_STEREO_CONFIG_DELAY | \
+	AR7240_STEREO_CONFIG_RESET | \
+	AR7240_STEREO_CONFIG_DATA_WORD_SIZE(ws) | \
+	AR7240_STEREO_CONFIG_MODE(AR7240_STEREO_MODE_LEFT) | \
+	AR7240_STEREO_CONFIG_MASTER | \
+	AR7240_STEREO_CONFIG_PSEDGE(26))
+
+#define ATH_STEREO_CFG_MASTER_STEREO_FS64_48KHZ(ws) AR7240_STEREO_CFG_MASTER_STEREO_FS64_48KHZ(ws)
+	AR7240_STEREO_CONFIG_DELAY | \
+	AR7240_STEREO_CONFIG_RESET | \
+	AR7240_STEREO_CONFIG_DATA_WORD_SIZE(ws) | \
+	AR7240_STEREO_CONFIG_MODE(AR7240_STEREO_MODE_STEREO) | \
+	AR7240_STEREO_CONFIG_I2S_32B_WORD | \
+	AR7240_STEREO_CONFIG_MASTER | \
+	AR7240_STEREO_CONFIG_PSEDGE(13))
+
+#define ATH_STEREO_CFG_SLAVE_STEREO_FS32_48KHZ(ws) AR7240_STEREO_CFG_SLAVE_STEREO_FS32_48KHZ(ws)
+	AR7240_STEREO_CONFIG_RESET | \
+	AR7240_STEREO_CONFIG_DATA_WORD_SIZE(ws) | \
+	AR7240_STEREO_CONFIG_MODE(AR7240_STEREO_MODE_STEREO) | \
+	AR7240_STEREO_CONFIG_PSEDGE(26))
+
+#define ATH_STEREO_CFG_SLAVE_STEREO_FS64_48KHZ(ws) AR7240_STEREO_CFG_SLAVE_STEREO_FS64_48KHZ(ws)
+	AR7240_STEREO_CONFIG_RESET | \
+	AR7240_STEREO_CONFIG_I2S_32B_WORD | \
+	AR7240_STEREO_CONFIG_DATA_WORD_SIZE(ws) | \
+	AR7240_STEREO_CONFIG_MODE(AR7240_STEREO_MODE_STEREO) | \
+	AR7240_STEREO_CONFIG_PSEDGE(13))
+
+/* Routine sets up STEREO block for use. Use one of the predefined
+ * configurations. Example:
+ *
+ * ar7240_stereo_config_setup(
+ *	AR7240_STEREO_CFG_MASTER_STEREO_FS32_48KHZ(AR7240_STEREO_WS_16B))
+ *
+ */
+static inline void ath_stereo_config_setup(unsigned int cfg) { ar7240_stereo_config_setup(cfg); }
+
+/* 48 kHz, 16 bit data & i2s 32fs */
+static inline void ath_setup_for_stereo_master(int ws) { ar7240_setup_for_stereo_master(ws); }
+
+/* 48 kHz, 16 bit data & 32fs i2s */
+static inline void ath_setup_for_stereo_slave(int ws) { ar7240_setup_for_stereo_slave(ws); }
+
+#define ath_perf0_ctl    ar7240_perf0_ctl
+#define ath_perf1_ctl    ar7240_perf1_ctl
+
+
+/* These are values used in platform.inc to select PLL settings */
+
+#define ATH_REV_ID			AR7240_REV_ID
+#define ATH_REV_ID_MASK		AR7240_REV_ID_MASK
+#define ATH_REV_ID_AR7130		AR7240_REV_ID_AR7130
+#define ATH_REV_ID_AR7141		AR7240_REV_ID_AR7141
+#define ATH_REV_ID_AR7161		AR7240_REV_ID_AR7161
+
+#define ATH_PLL_USE_REV_ID		AR7240_PLL_USE_REV_ID
+#define ATH_PLL_200_200_100		AR7240_PLL_200_200_100
+#define ATH_PLL_300_300_150		AR7240_PLL_300_300_150
+#define ATH_PLL_333_333_166		AR7240_PLL_333_333_166
+#define ATH_PLL_266_266_133		AR7240_PLL_266_266_133
+#define ATH_PLL_266_266_66		AR7240_PLL_266_266_66
+#define ATH_PLL_400_400_200		AR7240_PLL_400_400_200
+#define ATH_PLL_600_400_150		AR7240_PLL_600_400_150
+
+
+#define AR7240_RESET_EXT		(1 << 28)
+#define AR7240_RESET_FULL_CHIP		(1 << 24)
+#define AR7240_RESET_CPU_NMI		(1 << 21)
+#define AR7240_RESET_CPU_COLD		(1 << 20)
+#define AR7240_RESET_GE1_MAC		(1 << 13)
+#define AR7240_RESET_PCIE_PHY_SERIAL	(1 << 10)
+#define AR7240_RESET_GE0_MAC		(1 <<  9)
+#define AR7240_RESET_ETH_MACPHY		(1 <<  8)
+#define AR7240_RESET_PCIE_PHY		(1 <<  7)
+#define AR7240_RESET_PCIE		(1 <<  6)
+#define AR7240_RESET_USB_HOST		(1 <<  5)
+/*
+ * AR7240_RESET bit defines
+ */
+#define ATH_RESET_SLIC			AR7240_RESET_SLIC
+#define ATH_RESET_EXTERNAL		AR7240_RESET_EXT
+#define ATH_RESET_FULL_CHIP		AR7240_RESET_FULL_CHIP
+#define ATH_RESET_GE0_MDIO		AR7240_RESET_GE0_MDIO
+#define ATH_RESET_CPU_NMI		AR7240_RESET_CPU_NMI
+#define ATH_RESET_CPU_COLD_RESET_MASK	AR7240_RESET_CPU_COLD
+#define ATH_RESET_DMA			AR7240_RESET_DMA
+#define ATH_RESET_STEREO		AR7240_RESET_STEREO
+#define ATH_RESET_DDR			AR7240_RESET_DDR
+#define ATH_RESET_GE1_MAC		AR7240_RESET_GE1_MAC
+#define ATH_RESET_GE1_PHY		AR7240_RESET_GE1_PHY
+#ifdef CONFIG_MACH_HORNET
+#define ATH_RESET_WMAC			AR7240_RESET_WMAC
+#else
+#define ATH_RESET_USB_PHY_ANALOG	AR7240_RESET_USB_PHY_ANALOG
+#endif
+#define ATH_RESET_PCIE_PHY_SHIFT	AR7240_RESET_PCIE_PHY_SERIAL
+#define ATH_RESET_GE0_MAC		AR7240_RESET_GE0_MAC
+#define ATH_RESET_GE0_PHY		AR7240_RESET_ETH_MACPHY
+#define ATH_RESET_PCIE_PHY		AR7240_RESET_PCIE_PHY	
+#define ATH_RESET_PCIE			AR7240_RESET_PCIE	
+#define ATH_RESET_USBSUS_OVRIDE		AR7240_RESET_USBSUS_OVRIDE
+#define ATH_RESET_USB_OHCI_DLL		AR7240_RESET_USB_OHCI_DLL
+#define ATH_RESET_USB_HOST		AR7240_RESET_USB_HOST
+#define ATH_RESET_USB_PHY		AR7240_RESET_USB_PHY
+#define ATH_RESET_PCI_BUS		AR7240_RESET_PCI_BUS
+#define ATH_RESET_PCI_CORE		AR7240_RESET_PCI_CORE
+#define ATH_RESET_I2S			AR7240_RESET_I2S
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+#undef is_wasp
+#define is_wasp()		(0)
+
+#ifdef CONFIG_MACH_HORNET
+#define ATH_WMAC_BASE	AR7240_APB_BASE + 0x100000
+#define ATH_WMAC_LEN		0x1ffff /* XXX:Check this */
+#endif
+
+static inline void ath_reset(unsigned int mask) { ar7240_reset(mask); }
+
+/*
+ * Mii block
+ */
+#define ATH_MII0_CTRL		AR7240_MII0_CTRL
+#define ATH_MII1_CTRL		AR7240_MII1_CTRL
+
+//#define BIT(_x) (1 << (_x))
+
+#define ath_get_bit    ar7240_get_bit
+
+#define ath_flush_ge    ar7240_flush_ge
+
+#define ath_flush_pcie    ar7240_flush_pcie
+
+#define ath_flush_USB    ar7240_flush_USB
+
+static inline int ath_local_read_config(int where, int size, unsigned int *value) { ar7240_local_read_config(where, size, value); }
+static inline int ath_local_write_config(int where, int size, unsigned int value) { ar7240_local_write_config(where, size, value); }
+static inline int ath_check_error(int verbose) { ar7240_check_error(verbose); }
+static inline unsigned char  __ath_readb(const volatile void __iomem *p) { __ar7240_readb(p); }
+static inline unsigned short __ath_readw(const volatile void __iomem *p) { __ar7240_readw(p); }
+#endif

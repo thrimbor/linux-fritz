@@ -1713,7 +1713,7 @@ static void blk_account_io_completion(struct request *req, unsigned int bytes)
 	if (blk_do_io_stat(req)) {
 		const int rw = rq_data_dir(req);
 		struct hd_struct *part;
-		int cpu;
+		int cpu __maybe_unused__;
 
 		cpu = part_stat_lock();
 		part = disk_map_sector_rcu(req->rq_disk, blk_rq_pos(req));

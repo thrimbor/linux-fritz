@@ -27,4 +27,6 @@ source "drivers/mmc/card/Kconfig"
 
 source "drivers/mmc/host/Kconfig"
 
+source "drivers/mmc/Kconfig.ifx"
+
 endif # MMC

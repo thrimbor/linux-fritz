@@ -10,3 +10,5 @@ config IEEE802154
 
 	  Say Y here to compile LR-WPAN support into the kernel or say M to
 	  compile it as modules.
+
+#source "net/ieee802154/Kconfig.ifx"

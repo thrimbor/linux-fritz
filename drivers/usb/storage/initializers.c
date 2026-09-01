@@ -46,7 +46,7 @@
  * mode */
 int usb_stor_euscsi_init(struct us_data *us)
 {
-	int result;
+	int result __maybe_unused__;
 
 	US_DEBUGP("Attempting to init eUSCSI bridge...\n");
 	us->iobuf[0] = 0x1;
@@ -95,7 +95,7 @@ int usb_stor_ucr61s2b_init(struct us_data *us)
 /* This places the HUAWEI E220 devices in multi-port mode */
 int usb_stor_huawei_e220_init(struct us_data *us)
 {
-	int result;
+	int result __maybe_unused__;
 
 	result = usb_stor_control_msg(us, us->send_ctrl_pipe,
 				      USB_REQ_SET_FEATURE,

@@ -56,18 +56,22 @@ static int do_blktrans_request(struct mtd_blktrans_ops *tr,
 
 	switch(rq_data_dir(req)) {
 	case READ:
-		for (; nsect > 0; nsect--, block++, buf += tr->blksize)
-			if (tr->readsect(dev, block, buf))
-				return -EIO;
+		for (; nsect > 0; nsect--, block++, buf += tr->blksize) {
+            int ret = tr->readsect(dev, block, buf);
+			if (ret && (ret != -EUCLEAN))
+				return ret;
+        }
 		return 0;
 
 	case WRITE:
 		if (!tr->writesect)
 			return -EIO;
 
-		for (; nsect > 0; nsect--, block++, buf += tr->blksize)
-			if (tr->writesect(dev, block, buf))
-				return -EIO;
+		for (; nsect > 0; nsect--, block++, buf += tr->blksize) {
+            int ret = tr->writesect(dev, block, buf);
+			if (ret && (ret != -EUCLEAN))
+				return ret;
+        }
 		return 0;
 
 	default:
@@ -110,7 +114,7 @@ static int mtd_blktrans_thread(void *arg)
 
 		spin_lock_irq(rq->queue_lock);
 
-		if (!__blk_end_request_cur(req, res))
+		if (!__blk_end_request_cur(req, (!res || (res == -EUCLEAN)) ? 0 : res))
 			req = NULL;
 	}
 

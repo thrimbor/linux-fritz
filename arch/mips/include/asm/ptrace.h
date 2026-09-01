@@ -39,6 +39,15 @@ struct pt_regs {
 	unsigned long cp0_status;
 	unsigned long hi;
 	unsigned long lo;
+#if defined(__mips_dsp)
+    unsigned long ac1hi;
+    unsigned long ac1lo;
+    unsigned long ac2hi;
+    unsigned long ac2lo;
+    unsigned long ac3hi;
+    unsigned long ac3lo;
+    unsigned long dspctrl;
+#endif/*--- #if defined(__mips_dsp) ---*/
 #ifdef CONFIG_CPU_HAS_SMARTMIPS
 	unsigned long acx;
 #endif
@@ -146,8 +155,12 @@ extern NORET_TYPE void die(const char *, const struct pt_regs *) ATTRIB_NORET;
 
 static inline void die_if_kernel(const char *str, const struct pt_regs *regs)
 {
-	if (unlikely(!user_mode(regs)))
+	if (unlikely(!user_mode(regs))) {
+        extern unsigned int avm_nmi_taken __attribute__ ((weak));
+        if(&avm_nmi_taken)
+            avm_nmi_taken = ~0xdeadbabe;
 		die(str, regs);
+    }
 }
 
 #endif

@@ -98,6 +98,9 @@
 	mfc0	t0, CP0_STATUS
 	or	t0, ST0_CU0|\set|0x1f|\clr
 	xor	t0, 0x1f|\clr
+#ifdef CONFIG_CPU_HAS_DSP_ASE
+	or      t0, ST0_MX
+#endif
 	mtc0	t0, CP0_STATUS
 	.set	noreorder
 	sll	zero,3				# ehb
@@ -121,6 +124,8 @@
 #endif
 	.endm
 
+	j kernel_entry
+	nop
 #ifndef CONFIG_NO_EXCEPT_FILL
 	/*
 	 * Reserved space for exception handlers.
@@ -140,6 +145,12 @@ EXPORT(_stext)
 FEXPORT(__kernel_entry)
 	j	kernel_entry
 #endif
+
+#ifdef CONFIG_IMAGE_CMDLINE_HACK
+	.ascii	"CMDLINE:"
+EXPORT(__image_cmdline)
+	.fill	0x400
+#endif /* CONFIG_IMAGE_CMDLINE_HACK */
 
 	__REF
 
@@ -173,6 +184,144 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 	mtc0	t0, CP0_STATUS
 #endif /* CONFIG_MIPS_MT_SMTC */
 
+#ifdef CONFIG_MIPS_UR8
+    /* 
+     * Wir kopieren das Urlader-Environment (Pointer in a2) und die Kernel-commandline (Pointer in argc=a0 und argv=a1) 
+     * an einen neuen Bereich, da er sonst mit dem BSS kollidiert. Die neuen Bereiche dst_cmdline_buff, dst_cmdline, dst_env_buff
+     * und dst_env sind in .init.data und werden in kernel/env.c statisch reserviert.
+     *
+     * void copy_env ( void ) {
+     *     volatile register int i asm("t0"); // temporary register
+     *     volatile register char *buff_ptr asm("t2");
+     *     volatile register int s asm("t3");
+     * 
+     *     i = 0;
+     *     buff_ptr = dst_env_buff_reg;
+     *     while ( fw_arg2_reg[i] ) {
+     *         s = 0;
+     * 
+     *         dst_env_reg[i] = buff_ptr;
+     *         do {
+     *             *(buff_ptr++) = fw_arg2_reg[i][s];
+     *         } while ( fw_arg2_reg[i][s++] );
+     * 
+     *         i++;
+     *     }
+     *     fw_arg2_reg = dst_env_reg;
+     * 
+     * }
+     * 
+     * void copy_cmdline ( void ) {
+     *     volatile register int i asm("t0"); // temporary register
+     *     volatile register char *buff_ptr asm("t2");
+     *     volatile register int s asm("t3");
+     * 
+     *     buff_ptr = dst_cmdline_buff_reg;
+     *     for (i = 0; i < fw_arg0_reg; i++ ) {
+     *         dst_cmdline_reg[i] = buff_ptr;
+     *         s = 0;
+     *         do {
+     *             *(buff_ptr++) = fw_arg1_reg[i][s];
+     *         } while ( fw_arg1_reg[i][s++] );
+     *     }
+     * 
+     *     fw_arg1_reg = dst_cmdline_reg;
+     * }
+     * 
+     *
+     */
+# copy pointer for wlan and dect-config
+    la t4, dst_config
+    lw t5, 0(a3)
+    sw t5, 0(t4)
+
+    lw t5, 4(a3)
+    sw t5, 4(t4)
+
+    lw t5, 8(a3)
+    sw t5, 8(t4)
+
+    lw t5, 12(a3)
+    sw t5, 12(t4)
+
+    la a3, dst_config
+
+    la t4, dst_cmdline_buff
+    la t5, dst_cmdline
+
+    la t6, dst_env_buff
+    la t7, dst_env
+
+copy_env:
+	move	t0,zero
+	move	v0,t6
+	j	marke_2
+marke_0:
+	addu	t1,v1,t7
+	move	t3,zero
+	sw	v0,0(t1)
+	addu	v1,v1,a2
+marke_1:
+	lw	t1,0(v1)
+	nop
+	addu	t1,t1,t3
+	lbu	t1,0(t1)
+	nop
+	sb	t1,0(v0)
+	lw	t1,0(v1)
+	addiu	v0,v0,1
+	addu	t1,t1,t3
+	lbu	t1,0(t1)
+	nop
+	sll	t1,t1,0x18
+	sra	t1,t1,0x18
+	addiu	t3,t3,1
+	bnez	t1, marke_1
+	addiu	t0,t0,1
+marke_2:
+	sll	v1,t0,0x2
+	addu	t1,v1,a2
+	lw	t1,0(t1)
+	nop
+	bnez	t1, marke_0
+	move	a2,t7
+    nop
+
+copy_cmdline:
+	move	t0,zero
+	move	v0,t4
+	move	v1,a0
+	j	marke_c
+marke_a:
+	sll	t1,t0,0x2
+	addu	t2,t1,t5
+	sw	v0,0(t2)
+	move	t3,zero
+	addu	t1,t1,a1
+marke_b:
+	lw	t2,0(t1)
+	nop
+	addu	t2,t2,t3
+	lbu	t2,0(t2)
+	nop
+	sb	t2,0(v0)
+	lw	t2,0(t1)
+	addiu	v0,v0,1
+	addu	t2,t2,t3
+	lbu	t2,0(t2)
+	nop
+	sll	t2,t2,0x18
+	sra	t2,t2,0x18
+	addiu	t3,t3,1
+	bnez	t2, marke_b
+	addiu	t0,t0,1
+marke_c:
+	slt	t1,t0,v1
+	bnez	t1,marke_a
+	move	a1,t5
+	nop
+#endif
+
 	PTR_LA		t0, __bss_start		# clear .bss
 	LONG_S		zero, (t0)
 	PTR_LA		t1, __bss_stop - LONGSIZE
@@ -181,10 +330,10 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 	LONG_S		zero, (t0)
 	bne		t0, t1, 1b
 
-	LONG_S		a0, fw_arg0		# firmware arguments
-	LONG_S		a1, fw_arg1
-	LONG_S		a2, fw_arg2
-	LONG_S		a3, fw_arg3
+	LONG_S		a0, fw_arg0		# number of argument1 (argc)
+	LONG_S		a1, fw_arg1     # argv
+	LONG_S		a2, fw_arg2     # envp
+	LONG_S		a3, fw_arg3     # configp
 
 	MTC0		zero, CP0_CONTEXT	# clear context register
 	PTR_LA		$28, init_thread_union
@@ -194,7 +343,15 @@ NESTED(kernel_entry, 16, sp)			# kernel entry point
 	back_to_back_c0_hazard
 	set_saved_sp	sp, t0, t1
 	PTR_SUBU	sp, 4 * SZREG		# init stack pointer
-
+#ifdef CONFIG_BDI_SWITCH
+    /* Setup the PTE pointers for the Abatron bdiGDB.  */  
+    la t0, 0x800002f0
+    la t1, swapper_pg_dir
+    sw t1, (t0)
+    addiu t0, 4
+    la t1, pgd_current
+    sw t1, (t0)
+#endif
 	j		start_kernel
 	END(kernel_entry)
 

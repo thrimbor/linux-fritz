@@ -476,7 +476,7 @@ int jffs2_do_fill_super(struct super_block *sb, void *data, int silent)
 	struct jffs2_sb_info *c;
 	struct inode *root_i;
 	int ret;
-	size_t blocks;
+	size_t blocks = 0;
 
 	c = JFFS2_SB_INFO(sb);
 
@@ -493,7 +493,12 @@ int jffs2_do_fill_super(struct super_block *sb, void *data, int silent)
 
 	c->flash_size = c->mtd->size;
 	c->sector_size = c->mtd->erasesize;
-	blocks = c->flash_size / c->sector_size;
+
+	if (c->sector_size == 0) {
+		printk(KERN_ERR "jffs2: sector_size is zero\n");
+		return -EINVAL;
+    }
+    blocks = c->flash_size / c->sector_size;
 
 	/*
 	 * Size alignment check

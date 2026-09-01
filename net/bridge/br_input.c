@@ -17,6 +17,12 @@
 #include <linux/netfilter_bridge.h>
 #include "br_private.h"
 
+#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
+extern int brnf_filter_pre_routing_enable;
+extern int brnf_filter_local_in_enable;
+#endif
+
+
 /* Bridge group multicast address 802.1d (pg 51). */
 const u8 br_group_address[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
 
@@ -30,12 +36,20 @@ static void br_pass_frame_up(struct net_bridge *br, struct sk_buff *skb)
 	indev = skb->dev;
 	skb->dev = brdev;
 
+#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
+       if (!brnf_filter_local_in_enable)
+               return netif_receive_skb(skb);
+#endif
 	NF_HOOK(PF_BRIDGE, NF_BR_LOCAL_IN, skb, indev, NULL,
 		netif_receive_skb);
 }
 
 /* note: already called with rcu_read_lock (preempt_disabled) */
+#ifdef CONFIG_LTQ_BR_OPT
+int __bridge br_handle_frame_finish(struct sk_buff *skb)
+#else
 int br_handle_frame_finish(struct sk_buff *skb)
+#endif
 {
 	const unsigned char *dest = eth_hdr(skb)->h_dest;
 	struct net_bridge_port *p = rcu_dereference(skb->dev->br_port);
@@ -158,7 +172,15 @@ forward:
 	case BR_STATE_LEARNING:
 		if (!compare_ether_addr(p->br->dev->dev_addr, dest))
 			skb->pkt_type = PACKET_HOST;
+#if defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY) || defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_MODULE)
+		strcpy(p->br->in_dev_name, skb->dev->name);
+#endif
 
+#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
+               if (!brnf_filter_pre_routing_enable)
+                       br_handle_frame_finish(skb);
+	       else
+#endif
 		NF_HOOK(PF_BRIDGE, NF_BR_PRE_ROUTING, skb, skb->dev, NULL,
 			br_handle_frame_finish);
 		break;
@@ -168,3 +190,7 @@ drop:
 	}
 	return NULL;
 }
+
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE) || defined(CONFIG_MCAST_AP_SUPPORT)
+EXPORT_SYMBOL(br_pass_frame_up);
+#endif

@@ -1,0 +1,1 @@
+../../drivers/isdn/capi_oslib/linux_zugriff.h

@@ -63,11 +63,11 @@ static inline int dma_get_attr(enum dma_attr attr, struct dma_attrs *attrs)
 	return test_bit(attr, attrs->flags);
 }
 #else /* !CONFIG_HAVE_DMA_ATTRS */
-static inline void dma_set_attr(enum dma_attr attr, struct dma_attrs *attrs)
+static inline void dma_set_attr(enum dma_attr attr __attribute__ ((unused)), struct dma_attrs *attrs __attribute__ ((unused)))
 {
 }
 
-static inline int dma_get_attr(enum dma_attr attr, struct dma_attrs *attrs)
+static inline int dma_get_attr(enum dma_attr attr __attribute__ ((unused)), struct dma_attrs *attrs __attribute__ ((unused)))
 {
 	return 0;
 }

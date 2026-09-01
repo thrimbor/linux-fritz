@@ -55,6 +55,7 @@
 #include <linux/async.h>
 #include <linux/percpu.h>
 #include <linux/kmemleak.h>
+#include <linux/io.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/module.h>
@@ -79,6 +80,7 @@ EXPORT_TRACEPOINT_SYMBOL(module_get);
 DEFINE_MUTEX(module_mutex);
 EXPORT_SYMBOL_GPL(module_mutex);
 static LIST_HEAD(modules);
+EXPORT_SYMBOL(modules);
 
 /* Block module loading/unloading? */
 int modules_disabled = 0;
@@ -615,6 +617,7 @@ MODINFO_ATTR(version);
 MODINFO_ATTR(srcversion);
 
 static char last_unloaded_module[MODULE_NAME_LEN+1];
+static unsigned long last_unloaded_module_jiffies;
 
 #ifdef CONFIG_MODULE_UNLOAD
 /* Init the unload section of the module. */
@@ -657,7 +660,7 @@ static int already_uses(struct module *a, struct module *b)
 int use_module(struct module *a, struct module *b)
 {
 	struct module_use *use;
-	int no_warn, err;
+	int no_warn __maybe_unused__, err;
 
 	if (b == NULL || already_uses(a, b)) return 1;
 
@@ -870,6 +873,7 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	mutex_lock(&module_mutex);
 	/* Store the name of the last unloaded module for diagnostic purposes */
 	strlcpy(last_unloaded_module, mod->name, sizeof(last_unloaded_module));
+    last_unloaded_module_jiffies = jiffies;
 	free_module(mod);
 
  out:
@@ -1950,8 +1954,13 @@ static unsigned long layout_symtab(struct module *mod,
 			++ndst;
 		}
 
+    /*--- printk(KERN_ERR "[%s] module '%s' core size %d + %d symbols %d each = %d byte\n", ---*/
+            /*--- __FUNCTION__, mod->name, mod->core_size, ndst, sizeof(Elf_Sym), sizeof(Elf_Sym) * ndst); ---*/
+
 	/* Append room for core symbols at end of core part. */
 	symoffs = ALIGN(mod->core_size, symsect->sh_addralign ?: 1);
+    /*--- printk(KERN_ERR "[%s] module '%s' symoffs %d\n", __FUNCTION__, mod->name, symoffs); ---*/
+
 	mod->core_size = symoffs + ndst * sizeof(Elf_Sym);
 
 	/* Put string table section at end of init part of module. */
@@ -1964,6 +1973,10 @@ static unsigned long layout_symtab(struct module *mod,
 	*pstroffs = mod->core_size;
 	__set_bit(0, strmap);
 	mod->core_size += bitmap_weight(strmap, strsect->sh_size);
+
+    /*--- printk(KERN_ERR "[%s] module '%s' core_size %d (bitmap_weight %d ( strmap %ld sh_size %d)\n", ---*/ 
+            /*--- __FUNCTION__, mod->name, mod->core_size, bitmap_weight(strmap, strsect->sh_size), ---*/
+            /*--- *strmap, strsect->sh_size); ---*/
 
 	return symoffs;
 }
@@ -2044,9 +2057,9 @@ static void dynamic_debug_setup(struct _ddebug *debug, unsigned int num)
 #endif
 }
 
-static void *module_alloc_update_bounds(unsigned long size)
+static void *module_alloc_update_bounds(unsigned long size, char *name, enum _module_alloc_type_ type)
 {
-	void *ret = module_alloc(size);
+	void *ret = module_alloc(size, name, type);
 
 	if (ret) {
 		/* Update module bounds. */
@@ -2263,7 +2276,7 @@ static noinline struct module *load_module(void __user *umod,
 				secstrings, &stroffs, strmap);
 
 	/* Do the allocs. */
-	ptr = module_alloc_update_bounds(mod->core_size);
+	ptr = module_alloc_update_bounds(mod->core_size, mod->name, module_alloc_type_core);
 	/*
 	 * The pointer to this block is stored in the module structure
 	 * which is inside the block. Just mark it as not being a
@@ -2277,7 +2290,7 @@ static noinline struct module *load_module(void __user *umod,
 	memset(ptr, 0, mod->core_size);
 	mod->module_core = ptr;
 
-	ptr = module_alloc_update_bounds(mod->init_size);
+	ptr = module_alloc_update_bounds(mod->init_size, mod->name, module_alloc_type_init);
 	/*
 	 * The pointer to this block is stored in the module structure
 	 * which is inside the block. This block doesn't need to be
@@ -2497,6 +2510,7 @@ static noinline struct module *load_module(void __user *umod,
 		flush_icache_range((unsigned long)mod->module_init,
 				   (unsigned long)mod->module_init
 				   + mod->init_size);
+    /*--- __io_remap_setwriteprotect((unsigned char*)(((unsigned long)mod->module_core + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)), mod->core_text_size & ~(PAGE_SIZE - 1), 1); ---*/
 	flush_icache_range((unsigned long)mod->module_core,
 			   (unsigned long)mod->module_core + mod->core_size);
 
@@ -3102,8 +3116,11 @@ void print_modules(void)
 	list_for_each_entry_rcu(mod, &modules, list)
 		printk(" %s%s", mod->name, module_flags(mod, buf));
 	preempt_enable();
-	if (last_unloaded_module[0])
-		printk(" [last unloaded: %s]", last_unloaded_module);
+	if (last_unloaded_module[0]) {
+        struct timespec sincetime;
+        jiffies_to_timespec(jiffies - last_unloaded_module_jiffies, &sincetime);
+		printk(" [last unloaded: %s before %lu.%03lu s]", last_unloaded_module, sincetime.tv_sec, sincetime.tv_nsec / (1000* 1000));
+    }
 	printk("\n");
 }
 

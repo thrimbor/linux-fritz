@@ -34,6 +34,10 @@ ifeq ($(CONFIG_USB_GADGET_MUSB_HDRC),y)
 	musb_hdrc-objs		+= musb_gadget_ep0.o musb_gadget.o
 endif
 
+
+ifeq ($(CONFIG_MIPS_UR8),y)
+	musb_hdrc-objs	+= ur8.o
+endif
 ifeq ($(CONFIG_USB_MUSB_HDRC_HCD),y)
 	musb_hdrc-objs		+= musb_virthub.o musb_host.o
 endif

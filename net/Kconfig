@@ -23,6 +23,13 @@ menuconfig NET
 
 if NET
 
+config NET_DEV_LOAD
+	bool "Automatic load of network device modules"
+	help
+	  When this option is set access to a not existing network device,
+	  will trigger automatic module load for the network device.
+	  For desktop systems: say Y.
+
 config WANT_COMPAT_NETLINK_MESSAGES
 	bool
 	help
@@ -45,6 +52,9 @@ config COMPAT_NETLINK_MESSAGES
 
 menu "Networking options"
 
+source "net/avm_pa/Kconfig"
+source "net/avm_rtp_timestamp/Kconfig"
+source "net/kspeedtest/Kconfig"
 source "net/packet/Kconfig"
 source "net/unix/Kconfig"
 source "net/xfrm/Kconfig"
@@ -72,12 +82,53 @@ config INET
 
 	  Short answer: say Y.
 
+config IFX_IPQOS
+        bool "IPQOS support"
+        help
+                Infineon IPQOS support
+
+config LTQ_ADDON
+       bool "LTQ Networking enhancements "
+       depends on LTQ && INET
+       help
+         Enables all network related config options and features added by LTQ.
+
+config LTQ_UDP_REDIRECT
+        bool "LTQ Kernel Packet Interface for UDP re-direction"
+        depends on LTQ_ADDON
+        help
+          You can say Y here if you want to use hooks from kernel for
+          UDP re-direction
+
 if INET
 source "net/ipv4/Kconfig"
 source "net/ipv6/Kconfig"
 source "net/netlabel/Kconfig"
+source "net/Kconfig.ifx"
 
 endif # if INET
+
+config MAPPING
+       bool "IVI(test only)"
+	   depends on MACH_ATHEROS
+       ---help---
+          This option enables the IVI function of the kernel.
+          It may introduce unstable factors to your system.
+          Please use mroute and mroute6 programs for configuration.
+          Recommended to read detailed information, available from
+          <http://www.ipivi.org>
+          Annotation:
+          This guard is needed, because e.g. the generic net code contains some
+          fragments which are possible dangerous for other architectures and
+          need a carefully examination before removing this dependency.
+
+config GENERIC_CONNTRACK
+    bool "Generic connection tracking interface (AVM)"
+    help
+      This allows the use of a connection tracking with
+      a generic interface to access the connection tracking
+      entries. Do not use together with NETFILTER connection
+      tracking.
 
 config NETWORK_SECMARK
 	bool "Security Marking"
@@ -159,6 +210,15 @@ config NETFILTER_ADVANCED
 
 	  If unsure, say Y.
 
+config LTQ_NETFILTER_PROCFS
+       bool"LTQ netfilter procfs configurability"
+       depends on NETFILTER_ADVANCED && LTQ_ADDON && SYSCTL
+       help
+         If chosen, several hooks will be added to procfs for
+         selecting / deselecting netfilter chains at runtime.
+         It is recommended to be always on.
+
+
 config BRIDGE_NETFILTER
 	bool "Bridged IP/ARP packets filtering"
 	depends on BRIDGE && NETFILTER && INET
@@ -186,6 +246,7 @@ source "net/sctp/Kconfig"
 source "net/rds/Kconfig"
 source "net/tipc/Kconfig"
 source "net/atm/Kconfig"
+source "net/l2tp/Kconfig"
 source "net/802/Kconfig"
 source "net/bridge/Kconfig"
 source "net/dsa/Kconfig"

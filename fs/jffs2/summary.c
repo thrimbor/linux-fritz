@@ -32,7 +32,10 @@ int jffs2_sum_init(struct jffs2_sb_info *c)
 		return -ENOMEM;
 	}
 
-	c->summary->sum_buf = kmalloc(sum_size, GFP_KERNEL);
+    c->summary->sum_buf = kmalloc(sum_size, GFP_KERNEL);
+    /* hbl: Vorgeschlagene Lantiq-Aenderung
+     * c->summary->sum_buf = vmalloc(sum_size);
+     */
 
 	if (!c->summary->sum_buf) {
 		JFFS2_WARNING("Can't allocate buffer for writing out summary information!\n");
@@ -51,7 +54,10 @@ void jffs2_sum_exit(struct jffs2_sb_info *c)
 
 	jffs2_sum_disable_collecting(c->summary);
 
-	kfree(c->summary->sum_buf);
+    kfree(c->summary->sum_buf);
+    /* hbl: Vorgeschlagene Lantiq-Aenderung
+     * vfree(c->summary->sum_buf);
+     */
 	c->summary->sum_buf = NULL;
 
 	kfree(c->summary);

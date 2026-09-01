@@ -27,12 +27,12 @@ typedef struct { } seccomp_t;
 
 #define secure_computing(x) do { } while (0)
 
-static inline long prctl_get_seccomp(void)
+static inline long prctl_get_seccomp(void __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline long prctl_set_seccomp(unsigned long arg2)
+static inline long prctl_set_seccomp(unsigned long arg2 __attribute__ ((unused)))
 {
 	return -EINVAL;
 }

@@ -18,6 +18,7 @@ obj-$(CONFIG_USB_S3C2410)	+= s3c2410_udc.o
 obj-$(CONFIG_USB_AT91)		+= at91_udc.o
 obj-$(CONFIG_USB_ATMEL_USBA)	+= atmel_usba_udc.o
 obj-$(CONFIG_USB_FSL_USB2)	+= fsl_usb2_udc.o
+obj-$(CONFIG_USB_AR9130)        += ar9130_udc.o
 fsl_usb2_udc-objs		:= fsl_udc_core.o
 ifeq ($(CONFIG_ARCH_MXC),y)
 fsl_usb2_udc-objs		+= fsl_mx3_udc.o
@@ -28,6 +29,8 @@ obj-$(CONFIG_USB_FSL_QE)	+= fsl_qe_udc.o
 obj-$(CONFIG_USB_CI13XXX)	+= ci13xxx_udc.o
 obj-$(CONFIG_USB_S3C_HSOTG)	+= s3c-hsotg.o
 obj-$(CONFIG_USB_LANGWELL)	+= langwell_udc.o
+obj-$(CONFIG_USB_ATH)		+= ath_udc.o
+obj-$(CONFIG_USB_ATH_OTG)	+= ath_otg.o
 
 #
 # USB gadget drivers
@@ -52,3 +55,6 @@ obj-$(CONFIG_USB_G_PRINTER)	+= g_printer.o
 obj-$(CONFIG_USB_MIDI_GADGET)	+= g_midi.o
 obj-$(CONFIG_USB_CDC_COMPOSITE) += g_cdc.o
 
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/usb/gadget/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

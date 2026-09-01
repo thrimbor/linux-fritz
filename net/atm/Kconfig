@@ -71,3 +71,9 @@ config ATM_BR2684_IPFILTER
 	  This is an experimental mechanism for users who need to terminate a
 	  large number of IP-only vcc's.  Do not enable this unless you are sure
 	  you know what you are doing.
+
+if LANTIQ
+#IFX plaform specific
+source "net/atm/Kconfig.ifx"
+endif
+

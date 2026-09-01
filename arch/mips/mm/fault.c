@@ -25,7 +25,18 @@
 #include <asm/uaccess.h>
 #include <asm/ptrace.h>
 #include <asm/highmem.h>		/* For VMALLOC_END */
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+#include <atheros.h>
+#endif/*--- #if defined(CONFIG_NMI_ARBITER_WORKAROUND) ---*/
 
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) 
+#include <linux/avm_profile.h>
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/ 
+
+static atomic_t page_faultlink[NR_CPUS];
+unsigned int page_faultlink_max[NR_CPUS];
+unsigned int page_faultlink_sum[NR_CPUS];
+unsigned int page_faultlink_cnt[NR_CPUS];
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -39,7 +50,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 	struct mm_struct *mm = tsk->mm;
 	const int field = sizeof(unsigned long) * 2;
 	siginfo_t info;
-	int fault;
+	int fault, max, cpu;
 
 #if 0
 	printk("Cpu%d[%s:%d:%0*lx:%ld:%0*lx]\n", raw_smp_processor_id(),
@@ -48,6 +59,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long write,
 #endif
 
 	info.si_code = SEGV_MAPERR;
+
+    current->pg_faults++;
 
 	/*
 	 * We fault-in kernel-space virtual memory on-demand. The
@@ -108,7 +121,17 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
+    cpu =  smp_processor_id();
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) 
+    avm_simple_profiling_log(avm_profile_data_type_hw_irq_end, regs->cp0_epc, 0x1001);
+#endif/*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING)  ---*/
+    max = atomic_inc_return(&page_faultlink[cpu]);
 	fault = handle_mm_fault(mm, vma, address, write ? FAULT_FLAG_WRITE : 0);
+    atomic_dec(&page_faultlink[cpu]);
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) 
+    avm_simple_profiling_log(avm_profile_data_type_hw_irq_end, regs->cp0_epc, 0x1001);
+#endif/*--- #endif ---*//*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING)  ---*/
+
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		if (fault & VM_FAULT_OOM)
 			goto out_of_memory;
@@ -121,6 +144,11 @@ good_area:
 	else
 		tsk->min_flt++;
 
+    if(unlikely(max > page_faultlink_max[cpu])) {
+        page_faultlink_max[cpu] = max;
+    }
+    page_faultlink_sum[cpu] += max;
+    page_faultlink_cnt[cpu]++;
 	up_read(&mm->mmap_sem);
 	return;
 
@@ -159,7 +187,10 @@ no_context:
 		current->thread.cp0_baduaddr = address;
 		return;
 	}
-
+write_protect_die:
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+    ath_workaround_nmi_stop();
+#endif/*--- #if defined(CONFIG_NMI_ARBITER_WORKAROUND) ---*/
 	/*
 	 * Oops. The kernel tried to access some bad page. We'll have to
 	 * terminate things with extreme prejudice.
@@ -170,6 +201,7 @@ no_context:
 	       "virtual address %0*lx, epc == %0*lx, ra == %0*lx\n",
 	       raw_smp_processor_id(), field, address, field, regs->cp0_epc,
 	       field,  regs->regs[31]);
+
 	die("Oops", regs);
 
 out_of_memory:
@@ -246,6 +278,11 @@ vmalloc_fault:
 		pte_k = pte_offset_kernel(pmd_k, address);
 		if (!pte_present(*pte_k))
 			goto no_context;
+
+        if(write && !pte_write(*pte_k)) {
+            printk(KERN_ALERT"----- VMALLOC-AREA WRITE-PROTECTED -----\n");
+            goto write_protect_die;
+        }
 		return;
 	}
 #endif

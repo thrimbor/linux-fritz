@@ -284,6 +284,10 @@ nf_nat_setup_info(struct nf_conn *ct,
 	struct nf_conntrack_tuple curr_tuple, new_tuple;
 	struct nf_conn_nat *nat;
 	int have_to_hash = !(ct->status & IPS_NAT_DONE_MASK);
+#ifdef CONFIG_ATHRS_HW_NAT
+        void (*athr_ct_alter_port)(struct nf_conntrack_tuple,
+                                   struct nf_conntrack_tuple, struct nf_conn *);
+#endif
 
 	/* nat helper or nfctnetlink also setup binding */
 	nat = nfct_nat(ct);
@@ -316,6 +320,13 @@ nf_nat_setup_info(struct nf_conn *ct,
 		nf_ct_invert_tuplepr(&reply, &new_tuple);
 		nf_conntrack_alter_reply(ct, &reply);
 
+#ifdef CONFIG_ATHRS_HW_NAT
+                if (athr_nat_sw_ops) {
+                        athr_ct_alter_port = rcu_dereference(athr_nat_sw_ops->nf_alter_port);
+                        if (athr_ct_alter_port)
+                                athr_ct_alter_port(curr_tuple, new_tuple, ct);
+                }
+#endif
 		/* Non-atomic: we own this at the moment. */
 		if (maniptype == IP_NAT_MANIP_SRC)
 			ct->status |= IPS_SRC_NAT;

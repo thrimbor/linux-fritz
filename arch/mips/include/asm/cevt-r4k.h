@@ -22,7 +22,11 @@ void mips_set_clock_mode(enum clock_event_mode, struct clock_event_device *);
 irqreturn_t c0_compare_interrupt(int, void *);
 
 extern struct irqaction c0_compare_irqaction;
+#ifndef CONFIG_MIPS_MT_SMTC
+extern int cp0_timer_irq_installed[NR_CPUS];
+#else/*--- #ifndef CONFIG_MIPS_MT_SMTC ---*/
 extern int cp0_timer_irq_installed;
+#endif/*--- #else ---*//*--- #ifndef CONFIG_MIPS_MT_SMTC ---*/
 
 /*
  * Possibly handle a performance counter interrupt.

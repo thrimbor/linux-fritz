@@ -391,6 +391,13 @@ static const struct trans_ctl_table trans_net_ipv4_table[] = {
 	{ NET_TCP_ALLOWED_CONG_CONTROL,		"tcp_allowed_congestion_control" },
 	{ NET_TCP_MAX_SSTHRESH,			"tcp_max_ssthresh" },
 	{ NET_TCP_FRTO_RESPONSE,		"tcp_frto_response" },
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+	{ NET_NETFILTER_PREROUTING_ENABLE,     	"netfilter_prerouting_enable" },
+	{ NET_NETFILTER_POSTROUTING_ENABLE,    	"netfilter_postrouting_enable" },
+	{ NET_NETFILTER_INPUT_ENABLE,          	"netfilter_input_enable" },
+	{ NET_NETFILTER_OUTPUT_ENABLE,        	"netfilter_output_enable" },
+	{ NET_NETFILTER_FORWARD_ENABLE,     	"netfilter_forward_enable" },
+#endif
 	{ 2088 /* NET_IPQ_QMAX */,		"ip_queue_maxlen" },
 	{}
 };
@@ -454,6 +461,13 @@ static const struct trans_ctl_table trans_net_bridge_table[] = {
 	{ NET_BRIDGE_NF_CALL_IP6TABLES,		"bridge-nf-call-ip6tables" },
 	{ NET_BRIDGE_NF_FILTER_VLAN_TAGGED,	"bridge-nf-filter-vlan-tagged" },
 	{ NET_BRIDGE_NF_FILTER_PPPOE_TAGGED,	"bridge-nf-filter-pppoe-tagged" },
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+	{ NET_BRIDGE_NF_PRE_ROUTING_ENABLE,     "bridge-nf-pre-routing-enable" },
+	{ NET_BRIDGE_NF_LOCAL_IN_ENABLE,    	"bridge-nf-local-in-enable" },
+	{ NET_BRIDGE_NF_FORWARD_ENABLE,    	"bridge-nf-forward-enable" },
+	{ NET_BRIDGE_NF_LOCAL_OUT_ENABLE,    	"bridge-nf-local-out-enable" },
+	{ NET_BRIDGE_NF_POST_ROUTING_ENABLE,    "bridge-nf-post-routing-enable" },
+#endif
 	{}
 };
 

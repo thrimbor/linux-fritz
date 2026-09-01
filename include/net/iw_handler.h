@@ -478,7 +478,7 @@ extern void wireless_spy_update(struct net_device *	dev,
  * Function that are so simple that it's more efficient inlining them
  */
 
-static inline int iwe_stream_lcp_len(struct iw_request_info *info)
+static inline int iwe_stream_lcp_len(struct iw_request_info *info __attribute__ ((unused)))
 {
 #ifdef CONFIG_COMPAT
 	if (info->flags & IW_REQUEST_FLAG_COMPAT)
@@ -487,7 +487,7 @@ static inline int iwe_stream_lcp_len(struct iw_request_info *info)
 	return IW_EV_LCP_LEN;
 }
 
-static inline int iwe_stream_point_len(struct iw_request_info *info)
+static inline int iwe_stream_point_len(struct iw_request_info *info __attribute__ ((unused)))
 {
 #ifdef CONFIG_COMPAT
 	if (info->flags & IW_REQUEST_FLAG_COMPAT)
@@ -496,8 +496,8 @@ static inline int iwe_stream_point_len(struct iw_request_info *info)
 	return IW_EV_POINT_LEN;
 }
 
-static inline int iwe_stream_event_len_adjust(struct iw_request_info *info,
-					      int event_len)
+static inline int iwe_stream_event_len_adjust(struct iw_request_info *info __attribute__ ((unused)),
+                                              int event_len)
 {
 #ifdef CONFIG_COMPAT
 	if (info->flags & IW_REQUEST_FLAG_COMPAT) {

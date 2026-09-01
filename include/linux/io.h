@@ -30,10 +30,18 @@ void __iowrite64_copy(void __iomem *to, const void *from, size_t count);
 #ifdef CONFIG_MMU
 int ioremap_page_range(unsigned long addr, unsigned long end,
 		       unsigned long phys_addr, pgprot_t prot);
+/*--------------------------------------------------------------------------------*\
+ * writep(un)protect virt_addr-area 
+ * ret: 0 ok
+\*--------------------------------------------------------------------------------*/
+int __io_remap_setwriteprotect(unsigned char *virt_addr, unsigned int len, unsigned int wrprotect);
 #else
 static inline int ioremap_page_range(unsigned long addr, unsigned long end,
 				     unsigned long phys_addr, pgprot_t prot)
 {
+	return 0;
+}
+static inline int __io_remap_setwriteprotect(unsigned char *virt_addr, unsigned int len, unsigned int wrprotect){
 	return 0;
 }
 #endif

@@ -1,0 +1,17 @@
+obj-$(CONFIG_IFX_PMCU)   += ifxmips_pmcu.o
+obj-$(CONFIG_IFX_PMCU_V1) += ifxmips_pmcu_v1.o
+obj-$(CONFIG_IFX_CPUFREQ) += ifxmips_cpufreq.o
+obj-$(CONFIG_IFX_PMU)	+= ifxmips_pmu.o
+obj-$(CONFIG_IFX_GPIO)	+= ifxmips_gpio.o
+obj-$(CONFIG_IFX_RCU)	+= ifxmips_rcu.o
+obj-$(CONFIG_IFX_SI)	+= ifxmips_si/
+obj-$(CONFIG_IFX_LEDC)  += ifxmips_ledc.o
+obj-$(CONFIG_IFX_EBU_LED) += ifxmips_ebu_led.o
+obj-$(CONFIG_IFX_WDT)   += ifxmips_wdt.o
+obj-$(CONFIG_IFX_PMON)          += ifxmips_pmon.o
+obj-$(CONFIG_IFX_DCDC)          += ifxmips_dcdc/
+obj-$(CONFIG_IFX_TS)		+= ifxmips_ts/
+obj-$(CONFIG_LTQ_HN_MBMOD)   += ltq_hn_mbMod.o
+obj-$(CONFIG_LTQ_HN_HNDRV)   += ltq_hn_hnDrv.o
+obj-$(CONFIG_LTQ_HN_VPELAUNCHER)   += ltq_hn_vpe.o
+ltq_hn_vpe-objs:=ltq_hn_launchermain.o startMT.o loadELF.o

@@ -109,6 +109,129 @@ config EQUALIZER
 	  To compile this driver as a module, choose M here: the module
 	  will be called eql.  If unsure, say N.
 
+config IMQ
+	tristate "IMQ (intermediate queueing device) support"
+	depends on NETDEVICES && NETFILTER
+	---help---
+	  The IMQ device(s) is used as placeholder for QoS queueing
+	  disciplines. Every packet entering/leaving the IP stack can be
+	  directed through the IMQ device where it's enqueued/dequeued to the
+	  attached qdisc. This allows you to treat network devices as classes
+	  and distribute bandwidth among them. Iptables is used to specify
+	  through which IMQ device, if any, packets travel.
+
+	  More information at: http://www.linuximq.net/
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called imq.  If unsure, say N.
+
+choice
+	prompt "IMQ behavior (PRE/POSTROUTING)"
+	depends on IMQ
+	default IMQ_BEHAVIOR_AB
+	help
+
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		IMQ can work in any of the following ways:
+
+		    PREROUTING   |      POSTROUTING
+		-----------------|-------------------
+		#1  After NAT    |      After NAT
+		#2  After NAT    |      Before NAT
+		#3  Before NAT   |      After NAT
+		#4  Before NAT   |      Before NAT
+
+		The default behavior is to hook before NAT on PREROUTING
+		and after NAT on POSTROUTING (#3).
+
+		This settings are specially usefull when trying to use IMQ
+		to shape NATed clients.
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_AA
+	bool "IMQ AA"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   After NAT
+		POSTROUTING:  After NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_AB
+	bool "IMQ AB"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   After NAT
+		POSTROUTING:  Before NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_BA
+	bool "IMQ BA"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   Before NAT
+		POSTROUTING:  After NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+config IMQ_BEHAVIOR_BB
+	bool "IMQ BB"
+	help
+		This settings defines how IMQ behaves in respect to its
+		hooking in PREROUTING and POSTROUTING.
+
+		Choosing this option will make IMQ hook like this:
+
+		PREROUTING:   Before NAT
+		POSTROUTING:  Before NAT
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
+endchoice
+
+config IMQ_NUM_DEVS
+
+	int "Number of IMQ devices"
+	range 2 16
+	depends on IMQ
+	default "16"
+	help
+
+		This settings defines how many IMQ devices will be
+		created.
+
+		The default value is 16.
+
+		More information can be found at: www.linuximq.net
+
+		If not sure leave the default settings alone.
+
 config TUN
 	tristate "Universal TUN/TAP device driver support"
 	select CRC32
@@ -219,6 +342,45 @@ config MACB
 	  will be called macb.
 
 source "drivers/net/arm/Kconfig"
+
+config AVM_CPMAC
+	tristate "AVM CPMAC support"
+	depends on NET_ETHERNET
+	help
+	  This driver is developed for the FRITZ!Box network hardware.
+	  To compile this driver as a module, choose M here.
+	  The module will be called avm_cpmac.
+
+config AVM_CPMAC_NUM_RX_BUFFERS
+    int "Number of Rx-Buffers"
+    depends on AVM_CPMAC
+    default 256
+
+config AVM_CPMAC_SWITCH
+    bool "Support for switches (currently ADM6996 family)"
+    depends on AVM_CPMAC
+    default y
+    help
+      Code for the ADMtek switch family ADM6996 (L, LC, FC)
+
+config AVM_SCATTER_GATHER
+    bool "Scatter Gather DMA-TX Support for AVMNET"
+    depends on AVM_CPMAC && LANTIQ
+    default n
+
+config AVMNET_DEBUG
+    bool "AVMNET IFX Debug"
+    depends on AVM_CPMAC && LANTIQ
+    default n
+    help
+      Enable Debug-Proc-Interface /proc/eth/dbg for Lantiq CPUs"
+      
+config AVMNET_DEBUG_HAL
+    bool "AVMNET HAL Debug"
+    depends on AVM_CPMAC && LANTIQ
+    default n
+    help
+      Enable HAL Debug for Lantiq Datapath Drivers"
 
 config AX88796
 	tristate "ASIX AX88796 NE2000 clone support"
@@ -2392,6 +2554,10 @@ config UCC_GETH
 	  This driver supports the Gigabit Ethernet mode of the QUICC Engine,
 	  which is available on some Freescale SOCs.
 
+config UGETH_MAGIC_PACKET
+	bool "Magic Packet detection support"
+	depends on UCC_GETH
+
 config UGETH_TX_ON_DEMAND
 	bool "Transmit on Demand support"
 	depends on UCC_GETH
@@ -2484,6 +2650,226 @@ config S6GMAC
 	  will be called s6gmac.
 
 source "drivers/net/stmmac/Kconfig"
+
+
+
+
+################################################################# 
+#
+# ATHEROS Netzwerk-Device support
+#
+#################################################################
+config AG7240
+	tristate "Atheros AR7240 GigE"
+	depends on MACH_AR7240 || MACH_HORNET || \
+		MACH_AR724x || MACH_AR933x || MACH_AR934x
+	help
+	  This enables the building of Atheros AR7240 gigE driver module.
+
+config AR7240_PLC_FILTER
+    bool "Support power line filter"
+    depends on AG7240
+
+config FLOWMAC
+    tristate "Atheros Flowcontrol For GigE and Wifi"
+    depends on MACH_AR7240 || MACH_HORNET
+    help
+        This enables the building of Flow control between AG7100 and Wifi.
+
+config AR7240_S26_VLAN_IGMP
+	bool "Support vlan and igmp functions in AR7240-S26 switch"
+	depends on AG7240
+
+config AR7240_S16_VLAN_IGMP
+	bool "Support vlan and igmp functions in AR7240-S16 switch"
+	depends on AG7240
+
+config ATHEROS_HEADER_EN
+	bool "Add two bytes atheros header before the ethernet packet."
+	depends on AG7240
+
+################################################################# 
+
+################################################################# 
+#
+# GMAC0 ist mit einem Phy verbunden ?
+#
+################################################################# 
+config AG7240_GE0_IS_CONNECTED
+	bool "port 0 is connected to a PHY"
+	depends on AG7240
+
+choice
+	prompt "port 0 interface"
+	depends on AG7240_GE0_IS_CONNECTED
+
+config AG7240_GE0_MII
+	bool "MII mode"
+
+config AG7240_GE0_GMII
+	bool "GMII mode"
+
+config AG7240_GE0_RGMII
+	bool "RGMII mode"
+
+endchoice
+
+config GE0_EXTERNAL_PHY
+	bool "GE0 is connected to different PHY"
+	depends on AG7240_GE0_IS_CONNECTED
+
+
+################################################################## 
+##
+## GMAC1 ist mit einem Phy verbunden ?
+##
+################################################################## 
+config AG7240_GE1_IS_CONNECTED
+	bool "port 1 is connected to a PHY"
+	depends on AG7240
+
+choice
+	prompt "port 1 interface"
+	depends on AG7240_GE1_IS_CONNECTED
+
+config AG7240_GE1_MII
+	bool "MII mode"
+
+config AG7240_GE1_GMII
+	bool "GMII mode"
+
+config AG7240_GE1_RGMII
+	bool "RGMII mode"
+endchoice
+
+config GE1_EXTERNAL_PHY
+	bool "GE1 is connected to different PHY"
+	depends on AG7240_GE1_IS_CONNECTED
+
+config ATHRF1_PHY
+	bool "Atheros F1 GigE Phy"
+
+config ATHRF2_PHY
+	bool "Atheros F2 Phy"
+
+config ATHRS16_PHY
+	bool "Atheros S16 external Phy"
+
+config ATHRS17_PHY
+	bool "Atheros S17 external Phy"
+
+config AR8021_PHY
+	bool "Atheros AR8021 Phy"
+
+config AR7240_S26_PHY
+	bool "Atheros 7240 S26 internal Phy"
+
+config ATHRS27_PHY
+	bool "Atheros S27 internal Phy"
+
+config LANTIQ_11G_PHY
+	bool "Lantiq 11G Phy"
+
+config WLAN_OFFLOAD_PHY
+    bool "WLAN Offload Phy"
+    depends on LANTIQ
+
+config ATH_PLC_PHY
+    bool "PLC Phy"
+    depends on MACH_ATHEROS
+
+######################################################################
+config ATHR_PHY_SWAP
+    bool "Atheros PHY Swap "
+    depends on MACH_AR934x
+
+######################################################################
+config AR7242_GPIO_RESET_PIN
+    int "ResetPin external Phy"
+    default 11
+    depends on AG7240_GE0_IS_CONNECTED && MACH_AR724x
+
+config AR7242_MDIOINT_PIN
+    int "MDIO-Int Pin external Phy"
+    default 7
+    depends on AG7240_GE0_IS_CONNECTED && MACH_AR724x
+
+######################################################################
+config AG7240_QOS
+	bool "Enable MAC 0 QOS "
+	depends on AG7240
+
+config ATHRS_HW_NAT
+	bool "Enable MAC 0 Egress and Ingress NAT engine "
+	depends on AG7240
+
+config ATHRS_HW_ACL
+	bool "Enable MAC 0 Egress and Ingress ACL engine "
+	depends on AG7240
+
+config AG7100_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "1536"
+	depends on (REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7100
+
+config AG7100_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "512"
+	depends on !(REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7100
+
+config AG7100_MAC_LOCATION
+	hex "Memory location of MAC addresses (in flash)"
+	default "0xbfff1000"
+	help
+	  This is the physical address in memory that contains
+	  the MAC addresses for the board Ethernet interfaces.  They
+	  are stored sequentially in 6 byte groups, for the total number
+	  of interfaces supported on the board.
+	depends on AG7100 && ATHR_MAC_LOCATION_FLASH
+
+config AG7240_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "1536"
+	depends on (REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7240
+
+config AG7240_LEN_PER_TX_DS
+	int "Len per tx descriptor"
+	default "512"
+	depends on !(REALTEK_PHY || ADM6996FC_PHY || ICPLUS_PHY) && AG7240
+
+config  AG7240_NUMBER_TX_PKTS
+        int "Number tx pkts for intf 0"
+        default "100"
+        depends on AG7240
+
+config  AG7240_NUMBER_RX_PKTS
+        int "Number rx pkts for intf 0"
+        default "252"
+        depends on AG7240
+
+config  AG7240_NUMBER_TX_PKTS_1
+        int "Number tx pkts for intf 1"
+        default "40"
+        depends on AG7240_GE1_IS_CONNECTED
+
+config  AG7240_NUMBER_RX_PKTS_1
+        int "Number rx pkts for intf 1"
+        default "252"
+        depends on AG7240_GE1_IS_CONNECTED
+
+config  ATHR_MAC_LOCATION_FLASH
+        bool "MAC addresses stored in flash"
+        depends on AG7240
+
+config  AG7240_MAC_LOCATION
+	hex "Memory location of MAC addresses (in flash)"
+	default "0xbfff0000"
+	help
+	  This is the physical address in memory that contains
+	  the MAC addresses for the board Ethernet interfaces. They
+	  are stored sequentially in 6 byte groups, for the total number
+	  of interfaces supported on the board.
+	depends on AG7240 && ATHR_MAC_LOCATION_FLASH
 
 endif # NETDEV_1000
 
@@ -2795,6 +3181,8 @@ config XEN_NETDEV_FRONTEND
 	  frontend driver is intended for unprivileged guest domains;
 	  if you are compiling a kernel for a Xen guest, you almost
 	  certainly want to enable this.
+
+source "drivers/net/Kconfig.ifx"
 
 config ISERIES_VETH
 	tristate "iSeries Virtual Ethernet driver support"
@@ -3240,5 +3628,9 @@ config VMXNET3
          This driver supports VMware's vmxnet3 virtual ethernet NIC.
          To compile this driver as a module, choose M here: the
          module will be called vmxnet3.
+
+config AVM_NET_LINK_AUDIO
+        tristate "The AVM netlink-audio driver"
+        default n
 
 endif # NETDEVICES

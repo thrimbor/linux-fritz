@@ -40,6 +40,7 @@
 #include <asm/addrspace.h>
 #include <asm/smtc.h>
 #include <asm/smtc_proc.h>
+#include <asm/yield_context.h>
 
 /*
  * SMTC Kernel needs to manipulate low-level CPU interrupt mask
@@ -68,6 +69,7 @@ unsigned long irq_hwmask[NR_IRQS];
  * Data structures purely associated with SMTC parallelism
  */
 
+extern unsigned int cpu_idle_state(int vpe);
 
 /*
  * Table for tracking ASIDs whose lifetime is prolonged.
@@ -100,7 +102,11 @@ unsigned int smtc_status;
 
 static int vpe0limit;
 static int ipibuffers;
+#ifdef CONFIG_IFX_VPE_EXT
+int nostlb = 0;
+#else
 static int nostlb;
+#endif
 static int asidmask;
 unsigned long smtc_asid_mask = 0xff;
 
@@ -267,7 +273,7 @@ static void smtc_configure_tlb(void)
 		smtc_status |= SMTC_TLB_SHARED;
 		local_flush_tlb_all();
 
-		printk("TLB of %d entry pairs shared by %d VPEs\n",
+            printk("TLB of %d entry pairs shared by %d VPEs\n",
 			tlbsiz, vpes);
 	    } else {
 		printk("WARNING: TLB Not Sharable on SMTC Boot!\n");
@@ -278,7 +284,7 @@ static void smtc_configure_tlb(void)
 
 /*
  * Incrementally build the CPU map out of constituent MIPS MT cores,
- * using the specified available VPEs and TCs.  Plaform code needs
+ * using the specified available VPEs and TCs.	Plaform code needs
  * to ensure that each MIPS MT core invokes this routine on reset,
  * one at a time(!).
  *
@@ -352,8 +358,6 @@ static void smtc_tc_setup(int vpe, int tc, int cpu)
 		cpu_data[cpu].options &= ~MIPS_CPU_FPU;
 	cpu_data[cpu].vpe_id = vpe;
 	cpu_data[cpu].tc_id = tc;
-	/* Multi-core SMTC hasn't been tested, but be prepared */
-	cpu_data[cpu].core = (read_vpe_c0_ebase() >> 1) & 0xff;
 }
 
 /*
@@ -393,12 +397,13 @@ void smtc_prepare_cpus(int cpus)
 	/* cpu_data index starts at zero */
 	cpu = 0;
 	cpu_data[cpu].vpe_id = 0;
-	cpu_data[cpu].tc_id = 0;
-	cpu_data[cpu].core = (read_c0_ebase() >> 1) & 0xff;
+	cpu_data[cpu].tc_id  = 0;
+	cpu_data[cpu].core   = (read_c0_ebase() >> 1) & 0xff;
 	cpu++;
 
 	/* Report on boot-time options */
 	mips_mt_set_cpuoptions();
+    tclimit = NR_CPUS;
 	if (vpelimit > 0)
 		printk("Limit of %d VPEs set\n", vpelimit);
 	if (tclimit > 0)
@@ -499,10 +504,17 @@ void smtc_prepare_cpus(int cpus)
 			 * Clear ERL/EXL of VPEs other than 0
 			 * and set restricted interrupt enable/mask.
 			 */
+
+#if defined(CONFIG_AR9) || defined(CONFIG_VR9)   || defined(CONFIG_AR10)  || defined(CONFIG_HN1) // Enable IE and IM bits for all the intr lines.
+                        write_vpe_c0_status((read_vpe_c0_status()
+                                & ~(ST0_BEV | ST0_ERL | ST0_EXL))
+                                | (ST0_IM | ST0_IE));
+#else
 			write_vpe_c0_status((read_vpe_c0_status()
 				& ~(ST0_BEV | ST0_ERL | ST0_EXL | ST0_IM))
 				| (STATUSF_IP0 | STATUSF_IP1 | STATUSF_IP7
 				| ST0_IE));
+#endif
 			/*
 			 * set config to be the same as vpe0,
 			 *  particularly kseg0 coherency alg
@@ -612,11 +624,6 @@ void __cpuinit smtc_boot_secondary(int cpu, struct task_struct *idle)
 	UNLOCK_MT_PRA();
 }
 
-void smtc_init_secondary(void)
-{
-	local_irq_enable();
-}
-
 void smtc_smp_finish(void)
 {
 	int cpu = smp_processor_id();
@@ -636,6 +643,14 @@ void smtc_smp_finish(void)
 
 void smtc_cpus_done(void)
 {
+#if defined(CONFIG_LANTIQ)
+    if(NR_CPUS <= LANTIQ_YIELD_TC) {
+        yield_context_init_on(1, LANTIQ_YIELD_TC, LANTIQ_YIELD_MASK);
+#if defined(CONFIG_VR9) && defined(CONFIG_AVM_SIMPLE_PROFILING_YIELD)
+        yield_context_init_on(0, LANTIQ_YIELD_TC2, LANTIQ_YIELD_MASK2);
+#endif/*--- #if defined(CONFIG_VR9) ---*/
+    }
+#endif/*--- #if defined(CONFIG_YIELD_TC) ---*/
 }
 
 /*
@@ -705,12 +720,10 @@ void smtc_forward_irq(unsigned int irq)
 	 */
 
 	/* If no one is eligible, service locally */
-	if (target >= NR_CPUS) {
+	if (target >= NR_CPUS)
 		do_IRQ_no_affinity(irq);
-		return;
-	}
-
-	smtc_send_ipi(target, IRQ_AFFINITY_IPI, irq);
+	else
+		smtc_send_ipi(target, IRQ_AFFINITY_IPI, irq);
 }
 
 #endif /* CONFIG_MIPS_MT_SMTC_IRQAFF */
@@ -797,16 +810,34 @@ void smtc_send_ipi(int cpu, int type, unsigned int action)
 	int mtflags;
 	unsigned long tcrestart;
 	extern void r4k_wait_irqoff(void), __pastwait(void);
-	int set_resched_flag = (type == LINUX_SMP_IPI &&
-				action == SMP_RESCHEDULE_YOURSELF);
-
+	int set_resched_flag = ((type == LINUX_SMP_IPI) && (action == SMP_RESCHEDULE_YOURSELF));
+    
 	if (cpu == smp_processor_id()) {
 		printk("Cannot Send IPI to self!\n");
 		return;
 	}
-	if (set_resched_flag && IPIQ[cpu].resched_flag != 0)
-		return; /* There is a reschedule queued already */
-
+	if (set_resched_flag) {
+#if 0
+        static unsigned int last_jiffies, not_idle, resched, cnt;
+        cnt++;
+        if(jiffies - last_jiffies > 10 *HZ) {
+            __printk("not_idle: %u %u %u\n", not_idle, resched, cnt);
+            not_idle = cnt = resched = 0;
+            last_jiffies = jiffies;
+        }
+#endif
+        if(IPIQ[cpu].resched_flag != 0) {
+            /*--- resched++; ---*/
+            return; /* There is a reschedule queued already */
+        }
+#if 0
+mbahr: Deaktiviert: evtl. fuer Hw-Watchdog "verantwortlich" !
+        if(!cpu_idle_state(cpu_data[cpu].vpe_id)) {
+            /*--- not_idle++; ---*/
+            return; /* There is not in idle */
+        }
+#endif
+    }
 	/* Set up a descriptor, to be delivered either promptly or queued */
 	pipi = smtc_ipi_dq(&freeIPIq);
 	if (pipi == NULL) {
@@ -814,12 +845,14 @@ void smtc_send_ipi(int cpu, int type, unsigned int action)
 		mips_mt_regdump(dvpe());
 		panic("IPI Msg. Buffers Depleted\n");
 	}
+/*--- printk(KERN_ERR"%s(%d) dest_vpe_id =%x act vpe_id=%x\n", __func__, type, cpu_data[cpu].vpe_id, cpu_data[smp_processor_id()].vpe_id); ---*/
 	pipi->type = type;
 	pipi->arg = (void *)action;
 	pipi->dest = cpu;
 	if (cpu_data[cpu].vpe_id != cpu_data[smp_processor_id()].vpe_id) {
 		/* If not on same VPE, enqueue and send cross-VPE interrupt */
 		IPIQ[cpu].resched_flag |= set_resched_flag;
+        smp_mb();
 		smtc_ipi_nq(&IPIQ[cpu], pipi);
 		LOCK_CORE_PRA();
 		settc(cpu_data[cpu].tc_id);
@@ -867,6 +900,7 @@ void smtc_send_ipi(int cpu, int type, unsigned int action)
 			write_tc_c0_tchalt(0);
 			UNLOCK_CORE_PRA();
 			IPIQ[cpu].resched_flag |= set_resched_flag;
+            smp_mb();
 			smtc_ipi_nq(&IPIQ[cpu], pipi);
 		} else {
 postdirect:
@@ -948,6 +982,7 @@ void ipi_decode(struct smtc_ipi *pipi)
 	int irq = MIPS_CPU_IRQ_BASE + 1;
 
 	smtc_ipi_nq(&freeIPIq, pipi);
+/*--- printk(KERN_ERR"[%x]%s(%d)\n", cpu, __func__, type_copy); ---*/
 
 	switch (type_copy) {
 	case SMTC_CLOCK_TICK:
@@ -961,7 +996,9 @@ void ipi_decode(struct smtc_ipi *pipi)
 	case LINUX_SMP_IPI:
 		switch ((int)arg_copy) {
 		case SMP_RESCHEDULE_YOURSELF:
+/*--- printk(KERN_ERR"[%x]%s(%d)\n", cpu, __func__, type_copy); ---*/
 			ipi_resched_interrupt();
+		    IPIQ[cpu].resched_flag = 0;
 			break;
 		case SMP_CALL_FUNCTION:
 			ipi_call_interrupt();
@@ -1020,9 +1057,6 @@ void deferred_smtc_ipi(void)
 		pipi = __smtc_ipi_dq(q);
 		spin_unlock(&q->lock);
 		if (pipi != NULL) {
-			if (pipi->type == LINUX_SMP_IPI &&
-			    (int)pipi->arg == SMP_RESCHEDULE_YOURSELF)
-				IPIQ[cpu].resched_flag = 0;
 			ipi_decode(pipi);
 		}
 		/*
@@ -1105,9 +1139,6 @@ static irqreturn_t ipi_interrupt(int irq, void *dev_idm)
 				 * with interrupts off
 				 */
 				local_irq_save(flags);
-				if (pipi->type == LINUX_SMP_IPI &&
-				    (int)pipi->arg == SMP_RESCHEDULE_YOURSELF)
-					IPIQ[cpu].resched_flag = 0;
 				ipi_decode(pipi);
 				local_irq_restore(flags);
 			}
@@ -1282,18 +1313,20 @@ void smtc_idle_loop_hook(void)
 void smtc_soft_dump(void)
 {
 	int i;
-
+#if 0
 	printk("Counter Interrupts taken per CPU (TC)\n");
 	for (i=0; i < NR_CPUS; i++) {
 		printk("%d: %ld\n", i, smtc_cpu_stats[i].timerints);
 	}
+#endif
 	printk("Self-IPI invocations:\n");
 	for (i=0; i < NR_CPUS; i++) {
 		printk("%d: %ld\n", i, smtc_cpu_stats[i].selfipis);
 	}
 	smtc_ipi_qdump();
-	printk("%d Recoveries of \"stolen\" FPU\n",
-	       atomic_read(&smtc_fpu_recoveries));
+    if(atomic_read(&smtc_fpu_recoveries)) {
+        printk("%d Recoveries of \"stolen\" FPU\n", atomic_read(&smtc_fpu_recoveries));
+    }
 }
 
 
@@ -1328,6 +1361,13 @@ void smtc_get_new_mmu_context(struct mm_struct *mm, unsigned long cpu)
 	asid = asid_cache(cpu);
 
 	do {
+#ifdef CONFIG_IFX_VPE_EXT
+	/* If TLB is shared between AP and RP (AP is running SMTC),
+	leave out max ASID i.e., ASID_MASK for RP
+	*/
+	if (!nostlb && ((asid & ASID_MASK) == (ASID_MASK - 1)))
+		asid++;
+#endif
 		if (!((asid += ASID_INC) & ASID_MASK) ) {
 			if (cpu_has_vtag_icache)
 				flush_icache_all();
@@ -1460,3 +1500,80 @@ void smtc_cflush_release(void)
 	}
 	mips_ihb();
 }
+
+
+/* VPE/SMP Prototype implements platform interfaces directly */
+
+/*
+ * Cause the specified action to be performed on a targeted "CPU"
+ */
+
+static void smtc_send_ipi_single(int cpu, unsigned int action)
+{
+	/* "CPU" may be TC of same VPE, VPE of same CPU, or different CPU */
+	smtc_send_ipi(cpu, LINUX_SMP_IPI, action);
+}
+
+static void smtc_send_ipi_mask(const struct cpumask *mask, unsigned int action)
+{
+	unsigned int i;
+
+	for_each_cpu(i, mask)
+		smtc_send_ipi_single(i, action);
+}
+
+/*
+ * Post-config but pre-boot cleanup entry point
+ */
+static void __cpuinit smtc_init_secondary(void)
+{
+	struct cpuinfo_mips *c = &current_cpu_data;
+	int myvpe;
+
+	c->core   = (read_c0_ebase() >> 1) & 0xff;
+
+	/* Don't enable Malta I/O interrupts (IP2) for secondary VPEs */
+	myvpe = read_c0_tcbind() & TCBIND_CURVPE;
+	if (myvpe != 0) {
+		/* Ideally, this should be done only once per VPE, but... */
+		clear_c0_status(ST0_IM);
+		set_c0_status((0x100 << cp0_compare_irq)
+				| (0x100 << MIPS_CPU_IPI_IRQ));
+		if (cp0_perfcount_irq >= 0)
+			set_c0_status(0x100 << cp0_perfcount_irq);
+	}
+	local_irq_enable();
+}
+
+/*
+ * Platform SMP pre-initialization
+ *
+ * As noted above, we can assume a single CPU for now
+ * but it may be multithreaded.
+ */
+
+static void __init smtc_smp_setup(void)
+{
+	/*
+	 * we won't get the definitive value until
+	 * we've run smtc_prepare_cpus later, but
+	 * we would appear to need an upper bound now.
+	 */
+	smp_num_siblings = smtc_build_cpu_map(0);
+}
+
+static void __init msmtc_prepare_cpus(unsigned int max_cpus)
+{
+	smtc_prepare_cpus(max_cpus);
+}
+
+struct plat_smp_ops smtc_smp_ops = {
+	.send_ipi_single	= smtc_send_ipi_single,
+	.send_ipi_mask		= smtc_send_ipi_mask,
+	.init_secondary		= smtc_init_secondary,
+	.smp_finish		    = smtc_smp_finish,
+	.cpus_done		    = smtc_cpus_done,
+	.boot_secondary		= smtc_boot_secondary,
+	.smp_setup		    = smtc_smp_setup,
+	.prepare_cpus		= msmtc_prepare_cpus,
+};

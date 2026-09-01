@@ -80,6 +80,25 @@
 #include <linux/netlink.h>
 #include <linux/tcp.h>
 
+#if defined(CONFIG_NF_CONNTRACK) && ( defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+IFX_int32_t cpu_port_extended_cfg_get( int fd ) {
+  #include <net/ifx_ppa_api.h>
+#endif
+#ifdef  CONFIG_MAPPING
+#include "proto_trans.h"        /* for ip_mapping() */
+#endif
+
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+int sysctl_netfilter_postrouting_enable = 1;
+int sysctl_netfilter_output_enable = 1;
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+#include <linux/if_pppox.h>
+#include <linux/if_ether.h>
+#include <linux/if_vlan.h>
+#endif
+
 int sysctl_ip_default_ttl __read_mostly = IPDEFTTL;
 
 /* Generate a checksum for an outgoing IP datagram. */
@@ -95,6 +114,11 @@ int __ip_local_out(struct sk_buff *skb)
 
 	iph->tot_len = htons(skb->len);
 	ip_send_check(iph);
+
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+       if (!sysctl_netfilter_output_enable)
+               return dst_output(skb);
+#endif
 	return nf_hook(PF_INET, NF_INET_LOCAL_OUT, skb, NULL, skb_dst(skb)->dev,
 		       dst_output);
 }
@@ -200,7 +224,22 @@ static inline int ip_finish_output2(struct sk_buff *skb)
 		kfree_skb(skb);
 		skb = skb2;
 	}
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && ( defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+        if ( ppa_hook_session_add_fn != NULL )
+        {
+            struct nf_conn *ct;
 
+            enum ip_conntrack_info ctinfo;
+            uint32_t flags;
+    
+            ct = nf_ct_get(skb, &ctinfo);
+    
+            flags = 0;  //  post routing
+            flags |= CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL ? PPA_F_SESSION_ORG_DIR : PPA_F_SESSION_REPLY_DIR;
+    
+            ppa_hook_session_add_fn(skb, ct, flags);
+        }
+#endif
 	if (dst->hh)
 		return neigh_hh_output(dst->hh, skb);
 	else if (dst->neighbour)
@@ -231,8 +270,14 @@ static int ip_finish_output(struct sk_buff *skb)
 #endif
 	if (skb->len > ip_skb_dst_mtu(skb) && !skb_is_gso(skb))
 		return ip_fragment(skb, ip_finish_output2);
-	else
+	else {
+		skb_mark_priority(skb);
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+               if (!sysctl_netfilter_postrouting_enable)
+                       return ip_finish_output2(skb);
+#endif
 		return ip_finish_output2(skb);
+	}
 }
 
 int ip_mc_output(struct sk_buff *skb)
@@ -268,10 +313,16 @@ int ip_mc_output(struct sk_buff *skb)
 #endif
 		) {
 			struct sk_buff *newskb = skb_clone(skb, GFP_ATOMIC);
-			if (newskb)
-				NF_HOOK(PF_INET, NF_INET_POST_ROUTING, newskb,
+			if (newskb) {
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+			if (!sysctl_netfilter_postrouting_enable)
+				ip_dev_loopback_xmit(newskb);
+			else
+#endif
+			NF_HOOK(PF_INET, NF_INET_POST_ROUTING, newskb,
 					NULL, newskb->dev,
 					ip_dev_loopback_xmit);
+			}
 		}
 
 		/* Multicasts with ttl 0 must not go beyond the host */
@@ -284,9 +335,15 @@ int ip_mc_output(struct sk_buff *skb)
 
 	if (rt->rt_flags&RTCF_BROADCAST) {
 		struct sk_buff *newskb = skb_clone(skb, GFP_ATOMIC);
-		if (newskb)
+		if (newskb) {
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+                        if (!sysctl_netfilter_postrouting_enable)
+                                ip_dev_loopback_xmit(newskb);
+                        else
+#endif
 			NF_HOOK(PF_INET, NF_INET_POST_ROUTING, newskb, NULL,
 				newskb->dev, ip_dev_loopback_xmit);
+		}
 	}
 
 	return NF_HOOK_COND(PF_INET, NF_INET_POST_ROUTING, skb, NULL, skb->dev,
@@ -297,7 +354,16 @@ int ip_mc_output(struct sk_buff *skb)
 int ip_output(struct sk_buff *skb)
 {
 	struct net_device *dev = skb_dst(skb)->dev;
-
+#ifdef CONFIG_MAPPING
+       struct rtable *rt;
+       struct iphdr *myiph;
+       myiph = (struct iphdr *)ip_hdr(skb);
+       rt = (struct rtable *)skb_dst(skb);
+       if (rt->mapping) {      /* Packet translation for local output */
+               ip_mapping(skb, rt->src_prefix, rt->dst_prefix);
+               return 0;
+       }
+#endif
 	IP_UPD_PO_STATS(dev_net(dev), IPSTATS_MIB_OUT, skb->len);
 
 	skb->dev = dev;
@@ -413,6 +479,10 @@ static void ip_copy_metadata(struct sk_buff *to, struct sk_buff *from)
 #ifdef CONFIG_NET_SCHED
 	to->tc_index = from->tc_index;
 #endif
+#ifdef CONFIG_AVM_PA
+	memcpy(&to->avm_pa.pktinfo, &from->avm_pa.pktinfo,
+								sizeof(from->avm_pa.pktinfo));
+#endif
 	nf_copy(to, from);
 #if defined(CONFIG_NETFILTER_XT_TARGET_TRACE) || \
     defined(CONFIG_NETFILTER_XT_TARGET_TRACE_MODULE)
@@ -421,6 +491,21 @@ static void ip_copy_metadata(struct sk_buff *to, struct sk_buff *from)
 #if defined(CONFIG_IP_VS) || defined(CONFIG_IP_VS_MODULE)
 	to->ipvs_property = from->ipvs_property;
 #endif
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+        memcpy(&(to->apFlowData),&(from->apFlowData),sizeof(from->apFlowData));
+#else
+/* Copy the QOS related information from packet to the corresponding 
+   fragments also */
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+#if CONFIG_FUSIV_KERNEL_IPQOS_APQOS
+        memcpy(&(to->apFlowData.qosInfo),&(from->apFlowData.qosInfo),sizeof(from->apFlowData.qosInfo));
+#else 
+        memcpy(&(to->qosInfo),&(from->qosInfo),sizeof(from->qosInfo));
+#endif
+#endif
+#endif
+
 	skb_copy_secmark(to, from);
 }
 
@@ -1443,6 +1528,248 @@ void __init ip_init(void)
 #endif
 }
 
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+
+void fragmentPacket(struct sk_buff      *skb,
+                    struct fragmentInfo *fragInfo)
+{
+    struct sk_buff   *skb2;
+    struct iphdr     *iph      = NULL;
+    struct pppoe_hdr *pppoeHdr = NULL;
+    unsigned int     mtu, hlen = 0, left, len;
+    unsigned int     ll_rs = RESERVED_SPACE_FOR_FRAGMENT;
+    unsigned int     align = 4; /* For aligning IP header to 32-bit boundary */
+    int              raw = 0;
+    int              offset;
+    int              ptr;
+    int              err = 0;
+    int              macHdrLen = 0;
+    __be16           not_last_frag;
+
+    if (fragInfo->moduleType == MODULE_TYPE_ADSL)
+    {
+        iph  = (struct iphdr *)(skb->network_header);
+        hlen = (((unsigned char *) iph - ((unsigned char *) skb->data)) +
+                                                        (iph->ihl * 4));
+        macHdrLen = hlen - (iph->ihl * 4);
+    }
+    else if (fragInfo->moduleType == MODULE_TYPE_WLAN)
+    {
+        iph  = (struct iphdr *)(skb->data + fragInfo->l2HeaderLen);
+        hlen = fragInfo->l2HeaderLen + (iph->ihl * 4);
+        macHdrLen = fragInfo->l2HeaderLen;
+    }
+
+    mtu  = fragInfo->mtuSize - hlen;
+
+    left = skb->len - hlen;         /* Space per frame */
+    ptr  = raw + hlen;              /* Where to start from */
+
+    /*
+     *      Fragment the datagram.
+     */
+
+    offset        = (ntohs(iph->frag_off) & IP_OFFSET) << 3;
+    not_last_frag = iph->frag_off & htons(IP_MF);
+
+    /*
+     *      Keep copying data until we run out.
+     */
+
+    while (left > 0)
+    {
+        len = left;
+
+        /* IF: it doesn't fit, use 'mtu' - the data space left */
+
+        if (len > mtu)
+            len = mtu;
+
+        /* IF: we are not sending upto and including the packet end
+           then align the next start on an eight byte boundary */
+
+        if (len < left)
+        {
+            len &= ~7;
+        }
+
+        /*
+         *      Allocate buffer.
+         */
+
+        if ((skb2 = dev_alloc_skb(len + hlen + ll_rs + align)) == NULL)
+        {
+             printk("fragmentPacket: no memory for new fragment!\n");
+             goto fail;
+        }
+
+        /*
+         * Align IP header on 32-bit boundary as per the source buffer
+         * alignment.
+         */
+
+        skb_reserve(skb2, ((unsigned long) skb->data & 0x3));
+
+        /*
+         * Allow skbuff to have some head room, for growing at the front,
+         * required basically for WLAN protocol to add header
+         */
+
+        skb_reserve(skb2, ll_rs);
+
+        /*
+         *      Set up data on packet
+         */
+
+        ip_copy_metadata(skb2, skb);
+        skb_put(skb2, len + hlen);
+
+        if (macHdrLen)
+            skb2->mac_header = skb2->data;
+
+        skb2->network_header = skb2->data + macHdrLen;
+        skb2->transport_header  = skb2->data + hlen;
+
+        /*
+         *      Charge the memory for the fragment to any owner
+         *      it might possess
+         */
+
+        if (skb->sk)
+            skb_set_owner_w(skb2, skb->sk);
+
+        /*
+         *      Copy the packet header into the new buffer.
+         */
+
+        if (macHdrLen)
+            memcpy(skb2->mac_header, skb->data, macHdrLen);
+
+        memcpy(skb2->network_header, skb->data + macHdrLen, hlen - macHdrLen);
+
+        /*
+         *      Copy a block of the IP datagram.
+         */
+
+        memcpy(skb2->transport_header, skb->data + ptr, len);
+
+        memcpy(skb2->cb, skb->cb, sizeof(skb->cb));
+
+        left -= len;
+
+        /* If PPPoE packet, update the total length in PPPoE Header */
+
+        if ((fragInfo->pktType & (1 << PKT_TYPE_PPPOE)) &&
+            (fragInfo->pktType & (1 << PKT_TYPE_VLAN)))
+        {
+            pppoeHdr = (struct pppoe_hdr *) ((unsigned char *) skb2->data +
+                                                   sizeof(struct ethhdr) +
+                                                  sizeof(struct vlan_hdr));
+        }
+        else if (fragInfo->pktType & (1 << PKT_TYPE_PPPOE))
+        {
+            pppoeHdr = (struct pppoe_hdr *) ((unsigned char *) skb2->data +
+                                                     sizeof(struct ethhdr));
+        }
+
+        if (pppoeHdr)
+            pppoeHdr->length = len + hlen - sizeof(struct ethhdr)
+                                          - sizeof(struct pppoe_hdr);
+
+        /*
+         *      Fill in the new header fields.
+         */
+
+        iph = (struct iphdr *)(skb2->network_header);
+        iph->frag_off = htons((offset >> 3));
+
+        /* ANK: dirty, but effective trick. Upgrade options only if
+                 * the segment to be fragmented was THE FIRST (otherwise,
+         * options are already fixed) and make it ONCE
+         * on the initial skb, so that all the following fragments
+         * will inherit fixed options.
+         */
+
+#if 0  // Commented out assuming that there will be no ip options in the pkt
+        if (offset == 0)
+            ip_options_fragment(skb);
+#endif
+
+        /*
+         *      Added AC : If we are fragmenting a fragment that's not the
+         *                 last fragment then keep MF on each bit
+         */
+
+        if (left > 0 || not_last_frag)
+            iph->frag_off |= htons(IP_MF);
+
+        ptr    += len;
+        offset += len;
+
+        /*
+         *      Put this fragment into the sending queue.
+         */
+
+        iph->tot_len = htons(len + (iph->ihl * 4));
+
+        ip_send_check(iph);
+
+        err = (fragInfo->fragment_xmit_ptr)(skb2, skb2->dev);
+
+        if (err)
+            goto fail;
+
+        IP_INC_STATS(sock_net(skb->sk), IPSTATS_MIB_FRAGCREATES);
+    }
+
+    kfree_skb(skb);
+    IP_INC_STATS(sock_net(skb->sk), IPSTATS_MIB_FRAGOKS);
+
+    return;
+
+fail:
+    kfree_skb(skb);
+    IP_INC_STATS(sock_net(skb->sk), IPSTATS_MIB_FRAGFAILS);
+
+    return;
+}
+
+void checkIfFragmentNeeded(struct sk_buff      *skb,
+                           struct fragmentInfo *fragInfo)
+{
+    unsigned short ipLen;
+
+    ipLen = fragInfo->totalLength - fragInfo->l2HeaderLen;
+
+    if ((fragInfo->mtuSize) && (ipLen > fragInfo->mtuSize))
+    {
+        struct iphdr *ipHdr;
+
+        ipHdr = (struct iphdr *)(skb->data + fragInfo->l2HeaderLen);
+
+        if (ipHdr->frag_off & htons(IP_DF))
+            kfree_skb(skb);
+        else
+            return fragmentPacket(skb, fragInfo);
+    }
+    else
+    {
+        (fragInfo->fragment_xmit_ptr)(skb, skb->dev);
+
+        return;
+    }
+}
+
+EXPORT_SYMBOL(fragmentPacket);
+EXPORT_SYMBOL(checkIfFragmentNeeded);
+
+#endif
 EXPORT_SYMBOL(ip_generic_getfrag);
 EXPORT_SYMBOL(ip_queue_xmit);
 EXPORT_SYMBOL(ip_send_check);
+
+#if defined(CONFIG_IFX_PPA_API_MODULE)
+EXPORT_SYMBOL(ip_mc_output);
+EXPORT_SYMBOL(ip_forward);
+EXPORT_SYMBOL(ip_local_deliver);
+#endif

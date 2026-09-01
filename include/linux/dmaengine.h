@@ -451,7 +451,7 @@ static inline void async_dmaengine_put(void)
 {
 }
 static inline struct dma_chan *
-async_dma_find_channel(enum dma_transaction_type type)
+async_dma_find_channel(enum dma_transaction_type type __attribute__ ((unused)))
 {
 	return NULL;
 }
@@ -589,7 +589,7 @@ enum dma_status dma_sync_wait(struct dma_chan *chan, dma_cookie_t cookie);
 enum dma_status dma_wait_for_async_tx(struct dma_async_tx_descriptor *tx);
 void dma_issue_pending_all(void);
 #else
-static inline enum dma_status dma_wait_for_async_tx(struct dma_async_tx_descriptor *tx)
+static inline enum dma_status dma_wait_for_async_tx(struct dma_async_tx_descriptor *tx __attribute__ ((unused)))
 {
 	return DMA_SUCCESS;
 }

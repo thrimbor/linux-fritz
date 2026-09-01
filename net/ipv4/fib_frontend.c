@@ -448,6 +448,14 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 		cfg->fc_mx_len = len;
 	}
 
+#ifdef CONFIG_MAPPING
+	if(rt->rt_flags & RTF_MAPPING)
+	{
+		cfg->fib_config_rtm_mapping = 1;
+		cfg->fib_config_rtm_src_prefix = rt->src_prefix;
+		cfg->fib_config_rtm_dst_prefix = rt->dst_prefix;
+	}
+#endif
 	return 0;
 }
 
@@ -533,6 +541,12 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 	cfg->fc_type = rtm->rtm_type;
 	cfg->fc_flags = rtm->rtm_flags;
 	cfg->fc_nlflags = nlh->nlmsg_flags;
+
+#ifdef CONFIG_MAPPING
+	cfg->fib_config_rtm_mapping = rtm->rtm_mapping;
+	cfg->fib_config_rtm_dst_prefix = rtm->rtm_dst_prefix;
+	cfg->fib_config_rtm_src_prefix = rtm->rtm_src_prefix;
+#endif
 
 	cfg->fc_nlinfo.pid = NETLINK_CB(skb).pid;
 	cfg->fc_nlinfo.nlh = nlh;
@@ -689,11 +703,13 @@ static void fib_magic(int cmd, int type, __be32 dst, int dst_len, struct in_ifad
 			.nl_net = net,
 		},
 	};
+	u32 n;
 
 	if (type == RTN_UNICAST)
-		tb = fib_new_table(net, RT_TABLE_MAIN);
+		n = IN_DEV_CONF_GET(ifa->ifa_dev, IFADDR_RTABLE);
 	else
-		tb = fib_new_table(net, RT_TABLE_LOCAL);
+		n = RT_TABLE_LOCAL;
+	tb = fib_new_table(net, n);
 
 	if (tb == NULL)
 		return;

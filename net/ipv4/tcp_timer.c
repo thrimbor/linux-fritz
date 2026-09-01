@@ -496,7 +496,7 @@ static void tcp_keepalive_timer (unsigned long data)
 	elapsed = keepalive_time_when(tp);
 
 	/* It is alive without keepalive 8) */
-	if (tp->packets_out || tcp_send_head(sk))
+	if (icsk->icsk_retransmits == 0 && (tp->packets_out || tcp_send_head(sk)))
 		goto resched;
 
 	elapsed = tcp_time_stamp - tp->rcv_tstamp;

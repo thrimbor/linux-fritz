@@ -13,6 +13,9 @@ obj-y     := route.o inetpeer.o protocol.o \
 	     fib_frontend.o fib_semantics.o \
 	     inet_fragment.o
 
+ifneq ($(CONFIG_LTQ_UDP_REDIRECT),)
+obj-$(CONFIG_LTQ_UDP_REDIRECT) += udp_redirect_symb.o
+endif
 obj-$(CONFIG_SYSCTL) += sysctl_net_ipv4.o
 obj-$(CONFIG_IP_FIB_HASH) += fib_hash.o
 obj-$(CONFIG_IP_FIB_TRIE) += fib_trie.o
@@ -52,3 +55,9 @@ obj-$(CONFIG_NETLABEL) += cipso_ipv4.o
 
 obj-$(CONFIG_XFRM) += xfrm4_policy.o xfrm4_state.o xfrm4_input.o \
 		      xfrm4_output.o
+obj-$(CONFIG_IP_MULTICAST_FASTFORWARD) += mcfastforward.o
+obj-$(CONFIG_MAPPING) += mapping.o proto_trans.o
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/net/ipv4/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

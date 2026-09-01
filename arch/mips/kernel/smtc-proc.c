@@ -79,6 +79,8 @@ static int proc_read_smtc(char *page, char **start, off_t off,
 void init_smtc_stats(void)
 {
 	int i;
+	extern struct proc_dir_entry *get_mips_proc_dir(void);
+	struct proc_dir_entry *mips_proc_dir = get_mips_proc_dir();
 
 	for (i=0; i<NR_CPUS; i++) {
 		smtc_cpu_stats[i].timerints = 0;
@@ -87,6 +89,6 @@ void init_smtc_stats(void)
 
 	atomic_set(&smtc_fpu_recoveries, 0);
 
-	smtc_stats = create_proc_read_entry("smtc", 0444, NULL,
+	smtc_stats = create_proc_read_entry("smtc", 0444, mips_proc_dir,
 	                                    proc_read_smtc, NULL);
 }

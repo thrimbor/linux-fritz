@@ -60,6 +60,10 @@ icmp_manip_pkt(struct sk_buff *skb,
 	const struct iphdr *iph = (struct iphdr *)(skb->data + iphdroff);
 	struct icmphdr *hdr;
 	unsigned int hdroff = iphdroff + iph->ihl*4;
+        int nat_manip_type;
+	__be32 oldip, newip;
+	__be16 *portptr, newport, oldport;
+
 
 	if (!skb_make_writable(skb, hdroff + sizeof(*hdr)))
 		return false;
@@ -68,6 +72,23 @@ icmp_manip_pkt(struct sk_buff *skb,
 	inet_proto_csum_replace2(&hdr->checksum, skb,
 				 hdr->un.echo.id, tuple->src.u.icmp.id, 0);
 	hdr->un.echo.id = tuple->src.u.icmp.id;
+
+	if (maniptype == IP_NAT_MANIP_SRC) {
+		oldip = iph->saddr;
+                oldport = hdr->un.echo.id;
+		newip = tuple->src.u3.ip;
+		newport = tuple->src.u.icmp.id;
+                nat_manip_type = 1;
+        } else {
+		oldip = iph->daddr;
+		oldport = tuple->src.u.icmp.id;
+		newip = tuple->dst.u3.ip;
+                newport = hdr->un.echo.id;
+                nat_manip_type = 2;
+        }
+
+        athrs_hw_nat_add_entry(oldip, oldport, newip, newport, 3, nat_manip_type);
+
 	return true;
 }
 

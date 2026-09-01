@@ -519,6 +519,68 @@ static DEVICE_ATTR(authorized, 0644,
 	    usb_dev_authorized_show, usb_dev_authorized_store);
 
 
+#if 1 /* == 20101129 AVM/WK Extension: prevent probing for a device */
+
+/* show if probing is allowed (0) or not allowed (1) for the device */
+static ssize_t usb_dev_noprobe_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct usb_device *usb_dev = to_usb_device(dev);
+	return snprintf(buf, PAGE_SIZE, "%u\n", usb_dev->noprobe);
+}
+
+/*
+ * Prevent probing for a device
+ * (configures or deconfigures the device as a side effect)
+ *
+ * Writing a 0 allows probing and reconfigures the device
+ * writing a 1 prevents probing and unconfigures the device it
+ * 
+ */
+static ssize_t usb_dev_noprobe_store(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf, size_t size)
+{
+	ssize_t result;
+	struct usb_device *usb_dev = to_usb_device(dev);
+	unsigned val;
+	result = sscanf(buf, "%u\n", &val);
+	if (result != 1)
+		result = -EINVAL;
+	else {
+		usb_lock_device(usb_dev);
+		if (val == 0) {
+			int c,err;
+			usb_dev->noprobe = 0;
+			c = usb_choose_configuration(usb_dev);
+			if (c >= 0) {
+				err = usb_set_configuration(usb_dev, c);
+				if (err) {
+					dev_err(&usb_dev->dev,
+						"can't set config #%d, error %d\n", c, err);
+					/* This need not be fatal.  The user can try to
+					 * set other configurations. */
+				}
+			}
+		} else {
+			usb_dev->noprobe = 1;
+			usb_set_configuration(usb_dev, -1);
+			/* == 20110923 AVM/WK noprobe: extra value 2 resets device */			
+			if (val == 2) {
+				usb_dev->noprobe = 2;
+				usb_reset_device (usb_dev);
+			}
+		}
+		usb_unlock_device(usb_dev);
+	}
+	return result < 0? result : size;
+}
+
+static DEVICE_ATTR(noprobe, 0644,
+	    usb_dev_noprobe_show, usb_dev_noprobe_store);
+#endif
+
 static struct attribute *dev_attrs[] = {
 	/* current configuration's attributes */
 	&dev_attr_configuration.attr,
@@ -543,6 +605,9 @@ static struct attribute *dev_attrs[] = {
 	&dev_attr_maxchild.attr,
 	&dev_attr_quirks.attr,
 	&dev_attr_authorized.attr,
+#if 1 /* AVM/WK Extension */
+	&dev_attr_noprobe.attr,
+#endif
 	NULL,
 };
 static struct attribute_group dev_attr_grp = {
@@ -819,7 +884,7 @@ int usb_create_sysfs_intf_files(struct usb_interface *intf)
 {
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct usb_host_interface *alt = intf->cur_altsetting;
-	int retval;
+	int retval __maybe_unused__;
 
 	if (intf->sysfs_files_created || intf->unregistering)
 		return 0;

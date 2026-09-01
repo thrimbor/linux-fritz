@@ -493,7 +493,7 @@ int __nand_correct_data(unsigned char *buf,
 		return 1;	/* error in ecc data; no action needed */
 
 	printk(KERN_ERR "uncorrectable error : ");
-	return -1;
+	return -EBADMSG;
 }
 EXPORT_SYMBOL(__nand_correct_data);
 

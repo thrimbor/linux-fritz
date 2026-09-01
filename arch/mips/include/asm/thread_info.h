@@ -82,6 +82,11 @@ register struct thread_info *__current_thread_info __asm__("$28");
 #define THREAD_SIZE_ORDER (0)
 #endif
 
+#ifdef CONFIG_THREAD_SIZE_ORDER
+#undef THREAD_SIZE_ORDER
+#define THREAD_SIZE_ORDER (CONFIG_THREAD_SIZE_ORDER)
+#endif /*--- #ifdef CONFIG_THREAD_SIZE_ORDER ---*/
+
 #define THREAD_SIZE (PAGE_SIZE << THREAD_SIZE_ORDER)
 #define THREAD_MASK (THREAD_SIZE - 1UL)
 
@@ -147,8 +152,12 @@ register struct thread_info *__current_thread_info __asm__("$28");
 
 /* work to do on interrupt/exception return */
 #define _TIF_WORK_MASK		(0x0000ffef & ~_TIF_SECCOMP)
+#define _TIF_WORK_SYSCALL_EXIT	(_TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT)
 /* work to do on any return to u-space */
 #define _TIF_ALLWORK_MASK	(0x8000ffff & ~_TIF_SECCOMP)
+
+/* work to do on any return to u-space */
+
 
 #endif /* __KERNEL__ */
 

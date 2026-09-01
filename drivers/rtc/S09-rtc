@@ -1,0 +1,5 @@
+#! /bin/sh
+/sbin/modprobe rtc-avm
+rtc_major=`grep rtc /proc/devices`
+rtc_major=${rtc_major%% rtc}
+mknod /dev/rtc0 c ${rtc_major} 0

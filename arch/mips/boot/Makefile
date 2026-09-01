@@ -27,6 +27,38 @@ VMLINUX = vmlinux
 
 all: vmlinux.ecoff vmlinux.srec addinitrd
 
+TOPDIR ?= $(srctree)
+
+piggy.gzip: $(CONFIGURE) $(VMLINUX)
+	$(Q)$(OBJCOPY) -O binary -R .note -R .comment -S $(TOPDIR)/vmlinux piggy
+	$(Q)gzip -9 < piggy > piggy.gzip
+
+piggy.bz2: $(CONFIGURE) $(VMLINUX)
+	$(Q)$(OBJCOPY) -O binary -R .note -R .comment -S $(TOPDIR)/vmlinux piggy
+	$(Q)bzip2 -9 < piggy > piggy.bz2
+
+piggy.lzma: $(CONFIGURE) $(VMLINUX)
+	$(Q)$(OBJCOPY) -O binary -R .note -R .comment -S $(TOPDIR)/vmlinux piggy
+	$(Q)lzma e piggy piggy.lzma
+
+uImage.gzip : piggy.gzip
+	$(Q)mkimage -A mips -O linux -T kernel -C gzip -a $(LOADADDR) -e \
+	0x$(shell grep kernel_entry $(TOPDIR)/System.map | awk '{ printf "%s", $$1 }') \
+	-n 'MIPS Linux-$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)' \
+	-d piggy.gzip uImage
+
+uImage.bzip2 : piggy.bz2
+	$(Q)mkimage -A mips -O linux -T kernel -C bzip2 -a $(LOADADDR) -e \
+	0x$(shell grep kernel_entry $(TOPDIR)/System.map | awk '{ printf "%s", $$1 }') \
+	-n 'MIPS Linux-$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)' \
+	-d piggy.bz2 uImage
+
+uImage.lzma : piggy.lzma
+	$(Q)mkimage -A mips -O linux -T kernel -C lzma -a $(LOADADDR) -e \
+	0x$(shell grep kernel_entry $(TOPDIR)/System.map | awk '{ printf "%s", $$1 }') \
+	-n 'MIPS Linux-$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)' \
+	-d piggy.lzma uImage
+
 vmlinux.ecoff: $(obj)/elf2ecoff $(VMLINUX)
 	$(obj)/elf2ecoff $(VMLINUX) vmlinux.ecoff $(E2EFLAGS)
 

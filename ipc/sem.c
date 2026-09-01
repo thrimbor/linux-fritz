@@ -314,6 +314,7 @@ SYSCALL_DEFINE3(semget, key_t, key, int, nsems, int, semflg)
 	struct ipc_namespace *ns;
 	struct ipc_ops sem_ops;
 	struct ipc_params sem_params;
+	int id;
 
 	ns = current->nsproxy->ipc_ns;
 
@@ -328,7 +329,16 @@ SYSCALL_DEFINE3(semget, key_t, key, int, nsems, int, semflg)
 	sem_params.flg = semflg;
 	sem_params.u.nsems = nsems;
 
-	return ipcget(ns, &sem_ids(ns), &sem_ops, &sem_params);
+	id = ipcget(ns, &sem_ids(ns), &sem_ops, &sem_params);
+
+#if 0
+	if (id >= 0)
+	   printk(KERN_NOTICE "%s(%d): semget(0x%lx,%d,0%o)=%d\n",
+						  current->comm, current->pid,
+						  key, nsems, semflg, id);
+#endif
+
+	return id;
 }
 
 /*
@@ -899,6 +909,7 @@ SYSCALL_DEFINE(semctl)(int semid, int semnum, int cmd, union semun arg)
 	if (semid < 0)
 		return -EINVAL;
 
+
 	version = ipc_parse_version(&cmd);
 	ns = current->nsproxy->ipc_ns;
 
@@ -916,6 +927,9 @@ SYSCALL_DEFINE(semctl)(int semid, int semnum, int cmd, union semun arg)
 	case GETZCNT:
 	case SETVAL:
 	case SETALL:
+	   if (semid == 0)
+		  printk(KERN_ERR "semctl(: %s(%d): using uninitialized semid (0).\n",
+						  current->comm, current->pid);
 		err = semctl_main(ns,semid,semnum,cmd,version,arg);
 		return err;
 	case IPC_RMID:
@@ -1070,6 +1084,10 @@ SYSCALL_DEFINE4(semtimedop, int, semid, struct sembuf __user *, tsops,
 	struct sem_queue queue;
 	unsigned long jiffies_left = 0;
 	struct ipc_namespace *ns;
+
+	if (semid == 0)
+	   printk(KERN_ERR "sem(timed)op: %s(%d): using uninitialized semid (0).\n",
+					   current->comm, current->pid);
 
 	ns = current->nsproxy->ipc_ns;
 
@@ -1332,6 +1350,10 @@ void exit_sem(struct task_struct *tsk)
 			struct sem * semaphore = &sma->sem_base[i];
 			if (un->semadj[i]) {
 				semaphore->semval += un->semadj[i];
+				printk(KERN_NOTICE "%s(%d): sem-undo(%d) += %d (semval %d) \n",
+					               tsk->comm, tsk->pid,
+					               semid,
+								   un->semadj[i], semaphore->semval);
 				/*
 				 * Range checks of the new semaphore value,
 				 * not defined by sus:

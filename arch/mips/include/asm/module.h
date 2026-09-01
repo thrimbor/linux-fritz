@@ -78,6 +78,12 @@ search_module_dbetables(unsigned long addr)
 #define MODULE_PROC_FAMILY "MIPS32_R1 "
 #elif defined CONFIG_CPU_MIPS32_R2
 #define MODULE_PROC_FAMILY "MIPS32_R2 "
+#elif defined CONFIG_CPU_MIPS_24K
+#define MODULE_PROC_FAMILY "MIPS_24K "
+#elif defined CONFIG_CPU_MIPS_34K
+#define MODULE_PROC_FAMILY "MIPS_34K "
+#elif defined CONFIG_CPU_MIPS_74K
+#define MODULE_PROC_FAMILY "MIPS_74K "
 #elif defined CONFIG_CPU_MIPS64_R1
 #define MODULE_PROC_FAMILY "MIPS64_R1 "
 #elif defined CONFIG_CPU_MIPS64_R2

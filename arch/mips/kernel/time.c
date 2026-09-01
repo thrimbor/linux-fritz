@@ -71,7 +71,7 @@ EXPORT_SYMBOL(perf_irq);
 
 unsigned int mips_hpt_frequency;
 
-void __init clocksource_set_clock(struct clocksource *cs, unsigned int clock)
+void clocksource_set_clock(struct clocksource *cs, unsigned int clock)
 {
 	u64 temp;
 	u32 shift;
@@ -87,7 +87,7 @@ void __init clocksource_set_clock(struct clocksource *cs, unsigned int clock)
 	cs->mult = (u32) temp;
 }
 
-void __cpuinit clockevent_set_clock(struct clock_event_device *cd,
+void clockevent_set_clock(struct clock_event_device *cd,
 	unsigned int clock)
 {
 	u64 temp;

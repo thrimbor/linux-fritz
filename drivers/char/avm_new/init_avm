@@ -1,0 +1,72 @@
+#!/bin/bash
+# /*------------------------------------------------------------------------------------------*\
+# *   
+# *   Copyright (C) 2006 AVM GmbH <fritzbox_info@avm.de>
+# *
+# *   This program is free software; you can redistribute it and/or modify
+# *   it under the terms of the GNU General Public License as published by
+# *   the Free Software Foundation; either version 2 of the License, or
+# *   (at your option) any later version.
+# *
+# *   This program is distributed in the hope that it will be useful,
+# *   but WITHOUT ANY WARRANTY; without even the implied warranty of
+# *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# *   GNU General Public License for more details.
+# *
+# *   You should have received a copy of the GNU General Public License
+# *   along with this program; if not, write to the Free Software
+# *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA 
+# \*------------------------------------------------------------------------------------------*/
+
+KERNEL_CLASS=$1
+DRIVER_NAME=$2
+
+if [ -z "$KERNEL_CLASS" ] ; then
+    KERNEL_CLASS=26
+fi
+
+tmp=`grep 'BUTTON=y' $FRITZ_BOX_BUILD_DIR/arch/etc/init.d/rc.${KERNEL_LAYOUT}.init`
+
+AVM_NEW_HWREV_LIST=""
+for i in $tmp ; do
+    case $i in
+        HW=*)
+            HWREV=${i##HW=}
+            AVM_NEW_HWREV_LIST="$AVM_NEW_HWREV_LIST ${HWREV%%[a-zA-Z]*}"
+            ;;
+        *)
+            ;;
+    esac
+done
+
+for i in `find . -name Makefile.$KERNEL_CLASS` ; do
+    dest=${i%.$KERNEL_CLASS}
+    source="`pwd`/$i"
+    rm -f $dest 
+    echo -e "#############################################" >$dest
+    echo -e "# Makefile: automaticly genereated by $0" >>$dest
+    echo -e "#           `date`" >>$dest
+    echo -e "#############################################" >>$dest
+    echo -e "" >>$dest
+    cat  $source >> $dest
+    echo "EXTRA_CFLAGS	+= -DAVM_NEW_HWREV_LIST=\"\\\"$AVM_NEW_HWREV_LIST \\\"\"" >>$dest
+done
+
+ln -fs `pwd`/linux_avm_event.h ../../../include/linux/avm_event.h 
+ln -fs `pwd`/linux_avm_led.h ../../../include/linux/avm_led.h 
+ln -fs `pwd`/linux_ar7wdt.h  ../../../include/linux/ar7wdt.h 
+ln -fs `pwd`/linux_avm_profile.h  ../../../include/linux/avm_profile.h 
+ln -fs `pwd`/linux_avm_debug.h  ../../../include/linux/avm_debug.h 
+
+if [ -n "$FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD" ] ; then
+    if [ ! -d $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux ] ; then
+        mkdir -p $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux 
+    fi
+    cp -vf `pwd`/linux_avm_event.h $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux/avm_event.h 
+    cp -vf `pwd`/linux_avm_led.h $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux/avm_led.h 
+    cp -vf `pwd`/linux_ar7wdt.h  $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux/ar7wdt.h  
+    cp -vf `pwd`/linux_avm_profile.h  $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux/avm_profile.h  
+    cp -vf `pwd`/linux_avm_debug.h  $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux/avm_debug.h  
+fi
+
+exit 0 

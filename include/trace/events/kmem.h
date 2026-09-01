@@ -46,11 +46,11 @@
 
 TRACE_EVENT(kmalloc,
 
-	TP_PROTO(unsigned long call_site,
-		 const void *ptr,
-		 size_t bytes_req,
-		 size_t bytes_alloc,
-		 gfp_t gfp_flags),
+	TP_PROTO(unsigned long call_site __attribute__ ((unused)),
+		 const void *ptr __attribute__ ((unused)),
+		 size_t bytes_req __attribute__ ((unused)),
+		 size_t bytes_alloc __attribute__ ((unused)),
+		 gfp_t gfp_flags __attribute__ ((unused))),
 
 	TP_ARGS(call_site, ptr, bytes_req, bytes_alloc, gfp_flags),
 
@@ -80,11 +80,11 @@ TRACE_EVENT(kmalloc,
 
 TRACE_EVENT(kmem_cache_alloc,
 
-	TP_PROTO(unsigned long call_site,
-		 const void *ptr,
-		 size_t bytes_req,
-		 size_t bytes_alloc,
-		 gfp_t gfp_flags),
+	TP_PROTO(unsigned long call_site __attribute__ ((unused)),
+		 const void *ptr __attribute__ ((unused)),
+		 size_t bytes_req __attribute__ ((unused)),
+		 size_t bytes_alloc __attribute__ ((unused)),
+		 gfp_t gfp_flags __attribute__ ((unused))),
 
 	TP_ARGS(call_site, ptr, bytes_req, bytes_alloc, gfp_flags),
 
@@ -114,12 +114,12 @@ TRACE_EVENT(kmem_cache_alloc,
 
 TRACE_EVENT(kmalloc_node,
 
-	TP_PROTO(unsigned long call_site,
-		 const void *ptr,
-		 size_t bytes_req,
-		 size_t bytes_alloc,
-		 gfp_t gfp_flags,
-		 int node),
+	TP_PROTO(unsigned long call_site __attribute__ ((unused)),
+		 const void *ptr __attribute__ ((unused)),
+		 size_t bytes_req __attribute__ ((unused)),
+		 size_t bytes_alloc __attribute__ ((unused)),
+		 gfp_t gfp_flags __attribute__ ((unused)),
+		 int node __attribute__ ((unused))),
 
 	TP_ARGS(call_site, ptr, bytes_req, bytes_alloc, gfp_flags, node),
 
@@ -152,12 +152,12 @@ TRACE_EVENT(kmalloc_node,
 
 TRACE_EVENT(kmem_cache_alloc_node,
 
-	TP_PROTO(unsigned long call_site,
-		 const void *ptr,
-		 size_t bytes_req,
-		 size_t bytes_alloc,
-		 gfp_t gfp_flags,
-		 int node),
+	TP_PROTO(unsigned long call_site __attribute__ ((unused)),
+		 const void *ptr __attribute__ ((unused)),
+		 size_t bytes_req __attribute__ ((unused)),
+		 size_t bytes_alloc __attribute__ ((unused)),
+		 gfp_t gfp_flags __attribute__ ((unused)),
+		 int node __attribute__ ((unused))),
 
 	TP_ARGS(call_site, ptr, bytes_req, bytes_alloc, gfp_flags, node),
 
@@ -190,7 +190,7 @@ TRACE_EVENT(kmem_cache_alloc_node,
 
 TRACE_EVENT(kfree,
 
-	TP_PROTO(unsigned long call_site, const void *ptr),
+	TP_PROTO(unsigned long call_site __attribute__ ((unused)), const void *ptr __attribute__ ((unused))),
 
 	TP_ARGS(call_site, ptr),
 
@@ -209,7 +209,7 @@ TRACE_EVENT(kfree,
 
 TRACE_EVENT(kmem_cache_free,
 
-	TP_PROTO(unsigned long call_site, const void *ptr),
+	TP_PROTO(unsigned long call_site __attribute__ ((unused)), const void *ptr __attribute__ ((unused))),
 
 	TP_ARGS(call_site, ptr),
 
@@ -228,7 +228,7 @@ TRACE_EVENT(kmem_cache_free,
 
 TRACE_EVENT(mm_page_free_direct,
 
-	TP_PROTO(struct page *page, unsigned int order),
+	TP_PROTO(struct page *page __attribute__ ((unused)), unsigned int order __attribute__ ((unused))),
 
 	TP_ARGS(page, order),
 
@@ -250,7 +250,7 @@ TRACE_EVENT(mm_page_free_direct,
 
 TRACE_EVENT(mm_pagevec_free,
 
-	TP_PROTO(struct page *page, int cold),
+	TP_PROTO(struct page *page __attribute__ ((unused)), int cold __attribute__ ((unused))),
 
 	TP_ARGS(page, cold),
 
@@ -272,8 +272,8 @@ TRACE_EVENT(mm_pagevec_free,
 
 TRACE_EVENT(mm_page_alloc,
 
-	TP_PROTO(struct page *page, unsigned int order,
-			gfp_t gfp_flags, int migratetype),
+	TP_PROTO(struct page *page __attribute__ ((unused)), unsigned int order __attribute__ ((unused)),
+			gfp_t gfp_flags __attribute__ ((unused)), int migratetype __attribute__ ((unused))),
 
 	TP_ARGS(page, order, gfp_flags, migratetype),
 
@@ -301,7 +301,7 @@ TRACE_EVENT(mm_page_alloc,
 
 TRACE_EVENT(mm_page_alloc_zone_locked,
 
-	TP_PROTO(struct page *page, unsigned int order, int migratetype),
+	TP_PROTO(struct page *page __attribute__ ((unused)), unsigned int order __attribute__ ((unused)), int migratetype __attribute__ ((unused))),
 
 	TP_ARGS(page, order, migratetype),
 
@@ -327,7 +327,7 @@ TRACE_EVENT(mm_page_alloc_zone_locked,
 
 TRACE_EVENT(mm_page_pcpu_drain,
 
-	TP_PROTO(struct page *page, int order, int migratetype),
+	TP_PROTO(struct page *page __attribute__ ((unused)), int order __attribute__ ((unused)), int migratetype __attribute__ ((unused))),
 
 	TP_ARGS(page, order, migratetype),
 
@@ -352,9 +352,9 @@ TRACE_EVENT(mm_page_pcpu_drain,
 
 TRACE_EVENT(mm_page_alloc_extfrag,
 
-	TP_PROTO(struct page *page,
-			int alloc_order, int fallback_order,
-			int alloc_migratetype, int fallback_migratetype),
+	TP_PROTO(struct page *page __attribute__ ((unused)),
+			int alloc_order __attribute__ ((unused)), int fallback_order __attribute__ ((unused)),
+			int alloc_migratetype __attribute__ ((unused)), int fallback_migratetype __attribute__ ((unused))),
 
 	TP_ARGS(page,
 		alloc_order, fallback_order,

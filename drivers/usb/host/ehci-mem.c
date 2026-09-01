@@ -104,6 +104,7 @@ static struct ehci_qh *ehci_qh_alloc (struct ehci_hcd *ehci, gfp_t flags)
 		ehci_dbg (ehci, "no dummy td\n");
 		goto fail1;
 	}
+
 done:
 	return qh;
 fail1:

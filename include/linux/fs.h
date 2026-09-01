@@ -988,11 +988,11 @@ static inline int file_check_writeable(struct file *f)
 	return -EINVAL;
 }
 #else /* !CONFIG_DEBUG_WRITECOUNT */
-static inline void file_take_write(struct file *filp) {}
-static inline void file_release_write(struct file *filp) {}
-static inline void file_reset_write(struct file *filp) {}
-static inline void file_check_state(struct file *filp) {}
-static inline int file_check_writeable(struct file *filp)
+static inline void file_take_write(struct file *filp __attribute__ ((unused))) {}
+static inline void file_release_write(struct file *filp __attribute__ ((unused))) {}
+static inline void file_reset_write(struct file *filp __attribute__ ((unused))) {}
+static inline void file_check_state(struct file *filp __attribute__ ((unused))) {}
+static inline int file_check_writeable(struct file *filp __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -1139,143 +1139,143 @@ extern int lease_modify(struct file_lock **, int);
 extern int lock_may_read(struct inode *, loff_t start, unsigned long count);
 extern int lock_may_write(struct inode *, loff_t start, unsigned long count);
 #else /* !CONFIG_FILE_LOCKING */
-static inline int fcntl_getlk(struct file *file, struct flock __user *user)
+static inline int fcntl_getlk(struct file *file __attribute__ ((unused)), struct flock __user *user __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline int fcntl_setlk(unsigned int fd, struct file *file,
-			      unsigned int cmd, struct flock __user *user)
+static inline int fcntl_setlk(unsigned int fd __attribute__ ((unused)), struct file *file __attribute__ ((unused)),
+			      unsigned int cmd __attribute__ ((unused)), struct flock __user *user __attribute__ ((unused)))
 {
 	return -EACCES;
 }
 
 #if BITS_PER_LONG == 32
-static inline int fcntl_getlk64(struct file *file, struct flock64 __user *user)
+static inline int fcntl_getlk64(struct file *file __attribute__ ((unused)), struct flock64 __user *user __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline int fcntl_setlk64(unsigned int fd, struct file *file,
-				unsigned int cmd, struct flock64 __user *user)
+static inline int fcntl_setlk64(unsigned int fd __attribute__ ((unused)), struct file *file __attribute__ ((unused)),
+				unsigned int cmd __attribute__ ((unused)), struct flock64 __user *user __attribute__ ((unused)))
 {
 	return -EACCES;
 }
 #endif
-static inline int fcntl_setlease(unsigned int fd, struct file *filp, long arg)
+static inline int fcntl_setlease(unsigned int fd __attribute__ ((unused)), struct file *filp __attribute__ ((unused)), long arg __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int fcntl_getlease(struct file *filp)
+static inline int fcntl_getlease(struct file *filp __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void locks_init_lock(struct file_lock *fl)
+static inline void locks_init_lock(struct file_lock *fl __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline void __locks_copy_lock(struct file_lock *new, struct file_lock *fl)
+static inline void __locks_copy_lock(struct file_lock *new __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline void locks_copy_lock(struct file_lock *new, struct file_lock *fl)
+static inline void locks_copy_lock(struct file_lock *new __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline void locks_remove_posix(struct file *filp, fl_owner_t owner)
+static inline void locks_remove_posix(struct file *filp __attribute__ ((unused)), fl_owner_t owner __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline void locks_remove_flock(struct file *filp)
+static inline void locks_remove_flock(struct file *filp __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline void posix_test_lock(struct file *filp, struct file_lock *fl)
+static inline void posix_test_lock(struct file *filp __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline int posix_lock_file(struct file *filp, struct file_lock *fl,
-				  struct file_lock *conflock)
+static inline int posix_lock_file(struct file *filp __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)),
+				  struct file_lock *conflock __attribute__ ((unused)))
 {
 	return -ENOLCK;
 }
 
-static inline int posix_lock_file_wait(struct file *filp, struct file_lock *fl)
+static inline int posix_lock_file_wait(struct file *filp __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)))
 {
 	return -ENOLCK;
 }
 
-static inline int posix_unblock_lock(struct file *filp,
-				     struct file_lock *waiter)
+static inline int posix_unblock_lock(struct file *filp __attribute__ ((unused)),
+				     struct file_lock *waiter __attribute__ ((unused)))
 {
 	return -ENOENT;
 }
 
-static inline int vfs_test_lock(struct file *filp, struct file_lock *fl)
+static inline int vfs_test_lock(struct file *filp __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int vfs_lock_file(struct file *filp, unsigned int cmd,
-				struct file_lock *fl, struct file_lock *conf)
+static inline int vfs_lock_file(struct file *filp __attribute__ ((unused)), unsigned int cmd __attribute__ ((unused)),
+				struct file_lock *fl __attribute__ ((unused)), struct file_lock *conf __attribute__ ((unused)))
 {
 	return -ENOLCK;
 }
 
-static inline int vfs_cancel_lock(struct file *filp, struct file_lock *fl)
+static inline int vfs_cancel_lock(struct file *filp __attribute__ ((unused)), struct file_lock *fl __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int flock_lock_file_wait(struct file *filp,
-				       struct file_lock *request)
+static inline int flock_lock_file_wait(struct file *filp __attribute__ ((unused)),
+				       struct file_lock *request __attribute__ ((unused)))
 {
 	return -ENOLCK;
 }
 
-static inline int __break_lease(struct inode *inode, unsigned int mode)
+static inline int __break_lease(struct inode *inode __attribute__ ((unused)), unsigned int mode __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void lease_get_mtime(struct inode *inode, struct timespec *time)
+static inline void lease_get_mtime(struct inode *inode __attribute__ ((unused)), struct timespec *time __attribute__ ((unused)))
 {
 	return;
 }
 
-static inline int generic_setlease(struct file *filp, long arg,
-				    struct file_lock **flp)
+static inline int generic_setlease(struct file *filp __attribute__ ((unused)), long arg __attribute__ ((unused)),
+				    struct file_lock **flp __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline int vfs_setlease(struct file *filp, long arg,
-			       struct file_lock **lease)
+static inline int vfs_setlease(struct file *filp __attribute__ ((unused)), long arg __attribute__ ((unused)),
+			       struct file_lock **lease __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline int lease_modify(struct file_lock **before, int arg)
+static inline int lease_modify(struct file_lock **before __attribute__ ((unused)), int arg __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline int lock_may_read(struct inode *inode, loff_t start,
-				unsigned long len)
+static inline int lock_may_read(struct inode *inode __attribute__ ((unused)), loff_t start __attribute__ ((unused)),
+				unsigned long len __attribute__ ((unused)))
 {
 	return 1;
 }
 
-static inline int lock_may_write(struct inode *inode, loff_t start,
-				 unsigned long len)
+static inline int lock_may_write(struct inode *inode __attribute__ ((unused)), loff_t start __attribute__ ((unused)),
+				 unsigned long len __attribute__ ((unused)))
 {
 	return 1;
 }
@@ -1874,40 +1874,40 @@ static inline int break_lease(struct inode *inode, unsigned int mode)
 	return 0;
 }
 #else /* !CONFIG_FILE_LOCKING */
-static inline int locks_mandatory_locked(struct inode *inode)
+static inline int locks_mandatory_locked(struct inode *inode __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int locks_mandatory_area(int rw, struct inode *inode,
-				       struct file *filp, loff_t offset,
-				       size_t count)
+static inline int locks_mandatory_area(int rw __attribute__ ((unused)), struct inode *inode __attribute__ ((unused)),
+				       struct file *filp __attribute__ ((unused)), loff_t offset __attribute__ ((unused)),
+				       size_t count __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int __mandatory_lock(struct inode *inode)
+static inline int __mandatory_lock(struct inode *inode __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int mandatory_lock(struct inode *inode)
+static inline int mandatory_lock(struct inode *inode __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int locks_verify_locked(struct inode *inode)
+static inline int locks_verify_locked(struct inode *inode __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int locks_verify_truncate(struct inode *inode, struct file *filp,
-					size_t size)
+static inline int locks_verify_truncate(struct inode *inode __attribute__ ((unused)), struct file *filp __attribute__ ((unused)),
+					size_t size __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int break_lease(struct inode *inode, unsigned int mode)
+static inline int break_lease(struct inode *inode __attribute__ ((unused)), unsigned int mode __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -2072,6 +2072,11 @@ extern int invalidate_partition(struct gendisk *, int);
 extern int invalidate_inodes(struct super_block *);
 unsigned long invalidate_mapping_pages(struct address_space *mapping,
 					pgoff_t start, pgoff_t end);
+
+#ifdef CONFIG_FUSIV_USB_OPTIMIZATION
+/* Dervied from __invalidate_mapping_pages. Maximum 32 pages can be validated and index is stored back */
+unsigned long fusiv_invalidate_mapping_pages(struct address_space *mapping,pgoff_t end);
+#endif /*--- #ifdef CONFIG_FUSIV_USB_OPTIMIZATION ---*/
 
 static inline unsigned long __deprecated
 invalidate_inode_pages(struct address_space *mapping)
@@ -2261,7 +2266,7 @@ extern ssize_t xip_file_write(struct file *filp, const char __user *buf,
 			      size_t len, loff_t *ppos);
 extern int xip_truncate_page(struct address_space *mapping, loff_t from);
 #else
-static inline int xip_truncate_page(struct address_space *mapping, loff_t from)
+static inline int xip_truncate_page(struct address_space *mapping __attribute__ ((unused)), loff_t from __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -2469,7 +2474,7 @@ static const struct file_operations __fops = {				\
 };
 
 static inline void __attribute__((format(printf, 1, 2)))
-__simple_attr_check_format(const char *fmt, ...)
+__simple_attr_check_format(const char *fmt __attribute__ ((unused)), ...)
 {
 	/* don't do anything, just let the compiler check the arguments; */
 }

@@ -1,0 +1,34 @@
+###################################################################################################################
+#
+#   vim: noexpandtab
+#
+###################################################################################################################
+	
+O_TARGET		:= vmlinux-obj.o
+
+list-multi	 	:= avm_power.o
+export-objs  	:= avm_power_file.o 
+
+obj-$(CONFIG_AVM_POWER) += avm_power.o 
+
+ifneq ($(CONFIG_AVM_POWER),n)
+avm_power-objs	:=   avm_power_file.o \
+					 wyatt_earp.o \
+					 we_ethernet.o \
+					 we_xilinx.o \
+					 we_usb.o \
+					 we_isdn.o \
+					 we_led.o \
+					 we_wlan.o
+endif
+
+include $(TOPDIR)/Rules.make
+
+# Link rules for multi-part drivers.
+avm_power.o: $(avm_power-objs)
+	$(LD) -r -o $@ $(avm_power-objs)
+
+clean:
+	rm -f *.o
+
+

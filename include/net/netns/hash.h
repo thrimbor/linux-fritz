@@ -5,7 +5,11 @@
 
 struct net;
 
-static inline unsigned net_hash_mix(struct net *net)
+static inline unsigned net_hash_mix(struct net *net
+#ifndef CONFIG_NET_NS
+    __attribute__((unused))
+#endif/*--- #ifndef CONFIG_NET_NS ---*/
+        )
 {
 #ifdef CONFIG_NET_NS
 	/*

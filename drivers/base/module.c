@@ -34,8 +34,8 @@ static void module_create_drivers_dir(struct module_kobject *mk)
 void module_add_driver(struct module *mod, struct device_driver *drv)
 {
 	char *driver_name;
-	int no_warn;
 	struct module_kobject *mk = NULL;
+    int no_warn __maybe_unused__;
 
 	if (!drv)
 		return;

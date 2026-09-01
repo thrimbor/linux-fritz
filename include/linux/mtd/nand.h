@@ -103,12 +103,15 @@ extern void nand_wait_ready(struct mtd_info *mtd);
 #define NAND_CMD_STATUS_ERROR3	0x76
 #define NAND_CMD_STATUS_RESET	0x7f
 #define NAND_CMD_STATUS_CLEAR	0xff
+#define NAND_CMD_CACHEREAD_SEQ_CONTINUE     0x31
+#define NAND_CMD_CACHEREAD_SEQ_STOP         0x3F
 
 #define NAND_CMD_NONE		-1
 
 /* Status bits */
 #define NAND_STATUS_FAIL	0x01
 #define NAND_STATUS_FAIL_N1	0x02
+#define NAND_STATUS_CRITICAL_BLOCK	0x08
 #define NAND_STATUS_TRUE_READY	0x20
 #define NAND_STATUS_READY	0x40
 #define NAND_STATUS_WP		0x80
@@ -194,6 +197,8 @@ typedef enum {
 /* This option is defined if the board driver allocates its own buffers
    (e.g. because it needs them DMA-coherent */
 #define NAND_OWN_BUFFERS	0x00040000
+/* Flash has internal ECC. Use options to e.g. check status after read and write ops. */
+#define NAND_FLASH_HWECC	0x00080000
 /* Options set by nand scan */
 /* Nand scan has allocated controller struct */
 #define NAND_CONTROLLER_ALLOC	0x80000000
@@ -576,6 +581,7 @@ struct platform_nand_chip {
 	int			chip_delay;
 	unsigned int		options;
 	const char		**part_probe_types;
+	int			(*chip_fixup)(struct mtd_info *mtd);
 	void			(*set_parts)(uint64_t size,
 					struct platform_nand_chip *chip);
 	void			*priv;

@@ -1277,6 +1277,10 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	if (retval)
 		return retval;
 
+	/* kernel module loader fixup */
+	/* so we don't try to load run modprobe in kernel space. */
+	set_fs(USER_DS);
+
 	retval = audit_bprm(bprm);
 	if (retval)
 		return retval;
@@ -1352,6 +1356,26 @@ int do_execve(char * filename,
 	struct files_struct *displaced;
 	bool clear_in_exec;
 	int retval;
+
+    /*--------------------------------------------------------------------------------------*\
+     * AVM Process Check Debug Code
+    \*--------------------------------------------------------------------------------------*/
+#if 0
+    printk(KERN_ERR "[%s] %s(pid:%d): exec: '%s' ", __FUNCTION__, current->comm, current->pid, filename);
+    { char __user *__user *p = argv; 
+        while(p && *p) { 
+			char __user * pp;
+			if (get_user(pp, p))
+                break;
+            if(pp == 0)
+                break;
+            printk("'%s' ", pp); 
+            p++; 
+        }
+    }
+    printk("\n");
+#endif
+
 
 	retval = unshare_files(&displaced);
 	if (retval)

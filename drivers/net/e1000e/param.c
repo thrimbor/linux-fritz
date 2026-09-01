@@ -384,8 +384,8 @@ void __devinit e1000e_check_options(struct e1000_adapter *adapter)
 		struct e1000_option opt = {
 			.type = range_option,
 			.name = "Interrupt Mode",
-			.err  = "defaulting to 2 (MSI-X)",
-			.def  = E1000E_INT_MODE_MSIX,
+			.err  = "defaulting to 1 (MSI)",
+			.def  = E1000E_INT_MODE_MSI,
 			.arg  = { .r = { .min = MIN_INTMODE,
 					 .max = MAX_INTMODE } }
 		};

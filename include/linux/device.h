@@ -448,11 +448,11 @@ static inline void set_dev_node(struct device *dev, int node)
 	dev->numa_node = node;
 }
 #else
-static inline int dev_to_node(struct device *dev)
+static inline int dev_to_node(struct device *dev __attribute__ ((unused)))
 {
 	return -1;
 }
-static inline void set_dev_node(struct device *dev, int node)
+static inline void set_dev_node(struct device *dev __attribute__ ((unused)), int node __attribute__ ((unused)))
 {
 }
 #endif
@@ -560,9 +560,9 @@ extern int devtmpfs_create_node(struct device *dev);
 extern int devtmpfs_delete_node(struct device *dev);
 extern int devtmpfs_mount(const char *mountpoint);
 #else
-static inline int devtmpfs_create_node(struct device *dev) { return 0; }
-static inline int devtmpfs_delete_node(struct device *dev) { return 0; }
-static inline int devtmpfs_mount(const char *mountpoint) { return 0; }
+static inline int devtmpfs_create_node(struct device *dev __attribute__ ((unused))) { return 0; }
+static inline int devtmpfs_delete_node(struct device *dev __attribute__ ((unused))) { return 0; }
+static inline int devtmpfs_mount(const char *mountpoint __attribute__ ((unused))) { return 0; }
 #endif
 
 /* drivers/base/power/shutdown.c */

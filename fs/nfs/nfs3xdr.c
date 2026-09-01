@@ -507,7 +507,7 @@ nfs3_xdr_readdirres(struct rpc_rqst *req, __be32 *p, struct nfs3_readdirres *res
 	size_t hdrlen;
 	u32 len, recvd, pglen;
 	int status, nr = 0;
-	__be32 *entry, *end, *kaddr;
+	__be32 *entry, *end, *kaddr __maybe_unused__;
 
 	status = ntohl(*p++);
 	/* Decode post_op_attrs */

@@ -16,7 +16,7 @@
 /*
  * lock for reading
  */
-void __sched down_read(struct rw_semaphore *sem)
+inline void __sched down_read(struct rw_semaphore *sem)
 {
 	might_sleep();
 	rwsem_acquire_read(&sem->dep_map, 0, 0, _RET_IP_);

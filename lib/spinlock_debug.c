@@ -58,6 +58,8 @@ static void spin_bug(spinlock_t *lock, const char *msg)
 
 	if (lock->owner && lock->owner != SPINLOCK_OWNER_INIT)
 		owner = lock->owner;
+    console_verbose();
+    restore_printk();
 	printk(KERN_EMERG "BUG: spinlock %s on CPU#%d, %s/%d\n",
 		msg, raw_smp_processor_id(),
 		current->comm, task_pid_nr(current));
@@ -68,6 +70,7 @@ static void spin_bug(spinlock_t *lock, const char *msg)
 		owner ? task_pid_nr(owner) : -1,
 		lock->owner_cpu);
 	dump_stack();
+    BUG(); /*--- get information about all cpus ! ---*/
 }
 
 #define SPIN_BUG_ON(cond, lock, msg) if (unlikely(cond)) spin_bug(lock, msg)
@@ -112,15 +115,23 @@ static void __spin_lock_debug(spinlock_t *lock)
 		}
 		/* lockup suspected: */
 		if (print_once) {
+		    struct task_struct *owner = NULL;
+
+		    if (lock->owner && lock->owner != SPINLOCK_OWNER_INIT)
+			    owner = lock->owner;
 			print_once = 0;
+            console_verbose();
+            restore_printk();
 			printk(KERN_EMERG "BUG: spinlock lockup on CPU#%d, "
 					"%s/%d, %p\n",
 				raw_smp_processor_id(), current->comm,
 				task_pid_nr(current), lock);
+	        printk(KERN_EMERG " .owner: %s/%d, .owner_cpu: %d\n",
+		        owner ? owner->comm : "<none>",
+		        owner ? task_pid_nr(owner) : -1,
+		        lock->owner_cpu);
 			dump_stack();
-#ifdef CONFIG_SMP
-			trigger_all_cpu_backtrace();
-#endif
+            BUG(); /*--- get information about all cpus ! ---*/
 		}
 	}
 }
@@ -159,10 +170,13 @@ static void rwlock_bug(rwlock_t *lock, const char *msg)
 	if (!debug_locks_off())
 		return;
 
+    console_verbose();
+    restore_printk();
 	printk(KERN_EMERG "BUG: rwlock %s on CPU#%d, %s/%d, %p\n",
 		msg, raw_smp_processor_id(), current->comm,
 		task_pid_nr(current), lock);
 	dump_stack();
+    BUG(); /*--- get information about all cpus ! ---*/
 }
 
 #define RWLOCK_BUG_ON(cond, lock, msg) if (unlikely(cond)) rwlock_bug(lock, msg)

@@ -53,6 +53,65 @@ menuconfig ISDN_CAPI
 
 if ISDN_CAPI
 
+config CAPI_OSLIB
+	tristate "split CAPI2.0 oslib"
+	depends on ISDN
+	help
+        split oslib for fbox isdn drivers
+
+config CAPI_OSLIB_DEBUG
+    bool "capi oslib debug version"
+    depends on CAPI_OSLIB
+	help
+        debug version of oslib 
+
+config CAPI_CODEC
+    tristate "capi driver codec support"
+    depends on ISDN
+
+config CAPI_CODEC_SPEEX
+    bool "capi driver codec SPEEX"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_ILBC
+    bool "capi driver codec ILBC"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_G729
+    bool "capi driver codec G729"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_G711
+    bool "capi driver codec G711"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_G726
+    bool "capi driver codec G726"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_G722
+    bool "capi driver codec G722"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_VAD
+    bool "capi driver codec VAD"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_CNG
+    bool "capi driver codec CNG (comfort noise generator)"
+    depends on CAPI_CODEC
+
+config CAPI_CODEC_FAX
+    bool "capi driver codec FAX (T30/T38)"
+    depends on CAPI_CODEC
+
+config AVM_DECT
+	tristate "AVM DECT Stack"
+
+config AVM_DECT_DEBUG
+    bool "AVM DECT debug version"
+    depends on AVM_DECT
+
 source "drivers/isdn/capi/Kconfig"
 
 source "drivers/isdn/hardware/Kconfig"

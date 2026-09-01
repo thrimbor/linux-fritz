@@ -682,7 +682,7 @@ extern int init_currently_empty_zone(struct zone *zone, unsigned long start_pfn,
 #ifdef CONFIG_HAVE_MEMORY_PRESENT
 void memory_present(int nid, unsigned long start, unsigned long end);
 #else
-static inline void memory_present(int nid, unsigned long start, unsigned long end) {}
+static inline void memory_present(int nid __attribute__ ((unused)), unsigned long start __attribute__ ((unused)), unsigned long end __attribute__ ((unused))) {}
 #endif
 
 #ifdef CONFIG_NEED_NODE_MEMMAP_SIZE
@@ -710,7 +710,7 @@ static inline int zone_movable_is_highmem(void)
 #endif
 }
 
-static inline int is_highmem_idx(enum zone_type idx)
+static inline int is_highmem_idx(enum zone_type idx __attribute__ ((unused)))
 {
 #ifdef CONFIG_HIGHMEM
 	return (idx == ZONE_HIGHMEM ||
@@ -731,7 +731,7 @@ static inline int is_normal_idx(enum zone_type idx)
  *              to ZONE_{DMA/NORMAL/HIGHMEM/etc} in general code to a minimum.
  * @zone - pointer to struct zone variable
  */
-static inline int is_highmem(struct zone *zone)
+static inline int is_highmem(struct zone *zone __attribute__ ((unused)))
 {
 #ifdef CONFIG_HIGHMEM
 	int zone_off = (char *)zone - (char *)zone->zone_pgdat->node_zones;
@@ -748,7 +748,7 @@ static inline int is_normal(struct zone *zone)
 	return zone == zone->zone_pgdat->node_zones + ZONE_NORMAL;
 }
 
-static inline int is_dma32(struct zone *zone)
+static inline int is_dma32(struct zone *zone __attribute__ ((unused)))
 {
 #ifdef CONFIG_ZONE_DMA32
 	return zone == zone->zone_pgdat->node_zones + ZONE_DMA32;
@@ -757,7 +757,7 @@ static inline int is_dma32(struct zone *zone)
 #endif
 }
 
-static inline int is_dma(struct zone *zone)
+static inline int is_dma(struct zone *zone __attribute__ ((unused)))
 {
 #ifdef CONFIG_ZONE_DMA
 	return zone == zone->zone_pgdat->node_zones + ZONE_DMA;
@@ -839,7 +839,7 @@ static inline int zonelist_zone_idx(struct zoneref *zoneref)
 	return zoneref->zone_idx;
 }
 
-static inline int zonelist_node_idx(struct zoneref *zoneref)
+static inline int zonelist_node_idx(struct zoneref *zoneref __attribute__ ((unused)))
 {
 #ifdef CONFIG_NUMA
 	/* zone_to_nid not available in this context */
@@ -1137,8 +1137,8 @@ unsigned long __init node_memmap_size_bytes(int, unsigned long, unsigned long);
 int memmap_valid_within(unsigned long pfn,
 					struct page *page, struct zone *zone);
 #else
-static inline int memmap_valid_within(unsigned long pfn,
-					struct page *page, struct zone *zone)
+static inline int memmap_valid_within(unsigned long pfn __attribute__ ((unused)),
+					struct page *page __attribute__ ((unused)), struct zone *zone __attribute__ ((unused)))
 {
 	return 1;
 }

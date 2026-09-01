@@ -1,0 +1,9 @@
+# Makefile to build ipvoice for Linux 2.6
+
+EXTRA_CFLAGS += -I$(PWD)/include -DLINUX_2_6 $(LOCAL_IPQOS_FLAGS) 
+IPQOS_OBJ := ipt_fusivTC.o ipqos.o wfqlib.o wfqtimer.o qoslib.o qosconf.o
+
+obj-m :=  ipqos_lkm.o 
+ipqos_lkm-objs := $(IPQOS_OBJ)
+
+

@@ -225,6 +225,9 @@ struct sock {
 #define sk_bind_node		__sk_common.skc_bind_node
 #define sk_prot			__sk_common.skc_prot
 #define sk_net			__sk_common.skc_net
+#ifdef CONFIG_AVM_PA
+#define skc_session_handle      __sk_common.skc_session_handle
+#endif
 	kmemcheck_bitfield_begin(flags);
 	unsigned int		sk_shutdown  : 2,
 				sk_no_check  : 2,
@@ -293,7 +296,7 @@ struct sock {
 	void			*sk_security;
 #endif
 	__u32			sk_mark;
-	/* XXX 4 bytes hole on 64 bit */
+ 	unsigned long		sk_tc_index;
 	void			(*sk_state_change)(struct sock *sk);
 	void			(*sk_data_ready)(struct sock *sk, int bytes);
 	void			(*sk_write_space)(struct sock *sk);
@@ -1330,6 +1333,9 @@ static inline void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 	skb_orphan(skb);
 	skb->sk = sk;
 	skb->destructor = sock_wfree;
+#ifdef CONFIG_NET_SCHED
+ 	skb->tc_index = sk->sk_tc_index;
+#endif
 	/*
 	 * We used to take a refcount on sk, but following operation
 	 * is enough to guarantee sk_free() wont free this sock until
@@ -1512,7 +1518,7 @@ static inline void sk_eat_skb(struct sock *sk, struct sk_buff *skb, int copied_e
 		__skb_queue_tail(&sk->sk_async_wait_queue, skb);
 }
 #else
-static inline void sk_eat_skb(struct sock *sk, struct sk_buff *skb, int copied_early)
+static inline void sk_eat_skb(struct sock *sk, struct sk_buff *skb, int copied_early __attribute__((unused)))
 {
 	__skb_unlink(skb, &sk->sk_receive_queue);
 	__kfree_skb(skb);
@@ -1520,7 +1526,10 @@ static inline void sk_eat_skb(struct sock *sk, struct sk_buff *skb, int copied_e
 #endif
 
 static inline
-struct net *sock_net(const struct sock *sk)
+struct net *sock_net(const struct sock *sk 
+#ifndef CONFIG_NET_NS
+        __attribute__((unused)))
+#endif
 {
 #ifdef CONFIG_NET_NS
 	return sk->sk_net;
@@ -1530,7 +1539,15 @@ struct net *sock_net(const struct sock *sk)
 }
 
 static inline
-void sock_net_set(struct sock *sk, struct net *net)
+void sock_net_set(struct sock *sk
+#ifndef CONFIG_NET_NS
+        __attribute__((unused))
+#endif
+        , struct net *net
+#ifndef CONFIG_NET_NS
+        __attribute__((unused))
+#endif
+        )
 {
 #ifdef CONFIG_NET_NS
 	sk->sk_net = net;

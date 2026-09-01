@@ -26,10 +26,10 @@ typedef struct { pud_t pud; } pmd_t;
  * setup: the pmd is never bad, and a pmd always exists (as it's folded
  * into the pud entry)
  */
-static inline int pud_none(pud_t pud)		{ return 0; }
-static inline int pud_bad(pud_t pud)		{ return 0; }
-static inline int pud_present(pud_t pud)	{ return 1; }
-static inline void pud_clear(pud_t *pud)	{ }
+static inline int pud_none(pud_t pud __attribute__ ((unused)))		{ return 0; }
+static inline int pud_bad(pud_t pud __attribute__ ((unused)))		{ return 0; }
+static inline int pud_present(pud_t pud __attribute__ ((unused)))	{ return 1; }
+static inline void pud_clear(pud_t *pud __attribute__ ((unused)))	{ }
 #define pmd_ERROR(pmd)				(pud_ERROR((pmd).pud))
 
 #define pud_populate(mm, pmd, pte)		do { } while (0)
@@ -40,7 +40,7 @@ static inline void pud_clear(pud_t *pud)	{ }
  */
 #define set_pud(pudptr, pudval)			set_pmd((pmd_t *)(pudptr), (pmd_t) { pudval })
 
-static inline pmd_t * pmd_offset(pud_t * pud, unsigned long address)
+static inline pmd_t * pmd_offset(pud_t * pud, unsigned long address __attribute__ ((unused)))
 {
 	return (pmd_t *)pud;
 }
@@ -56,7 +56,7 @@ static inline pmd_t * pmd_offset(pud_t * pud, unsigned long address)
  * inside the pud, so has no extra memory associated with it.
  */
 #define pmd_alloc_one(mm, address)		NULL
-static inline void pmd_free(struct mm_struct *mm, pmd_t *pmd)
+static inline void pmd_free(struct mm_struct *mm __attribute__ ((unused)), pmd_t *pmd __attribute__ ((unused)))
 {
 }
 #define __pmd_free_tlb(tlb, x, a)		do { } while (0)

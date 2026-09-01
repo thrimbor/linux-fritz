@@ -39,6 +39,18 @@
 #include "common.h"
 #include "resources.h"
 #include <net/atmclip.h>
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+#include <netpro/apprehdr.h>
+#endif
+
+#if defined(CONFIG_MACH_FUSIV)
+#define ADI_IPOA_MODULE 1
+extern int (*AtmUpdateNewVCInfo_ptr)(int encap, struct atm_vcc *atmvcc, int moduleId, char *ifname);
+extern int (*AtmDeleteVCInfo_ptr)(short vpi,int vci);
+int (*updateEncapsulation_ptr)(short vpi, int vci, int encap) = NULL;
+int (*AtmUpdateVCInterface_ptr)(int vpi, int vci, char *ifname) = NULL;
+int (*AtmUpdateVCIPAddr_ptr)(int vpi, int vci, unsigned long ipaddr) = NULL;
+#endif
 
 static struct net_device *clip_devs;
 static struct atm_vcc *atmarpd;
@@ -195,6 +207,12 @@ static void clip_push(struct atm_vcc *vcc, struct sk_buff *skb)
 			unlink_clip_vcc(clip_vcc);
 		clip_vcc->old_push(vcc, NULL);	/* pass on the bad news */
 		kfree(clip_vcc);
+#if defined(CONFIG_MACH_FUSIV)
+        if (AtmDeleteVCInfo_ptr != NULL)
+                (*AtmDeleteVCInfo_ptr)(vcc->vpi, vcc->vci);
+        else
+                printk("\nclip: atmdriver_lkm not initialized properly...\n");
+#endif
 		return;
 	}
 	atm_return(vcc, skb->truesize);
@@ -356,7 +374,17 @@ static struct neigh_table clip_tbl = {
 
 static int clip_encap(struct atm_vcc *vcc, int mode)
 {
+	int iRet=0;
 	CLIP_VCC(vcc)->encap = mode;
+	
+#if defined(CONFIG_MACH_FUSIV)
+        if(updateEncapsulation_ptr != NULL)
+        {
+                iRet = (*updateEncapsulation_ptr)(vcc->vpi, vcc->vci, mode);
+        }
+        else
+                printk("\nclip: atmdriver_lkm is not initialized properly...\n");
+#endif
 	return 0;
 }
 
@@ -368,6 +396,24 @@ static netdev_tx_t clip_start_xmit(struct sk_buff *skb,
 	struct atm_vcc *vcc;
 	int old;
 	unsigned long flags;
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+      if((skb->apFlowData.flags1 >> AP_FLAG1_CLASSIFIED_BIT ) & 0x1)
+      {
+        struct neighbour *neigh = NULL;
+        neigh = (struct neighbour*) skb->apFlowData.neigh ;
+        if(!neigh)
+        {
+             printk(KERN_ERR "clip_start_xmit: NO FAST NEIGHBOUR !\n");
+             dev_kfree_skb(skb);
+             clip_priv->stats.tx_dropped++;
+             return 0;
+        }
+        entry = NEIGH2ENTRY(neigh);
+        goto process_vcc;
+
+      }
+#endif
 
 	pr_debug("clip_start_xmit (skb %p)\n", skb);
 	if (!skb_dst(skb)) {
@@ -415,7 +461,11 @@ static netdev_tx_t clip_start_xmit(struct sk_buff *skb,
 		memcpy(here, llc_oui, sizeof(llc_oui));
 		((__be16 *) here)[3] = skb->protocol;
 	}
+
+#if !defined(CONFIG_MACH_FUSIV)
 	atomic_add(skb->truesize, &sk_atm(vcc)->sk_wmem_alloc);
+#endif
+
 	ATM_SKB(skb)->atm_options = vcc->atm_options;
 	entry->vccs->last_use = jiffies;
 	pr_debug("atm_skb(%p)->vcc(%p)->dev(%p)\n", skb, vcc, vcc->dev);
@@ -493,6 +543,15 @@ static int clip_mkip(struct atm_vcc *vcc, int timeout)
 			kfree_skb(skb);
 		}
 	}
+#if defined(CONFIG_MACH_FUSIV)
+              if(AtmUpdateNewVCInfo_ptr != NULL)
+              {
+                if( (*AtmUpdateNewVCInfo_ptr)(1, vcc, ADI_IPOA_MODULE, "none")<0)
+                      return -1;
+              }
+              else
+                printk("clip: atmapdriver_lkm or br2684 not initialized properly...\n");
+#endif
 	return 0;
 }
 
@@ -538,6 +597,22 @@ static int clip_setentry(struct atm_vcc *vcc, __be32 ip)
 	}
 	error = neigh_update(neigh, llc_oui, NUD_PERMANENT,
 			     NEIGH_UPDATE_F_OVERRIDE | NEIGH_UPDATE_F_ADMIN);
+
+#if defined(CONFIG_MACH_FUSIV)
+        if(AtmUpdateVCInterface_ptr != NULL)
+        {
+                (*AtmUpdateVCInterface_ptr)(vcc->vpi, vcc->vci, neigh->dev->name); //ADI
+        }
+        else
+                printk("\nclip: atmdriver_lkm is not initialized properly...\n") ;
+
+        if(AtmUpdateVCIPAddr_ptr != NULL)
+        {
+                (*AtmUpdateVCIPAddr_ptr)(vcc->vpi, vcc->vci, ip); //ADI
+        }
+        else
+                printk("\nclip: atmdriver_lkm is not initialized properly...\n");
+#endif
 	neigh_release(neigh);
 	return error;
 }
@@ -551,7 +626,11 @@ static void clip_setup(struct net_device *dev)
 	dev->netdev_ops = &clip_netdev_ops;
 	dev->type = ARPHRD_ATM;
 	dev->hard_header_len = RFC1483LLC_LEN;
-	dev->mtu = RFC1626_MTU;
+#if !defined(CONFIG_MACH_FUSIV)
+    dev->mtu = RFC1626_MTU;
+#else
+        dev->mtu = 1500;
+#endif
 	dev->tx_queue_len = 100;	/* "normal" queue (packets) */
 	/* When using a "real" qdisc, the qdisc determines the queue */
 	/* length. tx_queue_len is only used for the default case, */
@@ -594,6 +673,54 @@ static int clip_create(int number)
 	pr_debug("registered (net:%s)\n", dev->name);
 	return number;
 }
+
+#if defined(CONFIG_MACH_FUSIV)
+
+int clip_delete(int number)
+{
+        struct net_device *dev = NULL;
+        struct net_device *prevdev = NULL;
+
+        pr_debug("clip_delete %d\n",number);
+        if (number != -1) {
+                for (dev = clip_devs; dev; dev = PRIV(dev)->next)
+                {
+                        if (PRIV(dev)->number == number)
+                        {
+                                pr_debug("device found %p\r\n",dev);
+                                break;
+                        }
+                        else
+                                prevdev = dev;
+                }
+        }
+
+        pr_debug(" dev %p predev %p \r\n", dev,prevdev);
+        if(!dev) {
+                printk(" Device not found \r\n");
+                return -1;
+        }
+
+        if(dev->flags&IFF_UP)
+        {
+                printk("Device is up,Delete Failed\r\n");
+                return -1;
+        }
+        else
+        {
+
+               if(prevdev)
+                        PRIV(prevdev)->next = PRIV(dev)->next;
+                else
+                        clip_devs = PRIV(dev)->next;
+
+                unregister_netdev(dev);
+                kfree(dev);
+                pr_debug("unregistered (net:%s)\n",dev->name);
+                return number;
+        }
+}
+#endif
 
 static int clip_device_event(struct notifier_block *this, unsigned long event,
 			     void *arg)
@@ -701,7 +828,11 @@ static int atm_init_atmarp(struct atm_vcc *vcc)
 	    /* allow replies and avoid getting closed if signaling dies */
 	vcc->dev = &atmarpd_dev;
 	vcc_insert_socket(sk_atm(vcc));
+#ifdef CONFIG_IFX_OAM
+	vcc->push_oam = ifx_push_oam;
+#else
 	vcc->push = NULL;
+#endif
 	vcc->pop = NULL; /* crash */
 	vcc->push_oam = NULL; /* crash */
 	rtnl_unlock();
@@ -719,6 +850,9 @@ static int clip_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case ATMARP_MKIP:
 	case ATMARP_SETENTRY:
 	case ATMARP_ENCAP:
+#if defined(CONFIG_MACH_FUSIV)
+	case SIOCDLCLIP:
+#endif
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		break;
@@ -746,6 +880,11 @@ static int clip_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case ATMARP_ENCAP:
 		err = clip_encap(vcc, arg);
 		break;
+#if defined(CONFIG_MACH_FUSIV)
+	case SIOCDLCLIP:
+		err = clip_delete(arg);
+		break;
+#endif
 	}
 	return err;
 }
@@ -1004,6 +1143,13 @@ static void __exit atm_clip_exit(void)
 
 module_init(atm_clip_init);
 module_exit(atm_clip_exit);
+
+#if defined(CONFIG_MACH_FUSIV)
+EXPORT_SYMBOL(updateEncapsulation_ptr);
+EXPORT_SYMBOL(AtmUpdateVCInterface_ptr);
+EXPORT_SYMBOL(AtmUpdateVCIPAddr_ptr);
+#endif
+
 MODULE_AUTHOR("Werner Almesberger");
 MODULE_DESCRIPTION("Classical/IP over ATM interface");
 MODULE_LICENSE("GPL");

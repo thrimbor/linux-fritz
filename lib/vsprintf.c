@@ -578,6 +578,7 @@ static char *string(char *buf, char *end, char *s, struct printf_spec spec)
 static char *symbol_string(char *buf, char *end, void *ptr,
 				struct printf_spec spec, char ext)
 {
+    extern char *module_alloc_find_module_name(char *buff, char *end, unsigned long addr) __attribute__ ((weak));
 	unsigned long value = (unsigned long) ptr;
 #ifdef CONFIG_KALLSYMS
 	char sym[KSYM_SYMBOL_LEN];
@@ -590,6 +591,9 @@ static char *symbol_string(char *buf, char *end, void *ptr,
 	spec.field_width = 2*sizeof(void *);
 	spec.flags |= SPECIAL | SMALL | ZEROPAD;
 	spec.base = 16;
+    if(!IS_ERR(module_alloc_find_module_name)) {
+        return module_alloc_find_module_name(buf, end, value);
+    }
 	return number(buf, end, value, spec);
 #endif
 }

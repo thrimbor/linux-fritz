@@ -27,6 +27,10 @@ config HOTPLUG_PCI_PCIE
 
 source "drivers/pci/pcie/aer/Kconfig"
 
+if LANTIQ
+source "drivers/pci/pcie/Kconfig.ifx"
+endif
+
 #
 # PCI Express ASPM
 #

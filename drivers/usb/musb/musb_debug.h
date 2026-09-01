@@ -50,12 +50,16 @@
 
 extern unsigned musb_debug;
 
+#ifdef CONFIG_USB_MUSB_DEBUG
 static inline int _dbg_level(unsigned l)
 {
 	return musb_debug >= l;
 }
-
 #define DBG(level, fmt, args...) xprintk(level, KERN_DEBUG, fmt, ## args)
+#else
+#define _dbg_level(l) 0
+#define DBG(level, fmt, args...)
+#endif
 
 extern const char *otg_state_string(struct musb *);
 

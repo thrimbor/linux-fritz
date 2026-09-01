@@ -54,6 +54,22 @@
 		LONG_S	v1, PT_HI(sp)
 		mflo	v1
 		LONG_S	v1, PT_LO(sp)
+#if defined(__mips_dsp)
+        rddsp   v1
+		LONG_S	v1, PT_DSPCTRL(sp)
+		mfhi	v1,$ac1
+		LONG_S	v1, PT_AC1HI(sp)
+		mflo	v1,$ac1
+		LONG_S	v1, PT_AC1LO(sp)
+		mfhi	v1,$ac2
+		LONG_S	v1, PT_AC2HI(sp)
+		mflo	v1,$ac2
+		LONG_S	v1, PT_AC2LO(sp)
+		mfhi	v1,$ac3
+		LONG_S	v1, PT_AC3HI(sp)
+		mflo	v1,$ac3
+		LONG_S	v1, PT_AC3LO(sp)
+#endif/*--- #if defined(__mips_dsp) ---*/
 #endif
 #ifdef CONFIG_32BIT
 		LONG_S	$8, PT_R8(sp)
@@ -237,6 +253,22 @@
 		mtlo	$24
 		LONG_L	$24, PT_HI(sp)
 		mthi	$24
+#if defined(__mips_dsp)
+		LONG_L	$24, PT_DSPCTRL(sp)
+        wrdsp   $24
+		LONG_L	$24, PT_AC1LO(sp)
+		mtlo	$24,$ac1
+		LONG_L	$24, PT_AC1HI(sp)
+		mthi	$24,$ac1
+		LONG_L	$24, PT_AC2LO(sp)
+		mtlo	$24,$ac2
+		LONG_L	$24, PT_AC2HI(sp)
+		mthi	$24,$ac2
+		LONG_L	$24, PT_AC3LO(sp)
+		mtlo	$24,$ac3
+		LONG_L	$24, PT_AC3HI(sp)
+		mthi	$24,$ac3
+#endif/*--- #if defined(__mips_dsp) ---*/
 #endif
 #ifdef CONFIG_32BIT
 		LONG_L	$8, PT_R8(sp)

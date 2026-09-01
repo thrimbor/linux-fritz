@@ -24,6 +24,11 @@
 #include <asm/system.h>
 #include <asm/watch.h>
 #include <asm/spram.h>
+
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+#include <adi6843.h>
+#endif
+
 /*
  * Not all of the MIPS CPUs have the "wait" instruction available. Moreover,
  * the implementation of the "wait" feature differs between CPU families. This
@@ -47,6 +52,8 @@ static void r39xx_wait(void)
 	local_irq_enable();
 }
 
+extern void cpu_wait_start(void);
+extern int cpu_wait_end(void);
 extern void r4k_wait(void);
 
 /*
@@ -59,11 +66,13 @@ extern void r4k_wait(void);
 void r4k_wait_irqoff(void)
 {
 	local_irq_disable();
+    cpu_wait_start();
 	if (!need_resched())
 		__asm__("	.set	push		\n"
 			"	.set	mips3		\n"
 			"	wait			\n"
 			"	.set	pop		\n");
+    cpu_wait_end();
 	local_irq_enable();
 	__asm__(" 	.globl __pastwait	\n"
 		"__pastwait:			\n");
@@ -170,15 +179,23 @@ void __init check_wait(void)
 	case CPU_24K:
 	case CPU_34K:
 	case CPU_1004K:
-		cpu_wait = r4k_wait;
-		if (read_c0_config7() & MIPS_CONF7_WII)
-			cpu_wait = r4k_wait_irqoff;
+        if(cpu_wait == NULL) {
+            if (read_c0_config7() & MIPS_CONF7_WII) {
+                printk(KERN_ERR "wait instruction: r4k_wait_irqoff\n");
+                cpu_wait = r4k_wait_irqoff;
+            } else
+                cpu_wait = r4k_wait;
+        } else {
+            printk(KERN_ERR "[%s] cpu_wait already set up %pF\n", __FUNCTION__, cpu_wait);
+        }
 		break;
 
 	case CPU_74K:
 		cpu_wait = r4k_wait;
-		if ((c->processor_id & 0xff) >= PRID_REV_ENCODE_332(2, 1, 0))
+		if ((c->processor_id & 0xff) >= PRID_REV_ENCODE_332(2, 1, 0)) {
+            printk(KERN_ERR "wait instruction: r4k_wait_irqoff\n");
 			cpu_wait = r4k_wait_irqoff;
+        }
 		break;
 
 	case CPU_TX49XX:
@@ -580,6 +597,17 @@ static inline void cpu_probe_legacy(struct cpuinfo_mips *c, unsigned int cpu)
 			     MIPS_CPU_32FPR;
 		c->tlbsize = 64;
 		break;
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+	case PRID_IMP_FUSIV_MIPS1:
+		/* CPU ID for Fusiv MIPS1 Lexra */ 
+		c->processor_id = (FUSIV_PRID << 16 )| PRID_IMP_FUSIV_MIPS1;
+		__cpu_name[cpu] = "Fusiv MIPS1";
+		c->cputype = CPU_R3000;
+		c->isa_level = MIPS_CPU_ISA_I;
+		c->options = MIPS_CPU_TLB;
+		c->tlbsize = 64;
+		break;
+#endif
 	}
 }
 
@@ -710,6 +738,12 @@ static void __cpuinit decode_configs(struct cpuinfo_mips *c)
 
 	mips_probe_watch_registers(c);
 }
+
+#ifdef CONFIG_CPU_MIPSR2
+extern void spram_config(void);
+#else
+static inline void spram_config(void) {}
+#endif
 
 static inline void cpu_probe_mips(struct cpuinfo_mips *c, unsigned int cpu)
 {

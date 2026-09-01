@@ -44,9 +44,9 @@ void mips_set_clock_mode(enum clock_event_mode mode,
 }
 
 DEFINE_PER_CPU(struct clock_event_device, mips_clockevent_device);
-int cp0_timer_irq_installed;
 
 #ifndef CONFIG_MIPS_MT_SMTC
+int cp0_timer_irq_installed[NR_CPUS];
 
 irqreturn_t c0_compare_interrupt(int irq, void *dev_id)
 {
@@ -74,6 +74,14 @@ irqreturn_t c0_compare_interrupt(int irq, void *dev_id)
 		cd = &per_cpu(mips_clockevent_device, cpu);
 		cd->event_handler(cd);
 	}
+#ifdef CONFIG_OPROFILE_WASP
+        //pkamath: oprofile-0.9.2 does not support interrupt based profiling.
+        //Therefore we will check for a profiling event every timer interrupt.
+        // Note that this may impact accuracy of the profile
+        if (!r2 || (read_c0_cause() & (1 << 26)))
+                perf_irq();
+        //End of code changes
+#endif
 
 out:
 	return IRQ_HANDLED;
@@ -172,7 +180,18 @@ int __cpuinit r4k_clockevent_init(void)
 		return -ENXIO;
 
 	if (!c0_compare_int_usable())
+#if defined(CONFIG_MACH_AR934x) || defined(CONFIG_MACH_AR7100)
+		/*
+		 * The above test seems to randomly fail on Wasp. This
+		 * results in timer isr not getting registered. Later,
+		 * when the cpu receives a timer interrupt and tries
+		 * to handle it, the corresponding data structures are
+		 * not initialzed properly resulting in a panic
+		 */
+		printk("%s: Ignoring int_usable failure\n", __func__);
+#else
 		return -ENXIO;
+#endif
 
 	/*
 	 * With vectored interrupts things are getting platform specific.
@@ -203,10 +222,10 @@ int __cpuinit r4k_clockevent_init(void)
 
 	clockevents_register_device(cd);
 
-	if (cp0_timer_irq_installed)
+	if (cp0_timer_irq_installed[cpu])
 		return 0;
 
-	cp0_timer_irq_installed = 1;
+	cp0_timer_irq_installed[cpu] = 1;
 
 	setup_irq(irq, &c0_compare_irqaction);
 

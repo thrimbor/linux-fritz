@@ -63,6 +63,9 @@
 #include <net/checksum.h>
 #include <net/netlink.h>
 
+#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+  #include <net/ifx_ppa_api.h>
+#endif
 #if defined(CONFIG_IP_PIMSM_V1) || defined(CONFIG_IP_PIMSM_V2)
 #define CONFIG_IP_PIMSM	1
 #endif
@@ -98,6 +101,10 @@ static int ip_mr_forward(struct sk_buff *skb, struct mfc_cache *cache, int local
 static int ipmr_cache_report(struct net *net,
 			     struct sk_buff *pkt, vifi_t vifi, int assert);
 static int ipmr_fill_mroute(struct sk_buff *skb, struct mfc_cache *c, struct rtmsg *rtm);
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+int (*ap2apMcastRtPortForwarded_ptr)(struct sk_buff* , int) = NULL;
+#endif
 
 static struct timer_list ipmr_expire_timer;
 
@@ -469,8 +476,17 @@ static int vif_add(struct net *net, struct vifctl *vifc, int mrtsock)
 			return err;
 		}
 		break;
+	case VIFF_USE_IFINDEX:
 	case 0:
-		dev = ip_dev_find(net, vifc->vifc_lcl_addr.s_addr);
+		if (vifc->vifc_flags == VIFF_USE_IFINDEX) {
+			dev = dev_get_by_index(net, vifc->vifc_lcl_ifindex);
+			if (dev && __in_dev_get_rtnl(dev) == NULL) {
+				dev_put(dev);
+				return -EADDRNOTAVAIL;
+			}
+		} else {
+			dev = ip_dev_find(net, vifc->vifc_lcl_addr.s_addr);
+		}
 		if (!dev)
 			return -EADDRNOTAVAIL;
 		err = dev_set_allmulti(dev, 1);
@@ -527,6 +543,36 @@ static struct mfc_cache *ipmr_cache_find(struct net *net,
 {
 	int line = MFC_HASH(mcastgrp, origin);
 	struct mfc_cache *c;
+
+#if defined(CONFIG_FUSIV)   && 0    /* ERROR Patch ist fehlerhaft  MaPom */
+  	struct mfc_cache *uc, **cp;
+	//IKANOS IGMPRT temp patch starts 
+        if (origin == 0)
+        {
+            for (line = 0; line < MFC_LINES; line ++)
+            {
+                for (cp = &net->ipv4.mfc_cache_array[line]; (c = *cp) != NULL; cp = &c->next)
+                {
+                    if (c->mfc_mcastgrp == origin)
+                        break;
+                }
+
+                if (c)
+                {
+                    write_lock_bh(&mrt_lock);
+                    c->mfc_parent = mfc->mfcc_parent;
+                    ipmr_update_thresholds(c, mfc->mfcc_ttls);
+                    if (!mrtsock)
+                        c->mfc_flags |= MFC_STATIC;
+                    write_unlock_bh(&mrt_lock);
+                }
+            }
+
+            return 0;
+        }
+	//IKANOS IGMPRT temp patch ends
+	line = MFC_HASH(mcastgrp, origin);
+#endif /*--- #if defined(CONFIG_FUSIV) ---*/
 
 	for (c = net->ipv4.mfc_cache_array[line]; c; c = c->next) {
 		if (c->mfc_origin==origin && c->mfc_mcastgrp==mcastgrp)
@@ -708,7 +754,7 @@ ipmr_cache_unresolved(struct net *net, vifi_t vifi, struct sk_buff *skb)
 		 *	Create a new entry if allowable
 		 */
 
-		if (atomic_read(&net->ipv4.cache_resolve_queue_len) >= 10 ||
+		if (atomic_read(&net->ipv4.cache_resolve_queue_len) >= 20 ||
 		    (c = ipmr_cache_alloc_unres(net)) == NULL) {
 			spin_unlock_bh(&mfc_unres_lock);
 
@@ -769,6 +815,56 @@ static int ipmr_mfc_delete(struct net *net, struct mfcctl *mfc)
 	int line;
 	struct mfc_cache *c, **cp;
 
+	/* IKANOS IGMPRT temp patch starts */
+        if (mfc->mfcc_origin.s_addr == 0)
+        {
+            for (line = 0; line < MFC_LINES; line ++)
+            {
+                for (cp=&net->ipv4.mfc_cache_array[line]; (c=*cp) != NULL; cp = &c->next)
+                {
+                    if (c->mfc_mcastgrp == mfc->mfcc_mcastgrp.s_addr)
+                        break;
+                }
+
+                if (c)
+                {
+                    write_lock_bh(&mrt_lock);
+                    *cp = c->next;
+                    write_unlock_bh(&mrt_lock);
+
+                    kmem_cache_free(mrt_cachep, c);
+                    return 0;
+                }
+            }
+
+            return 0;
+        } /* IKANOS IGMPRT temp patch ends */
+
+	/* IKANOS IGMPRT temp patch starts */
+        if (mfc->mfcc_origin.s_addr == 0)
+        {
+            for (line = 0; line < MFC_LINES; line ++)
+            {
+                for (cp=&net->ipv4.mfc_cache_array[line]; (c=*cp) != NULL; cp = &c->next)
+                {
+                    if (c->mfc_mcastgrp == mfc->mfcc_mcastgrp.s_addr)
+                        break;
+                }
+
+                if (c)
+                {
+                    write_lock_bh(&mrt_lock);
+                    *cp = c->next;
+                    write_unlock_bh(&mrt_lock);
+
+                    kmem_cache_free(mrt_cachep, c);
+                    return 0;
+                }
+            }
+
+            return 0;
+        } /* IKANOS IGMPRT temp patch ends */
+
 	line = MFC_HASH(mfc->mfcc_mcastgrp.s_addr, mfc->mfcc_origin.s_addr);
 
 	for (cp = &net->ipv4.mfc_cache_array[line];
@@ -779,6 +875,49 @@ static int ipmr_mfc_delete(struct net *net, struct mfcctl *mfc)
 			*cp = c->next;
 			write_unlock_bh(&mrt_lock);
 
+#if 0
+#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+            if ( ppa_hook_mc_group_get_fn != NULL && ppa_hook_mc_group_update_fn != NULL )
+            {
+                PPA_MC_GROUP ppa_mc_entry = {0}, ppa_mc_entry_cmp = {0};
+                int n, idx;
+
+                ppa_hook_mc_group_get_fn(c->mfc_mcastgrp, &ppa_mc_entry_cmp, 0);
+
+                ppa_mc_entry.if_mask = ppa_mc_entry_cmp.if_mask;
+                for ( n = c->mfc_un.res.minvif; n < c->mfc_un.res.maxvif; n++ )
+                {
+                    int i;
+                    struct net_device *dev = NULL;
+
+                    dev = net->ipv4.vif_table[n].dev;
+                    for ( i = 0, idx = 0; i < ppa_mc_entry_cmp.num_ifs; i++ )
+                    {
+#ifdef CONFIG_IFX_MCAST_FASTPATH
+							if (( strcmp(dev->name, ppa_mc_entry_cmp.array_mem_ifs[i].ifname) == 0 )
+							      || ( memcmp(dev->name, "br", 2) == 0 ))
+#else
+							if ( strcmp(dev->name, ppa_mc_entry_cmp.array_mem_ifs[i].ifname) == 0 )
+#endif
+							{
+                            	ppa_mc_entry.if_mask &= ~(1 << idx);
+							}
+                    }
+#ifdef CONFIG_IFX_MCAST_FASTPATH
+					ppa_mc_entry.array_mem_ifs[idx].ifname = "eth0"; // FIXME:
+#else
+					ppa_mc_entry.array_mem_ifs[idx].ifname = dev->name;
+#endif
+                    ppa_mc_entry.array_mem_ifs[idx].ttl = c->mfc_un.res.ttls[n];
+                    ppa_mc_entry.ip_mc_group = c->mfc_mcastgrp;
+                    ppa_mc_entry.num_ifs++;
+                    idx++;
+                }
+
+                ppa_hook_mc_group_update_fn(&ppa_mc_entry, 0);
+            }
+#endif
+#endif
 			ipmr_cache_free(c);
 			return 0;
 		}
@@ -791,6 +930,31 @@ static int ipmr_mfc_add(struct net *net, struct mfcctl *mfc, int mrtsock)
 	int line;
 	struct mfc_cache *uc, *c, **cp;
 
+	//IKANOS IGMPRT temp patch starts 
+        if (mfc->mfcc_origin.s_addr == 0)
+        {
+            for (line = 0; line < MFC_LINES; line ++)
+            {
+                for (cp=&net->ipv4.mfc_cache_array[line]; (c=*cp) != NULL; cp = &c->next)
+                {
+                    if (c->mfc_mcastgrp == mfc->mfcc_mcastgrp.s_addr)
+                        break;
+                }
+
+                if (c)
+                {
+                    write_lock_bh(&mrt_lock);
+                    c->mfc_parent = mfc->mfcc_parent;
+                    ipmr_update_thresholds(c, mfc->mfcc_ttls);
+                    if (!mrtsock)
+                        c->mfc_flags |= MFC_STATIC;
+                    write_unlock_bh(&mrt_lock);
+                }
+            }
+
+            return 0;
+        }
+	//IKANOS IGMPRT temp patch ends
 	line = MFC_HASH(mfc->mfcc_mcastgrp.s_addr, mfc->mfcc_origin.s_addr);
 
 	for (cp = &net->ipv4.mfc_cache_array[line];
@@ -823,6 +987,42 @@ static int ipmr_mfc_add(struct net *net, struct mfcctl *mfc, int mrtsock)
 	ipmr_update_thresholds(c, mfc->mfcc_ttls);
 	if (!mrtsock)
 		c->mfc_flags |= MFC_STATIC;
+
+#if 0
+#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+    if ( ppa_hook_mc_group_update_fn != NULL )
+    {
+        PPA_MC_GROUP ppa_mc_entry = {0};
+        int n, idx;
+
+        for ( n = c->mfc_un.res.minvif, idx = 0; n < c->mfc_un.res.maxvif; n++ )
+        {
+            if (  VIF_EXISTS(net,n) && c->mfc_un.res.ttls[n] < 255 )
+            {
+                //  only dst itf are added here by kernel
+
+                struct net_device *dev = net->ipv4.vif_table[n].dev;
+#ifdef CONFIG_IFX_MCAST_FASTPATH
+				if( memcmp(dev->name, "br", 2) == 0 )
+					ppa_mc_entry.array_mem_ifs[idx].ifname = "eth0";
+				else
+#endif
+                ppa_mc_entry.array_mem_ifs[idx].ifname = dev->name;
+                ppa_mc_entry.array_mem_ifs[idx].ttl = c->mfc_un.res.ttls[n];
+                ppa_mc_entry.if_mask |= 1 << idx;
+                ppa_mc_entry.ip_mc_group = c->mfc_mcastgrp;
+                ppa_mc_entry.num_ifs++;
+                idx++;
+            }
+        }
+
+        if ( idx > 0 )
+            ppa_mc_entry.src_ifname = net->ipv4.vif_table[c->mfc_parent].dev->name;
+
+        ppa_hook_mc_group_update_fn(&ppa_mc_entry, 0);
+    }
+#endif
+#endif
 
 	write_lock_bh(&mrt_lock);
 	c->next = net->ipv4.mfc_cache_array[line];
@@ -1387,6 +1587,13 @@ static int ip_mr_forward(struct sk_buff *skb, struct mfc_cache *cache, int local
 	 */
 	for (ct = cache->mfc_un.res.maxvif-1; ct >= cache->mfc_un.res.minvif; ct--) {
 		if (ip_hdr(skb)->ttl > cache->mfc_un.res.ttls[ct]) {
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+                   if (ap2apMcastRtPortForwarded_ptr)
+                   {
+                     if (ap2apMcastRtPortForwarded_ptr(skb , ct) == 0)
+                       continue;
+                   }
+#endif
 			if (psend != -1) {
 				struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 				if (skb2)
@@ -2052,3 +2259,10 @@ reg_pernet_fail:
 	kmem_cache_destroy(mrt_cachep);
 	return err;
 }
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+EXPORT_SYMBOL(ipmr_cache_find);
+EXPORT_SYMBOL(vif_table);
+EXPORT_SYMBOL(ap2apMcastRtPortForwarded_ptr);
+EXPORT_SYMBOL(mrt_lock);
+#endif

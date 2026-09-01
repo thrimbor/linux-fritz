@@ -48,6 +48,7 @@ obj-$(CONFIG_MTD)		+= mtd/
 obj-$(CONFIG_SPI)		+= spi/
 obj-y				+= net/
 obj-$(CONFIG_ATM)		+= atm/
+obj-$(CONFIG_UR8_DSL)		+= dsl/
 obj-$(CONFIG_FUSION)		+= message/
 obj-$(CONFIG_FIREWIRE)		+= firewire/
 obj-y				+= ieee1394/
@@ -109,5 +110,11 @@ obj-$(CONFIG_OF)		+= of/
 obj-$(CONFIG_SSB)		+= ssb/
 obj-$(CONFIG_VLYNQ)		+= vlynq/
 obj-$(CONFIG_STAGING)		+= staging/
+obj-$(CONFIG_DSL)		+= dsl/
+obj-$(CONFIG_MEI)		+= mei/
 obj-y				+= platform/
 obj-y				+= ieee802154/
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

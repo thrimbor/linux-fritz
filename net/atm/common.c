@@ -56,12 +56,16 @@ static void vcc_remove_socket(struct sock *sk)
 	write_unlock_irq(&vcc_sklist_lock);
 }
 
+struct sk_buff* (*ifx_atm_alloc_tx)(struct atm_vcc *, unsigned int) = NULL;
+EXPORT_SYMBOL(ifx_atm_alloc_tx);
 
 static struct sk_buff *alloc_tx(struct atm_vcc *vcc,unsigned int size)
 {
 	struct sk_buff *skb;
 	struct sock *sk = sk_atm(vcc);
 
+    if ( ifx_atm_alloc_tx != NULL )
+		return ifx_atm_alloc_tx(vcc, size);
 	if (sk_wmem_alloc_get(sk) && !atm_may_send(vcc, size)) {
 		pr_debug("Sorry: wmem_alloc = %d, size = %d, sndbuf = %d\n",
 			sk_wmem_alloc_get(sk), size,
@@ -125,6 +129,19 @@ static struct proto vcc_proto = {
 	.obj_size = sizeof(struct atm_vcc),
 };
 
+#ifdef CONFIG_IFX_OAM
+int (*ifx_push_oam_pfn)(struct atm_vcc *atmvcc, void *cell) = NULL;
+EXPORT_SYMBOL(ifx_push_oam_pfn);
+
+int ifx_push_oam(struct atm_vcc *atmvcc, void *cell)
+{
+	if (ifx_push_oam_pfn != NULL)
+		return ifx_push_oam_pfn(atmvcc, cell);
+	return -1;
+}
+EXPORT_SYMBOL(ifx_push_oam);
+#endif
+
 int vcc_create(struct net *net, struct socket *sock, int protocol, int family)
 {
 	struct sock *sk;
@@ -149,7 +166,11 @@ int vcc_create(struct net *net, struct socket *sock, int protocol, int family)
 	atomic_set(&sk->sk_rmem_alloc, 0);
 	vcc->push = NULL;
 	vcc->pop = NULL;
+#ifdef CONFIG_IFX_OAM
+	vcc->push_oam = ifx_push_oam;
+#else
 	vcc->push_oam = NULL;
+#endif
 	vcc->vpi = vcc->vci = 0; /* no VCI/VPI yet */
 	vcc->atm_options = vcc->aal_options = 0;
 	sk->sk_destruct = vcc_sock_destruct;
@@ -651,6 +672,9 @@ static int check_tp(const struct atm_trafprm *tp)
 	/* @@@ Should be merged with adjust_tp */
 	if (!tp->traffic_class || tp->traffic_class == ATM_ANYCLASS) return 0;
 	if (tp->traffic_class != ATM_UBR && !tp->min_pcr && !tp->pcr &&
+#ifdef CONFIG_IFX_ATM
+	    !tp->scr &&
+#endif
 	    !tp->max_pcr) return -EINVAL;
 	if (tp->min_pcr == ATM_MAX_PCR) return -EINVAL;
 	if (tp->min_pcr && tp->max_pcr && tp->max_pcr != ATM_MAX_PCR &&
@@ -809,10 +833,14 @@ static void __exit atm_exit(void)
 	proto_unregister(&vcc_proto);
 }
 
-subsys_initcall(atm_init);
-
+module_init(atm_init);
 module_exit(atm_exit);
+
+subsys_initcall(atm_init);
 
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_NETPROTO(PF_ATMPVC);
 MODULE_ALIAS_NETPROTO(PF_ATMSVC);
+
+
+

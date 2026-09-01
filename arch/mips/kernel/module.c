@@ -29,8 +29,12 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/zugriff.h>
 #include <linux/spinlock.h>
 #include <asm/pgtable.h>	/* MODULE_START */
+#include <linux/avm_kernel_config.h>
+
+#define CONFIG_INSMOD_KSEG0 1
 
 struct mips_hi16 {
 	struct mips_hi16 *next;
@@ -43,31 +47,213 @@ static struct mips_hi16 *mips_hi16_list;
 static LIST_HEAD(dbe_list);
 static DEFINE_SPINLOCK(dbe_lock);
 
-void *module_alloc(unsigned long size)
-{
-#ifdef MODULE_START
-	struct vm_struct *area;
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+struct _module_alloc_size_list {
+    unsigned long size;
+    unsigned int alloc;
+    unsigned long addr;
+    char name[64];
+    enum _module_alloc_type_ type;
+} module_alloc_size_list[50];
 
-	size = PAGE_ALIGN(size);
-	if (!size)
-		return NULL;
+unsigned long module_alloc_size_list_base;
+unsigned int module_alloc_size_list_size;
 
-	area = __get_vm_area(size, VM_ALLOC, MODULE_START, MODULE_END);
-	if (!area)
-		return NULL;
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+char *module_alloc_find_module_name(char *buff, char *end, unsigned long addr) {
+    unsigned int i;
+    unsigned int len;
+    for(i = 0 ; i < sizeof(module_alloc_size_list) / sizeof(module_alloc_size_list[0]) ; i++) {
+        if(module_alloc_size_list[i].alloc == 0)
+            continue;
+        if(addr < module_alloc_size_list[i].addr)
+            continue;
+        if(addr > module_alloc_size_list[i].size + module_alloc_size_list[i].addr)
+            continue;
+        len = snprintf(buff, end - buff, "0x%08lx (%s + 0x%lx)   [%s]", addr, 
+                    module_alloc_size_list[i].name,
+                    addr - module_alloc_size_list[i].addr,
+                    module_alloc_size_list[i].name);
+        return buff + len;
+    }
+    len = snprintf(buff, end - buff, "0x%08lx", addr);
+    return buff + len;
+}
 
-	return __vmalloc_area(area, GFP_KERNEL, PAGE_KERNEL);
-#else
-	if (size == 0)
-		return NULL;
-	return vmalloc(size);
-#endif
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+void module_alloc_size_list_free(unsigned long addr) {
+    unsigned int i;
+    for(i = 0 ; i < sizeof(module_alloc_size_list) / sizeof(module_alloc_size_list[0]) ; i++) {
+        if(module_alloc_size_list[i].addr == addr) {
+            if(module_alloc_size_list[i].alloc == 1) {
+                module_alloc_size_list[i].alloc = 0;
+                return;
+            }
+        }
+    }
+    /*--- printk(KERN_ERR "[module-alloc-by-name] pointer 0x%lx isn't in kseg0-module-list\n", addr); ---*/
+    return;
+}
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+#if defined(CONFIG_CHECK_TIMER_ON_FREED_MODULE)
+int module_alloc_check_pointer(unsigned long addr, char **name) {
+    unsigned int i;
+    *name = NULL;
+    for(i = 0 ; i < sizeof(module_alloc_size_list) / sizeof(module_alloc_size_list[0]) ; i++) {
+        if(module_alloc_size_list[i].addr > addr) {
+            continue;
+        }
+        if(module_alloc_size_list[i].addr + module_alloc_size_list[i].size <= addr) {
+            continue;
+        }
+        if(module_alloc_size_list[i].alloc == 1) {
+            return 0;
+        }
+        *name = module_alloc_size_list[i].name;
+        return -1;
+    }
+    /*--- printk(KERN_ERR "[module-alloc-by-name] pointer 0x%lx isn't in kseg0-module-list\n", addr); ---*/
+    return 1;
+}
+#endif /*--- #if defined(CONFIG_CHECK_TIMER_ON_FREED_MODULE) ---*/
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+char *module_load_black_list[] = { 
+    /*--- "pcmlink", "isdn_fbox_fon5", "capi_codec", "usbcore", "ifxusb_host", NULL ---*/
+    NULL
+};
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+unsigned long module_alloc_size_list_alloc(unsigned long size, char *name, enum _module_alloc_type_ type) {
+    unsigned int i;
+    char **p;
+
+    if((module_alloc_size_list_size == 0) || (module_alloc_size_list_base == 0))
+        return 0L;
+
+    /*--- printk(KERN_ERR "[module-alloc-by-name] module '%s' size 0x%lx type %s\n", name, size, type == module_alloc_type_core ? "core" : "init"); ---*/
+    p = module_load_black_list;
+    while(*p) {
+        if(!strcmp(*p, name)) {
+            printk(KERN_ERR "[module-alloc-by-name] module '%s' on black list, use normal alloc\n", name);
+            return 0UL;
+        }
+        p++;
+    }
+
+    /*--- printk(KERN_ERR "[module-alloc-by-name] next base is 0x%lx, rest size is 0x%x\n", module_alloc_size_list_base, module_alloc_size_list_size); ---*/
+
+    size +=  ((1 << PAGE_SHIFT) - 1);
+    size &= ~((1 << PAGE_SHIFT) - 1);
+
+    for(i = 0 ; i < sizeof(module_alloc_size_list) / sizeof(module_alloc_size_list[0]) ; i++) {
+        if(!strcmp(module_alloc_size_list[i].name, name)) { /*--- name gefunden ---*/
+            if(module_alloc_size_list[i].type == type) {
+                /*--- printk(KERN_ERR "[module-alloc-by-name] module '%s' found\n", name); ---*/
+                break;
+            }
+        }
+        if(module_alloc_size_list[i].name[0] == '\0') {
+            strcpy(module_alloc_size_list[i].name, name);
+            module_alloc_size_list[i].type = type;
+            /*--- printk(KERN_ERR "[module-alloc-by-name] new module '%s' will use entry %d\n", name, i); ---*/
+            break;
+        }
+    }
+    if(i == sizeof(module_alloc_size_list) / sizeof(module_alloc_size_list[0])) {
+        printk(KERN_ERR "[module-alloc-by-name] module alloc table full\n");
+        return 0UL;
+    }
+
+    if(module_alloc_size_list[i].alloc != 0) {
+        printk(KERN_ERR "[module-alloc-by-name] segment for %s is %s\n", name,
+            module_alloc_size_list[i].alloc == 1 ? "already allocated" :
+            module_alloc_size_list[i].alloc == 2 ? "locked, because of size" : "unknown locked");
+        return 0UL;
+    }
+
+    /*--- wenn noch keine addresse, dann festlegen ---*/
+    if(module_alloc_size_list[i].addr == 0) {
+        module_alloc_size_list[i].size = size;
+        if(size > module_alloc_size_list_size) {
+            printk(KERN_ERR "[module-alloc-by-name] no kseg0-space for module '%s' (0x%lx bytes) -> use ksseg\n", name, size);
+            module_alloc_size_list[i].alloc = 2;
+            return 0UL;
+        }
+        module_alloc_size_list[i].addr = module_alloc_size_list_base;
+
+        module_alloc_size_list_size -= size;
+        module_alloc_size_list_base += size;
+        module_alloc_size_list[i].alloc = 1;
+
+        printk(KERN_ERR "[module-alloc-by-name] give 0x%lx bytes at 0x%lx to module '%s' (0x%x bytes left)\n", 
+            module_alloc_size_list[i].size, module_alloc_size_list[i].addr, module_alloc_size_list[i].name,
+            module_alloc_size_list_size 
+            );
+        if(kernel_modulmemory_config) {
+            struct _kernel_modulmemory_config *C = kernel_modulmemory_config;
+            while(C->name) {
+                if(!strcmp(C->name, module_alloc_size_list[i].name)) {
+                    printk(KERN_ERR "[module-alloc-by-name] 0x%lx bytes used, 0x%x bytes expected\n", 
+                        module_alloc_size_list[i].size, C->size);
+                    break;
+                }
+                C++;
+            }
+        }
+    }
+
+    /*--- segment groesse überprüfen ---*/
+    if(module_alloc_size_list[i].size != size) {
+        printk(KERN_ERR "[module-alloc-by-name] invalid size change 0x%lx bytes != 0x%lx bytes (module '%s')\n", 
+            module_alloc_size_list[i].size, size, module_alloc_size_list[i].name);
+
+        if(module_alloc_size_list[i].size < size) {
+            module_alloc_size_list[i].size = size;
+        }
+        module_alloc_size_list[i].alloc = 2;
+        return 0UL;
+    }
+    return module_alloc_size_list[i].addr;
+}
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+void *module_alloc(unsigned long size, char *name __attribute__ ((unused)), enum _module_alloc_type_ type __attribute__ ((unused))) {
+    void *ptr;
+    switch(type) {
+        case module_alloc_type_init:
+            ptr = vmalloc(size);
+            break;
+        case module_alloc_type_core:
+            ptr = (void *)module_alloc_size_list_alloc(size, name, type);
+            if(ptr == NULL)
+                ptr = vmalloc(size);
+            break;
+        default:
+        case module_alloc_type_page:
+            ptr = vmalloc(size);
+            break;
+    }
+    /*--- do_memory_check(); ---*/
+    return ptr;
 }
 
 /* Free memory returned from module_alloc */
-void module_free(struct module *mod, void *module_region)
-{
-	vfree(module_region);
+void module_free(struct module *mod, void *module_region) {
+    if((((unsigned long)module_region) & 0xE0000000) == 0xC0000000) {
+        vfree(module_region);
+        return;
+    }
+    module_alloc_size_list_free((unsigned long)module_region);
+    return;
 }
 
 int module_frob_arch_sections(Elf_Ehdr *hdr, Elf_Shdr *sechdrs,
@@ -83,15 +269,24 @@ static int apply_r_mips_none(struct module *me, u32 *location, Elf_Addr v)
 
 static int apply_r_mips_32_rel(struct module *me, u32 *location, Elf_Addr v)
 {
-	*location += v;
-
+    if((u32)location & 0x3) {
+        /*--- supress unaligned trap-handling ---*/
+        u32 tmp = extract_unaligned_dword(location);
+        set_unaligned_dword(location, tmp + v);
+    } else {
+        *location += v;
+    }
 	return 0;
 }
 
 static int apply_r_mips_32_rela(struct module *me, u32 *location, Elf_Addr v)
 {
-	*location = v;
-
+    if((u32)location & 0x3) {
+        /*--- supress unaligned trap-handling ---*/
+        set_unaligned_dword(location, v);
+    } else {
+        *location = v;
+    }
 	return 0;
 }
 

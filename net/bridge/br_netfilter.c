@@ -48,6 +48,15 @@
 #include <linux/sysctl.h>
 #endif
 
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+int brnf_filter_pre_routing_enable = 1;
+int brnf_filter_local_in_enable = 1;
+int brnf_filter_forward_enable = 1;
+int brnf_filter_local_out_enable = 1;
+int brnf_filter_post_routing_enable = 1;
+#endif
+
+
 #define skb_origaddr(skb)	 (((struct bridge_skb_cb *) \
 				 (skb->nf_bridge->data))->daddr.ipv4)
 #define store_orig_dstaddr(skb)	 (skb_origaddr(skb) = ip_hdr(skb)->daddr)
@@ -1018,6 +1027,43 @@ static ctl_table brnf_table[] = {
 		.mode		= 0644,
 		.proc_handler	= brnf_sysctl_call_tables,
 	},
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+       {
+               .procname   = "bridge-nf-pre-routing-enable",
+               .data       = &brnf_filter_pre_routing_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   = proc_dointvec,
+       },
+       {
+               .procname   = "bridge-nf-local-in-enable",
+               .data       = &brnf_filter_local_in_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   = proc_dointvec,
+       },
+       {
+               .procname   = "bridge-nf-forward-enable",
+               .data       = &brnf_filter_forward_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   = proc_dointvec,
+       },
+       {
+               .procname   = "bridge-nf-local-out-enable",
+               .data       = &brnf_filter_local_out_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   = proc_dointvec,
+       },
+       {
+               .procname   = "bridge-nf-post-routing-enable",
+               .data       = &brnf_filter_post_routing_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   = proc_dointvec,
+       },
+#endif
 	{ .ctl_name = 0 }
 };
 

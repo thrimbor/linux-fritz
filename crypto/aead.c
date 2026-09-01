@@ -478,22 +478,29 @@ struct crypto_aead *crypto_alloc_aead(const char *alg_name, u32 type, u32 mask)
 
 		alg = crypto_lookup_aead(alg_name, type, mask);
 		if (IS_ERR(alg)) {
+		    printk("[%s]%d\n", __func__, __LINE__);
 			err = PTR_ERR(alg);
 			goto err;
 		}
 
 		tfm = __crypto_alloc_tfm(alg, type, mask);
-		if (!IS_ERR(tfm))
+		if (!IS_ERR(tfm)){
+    	    printk("[%s]%d\n", __func__, __LINE__);
 			return __crypto_aead_cast(tfm);
+		}
+	    printk("[%s]%d\n", __func__, __LINE__);
 
 		crypto_mod_put(alg);
 		err = PTR_ERR(tfm);
 
 err:
-		if (err != -EAGAIN)
+		if (err != -EAGAIN){
+    	    printk("[%s]%d\n", __func__, __LINE__);
 			break;
+		}
 		if (signal_pending(current)) {
 			err = -EINTR;
+    	    printk("[%s]%d\n", __func__, __LINE__);
 			break;
 		}
 	}

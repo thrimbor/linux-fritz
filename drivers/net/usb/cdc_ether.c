@@ -438,6 +438,22 @@ static const struct usb_device_id	products [] = {
 	.bInterfaceSubClass	= USB_CDC_SUBCLASS_ETHERNET, \
 	.bInterfaceProtocol	= USB_CDC_PROTO_NONE
 
+/* Altair LTE modem. uses the class, needs a custom driver; */
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor    = 0x216f,
+	.idProduct   = 0x0040,
+	.driver_info = 0,
+},
+
+/* Altair LTE modem. uses the class, needs a custom driver; */
+{
+	.match_flags = USB_DEVICE_ID_MATCH_DEVICE,
+	.idVendor    = 0x216f,
+	.idProduct   = 0x0041,
+	.driver_info = 0,
+},
+
 /* SA-1100 based Sharp Zaurus ("collie"), or compatible;
  * wire-incompatible with true CDC Ethernet implementations.
  * (And, it seems, needlessly so...)
@@ -524,11 +540,14 @@ static const struct usb_device_id	products [] = {
  * NOTE:  this match must come AFTER entries blacklisting devices
  * because of bugs/quirks in a given product (like Zaurus, above).
  */
+
+/* == AVM/BC 20120816 Driver should not support devices by default == */
 {
 	USB_INTERFACE_INFO(USB_CLASS_COMM, USB_CDC_SUBCLASS_ETHERNET,
 			USB_CDC_PROTO_NONE),
 	.driver_info = (unsigned long) &cdc_info,
-}, {
+},
+#if 0 
 	/* Ericsson F3507g */
 	USB_DEVICE_AND_INTERFACE_INFO(0x0bdb, 0x1900, USB_CLASS_COMM,
 			USB_CDC_SUBCLASS_MDLM, USB_CDC_PROTO_NONE),
@@ -599,6 +618,7 @@ static const struct usb_device_id	products [] = {
 			USB_CDC_SUBCLASS_MDLM, USB_CDC_PROTO_NONE),
 	.driver_info = (unsigned long) &cdc_info,
 },
+#endif //0
 	{ },		// END
 };
 MODULE_DEVICE_TABLE(usb, products);

@@ -12,6 +12,12 @@
 #define APOLLO_MOUSE_MINOR	7
 #define PC110PAD_MINOR		9
 /*#define ADB_MOUSE_MINOR	10	FIXME OBSOLETE */
+#if defined(CONFIG_MACH_ATHEROS)
+#define ATH_CLKSW_MINOR     40
+#endif /*--- #if defined(CONFIG_AR7240) ---*/
+#define FACTORY_RESET_MINOR     129     /* Factory reset minor */
+#define ATH_OTP_MINOR		132	/* Atheros OTP */
+#define CRYPTODEV_MINOR		70	/* /dev/crypto */
 #define WATCHDOG_MINOR		130	/* Watchdog timer     */
 #define TEMP_MINOR		131	/* Temperature Sensor */
 #define RTC_MINOR		135

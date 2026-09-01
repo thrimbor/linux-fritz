@@ -167,6 +167,12 @@ struct rtmsg
 	unsigned char		rtm_type;	/* See below	*/
 
 	unsigned		rtm_flags;
+#ifdef	CONFIG_MAPPING
+	unsigned char		rtm_mapping;	/* For mapping */
+	unsigned long		rtm_src_prefix;	/* Mapping src prefix */
+	unsigned long		rtm_dst_prefix;	/* Mapping dst prefix */
+#endif
+	
 };
 
 /* rtm_type */
@@ -750,6 +756,11 @@ __rta_reserve(struct sk_buff *skb, int attrtype, int attrlen)
 extern void rtmsg_ifinfo(int type, struct net_device *dev, unsigned change);
 
 /* RTNL is used as a global lock for all changes to network configuration  */
+extern void rtnl_offload_read_lock(void);
+extern void rtnl_offload_read_unlock(void);
+extern void rtnl_offload_write_lock(void);
+extern void rtnl_offload_write_unlock(void);
+
 extern void rtnl_lock(void);
 extern void rtnl_unlock(void);
 extern int rtnl_trylock(void);

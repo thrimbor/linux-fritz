@@ -235,12 +235,12 @@ static inline void *kcalloc(size_t n, size_t size, gfp_t flags)
  * if available. Equivalent to kmalloc() in the non-NUMA single-node
  * case.
  */
-static inline void *kmalloc_node(size_t size, gfp_t flags, int node)
+static inline void *kmalloc_node(size_t size, gfp_t flags, int node __attribute__ ((unused)))
 {
 	return kmalloc(size, flags);
 }
 
-static inline void *__kmalloc_node(size_t size, gfp_t flags, int node)
+static inline void *__kmalloc_node(size_t size, gfp_t flags, int node __attribute__ ((unused)))
 {
 	return __kmalloc(size, flags);
 }
@@ -248,7 +248,7 @@ static inline void *__kmalloc_node(size_t size, gfp_t flags, int node)
 void *kmem_cache_alloc(struct kmem_cache *, gfp_t);
 
 static inline void *kmem_cache_alloc_node(struct kmem_cache *cachep,
-					gfp_t flags, int node)
+					gfp_t flags, int node __attribute__ ((unused)))
 {
 	return kmem_cache_alloc(cachep, flags);
 }

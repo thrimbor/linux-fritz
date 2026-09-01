@@ -28,15 +28,30 @@
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
 
+#if defined(CONFIG_MACH_AR934x) || \
+    defined(CONFIG_MACH_QCA955x)
+#include <atheros.h>
+#endif
+
 #include "usb.h"
 #include "hcd.h"
 #include "hub.h"
+
+#ifdef CONFIG_AVM_POWERMETER
+#include <linux/avm_power.h>
+#include <linux/avm_hw_config.h>
+#endif /*--- #ifdef CONFIG_AVM_POWERMETER ---*/
 
 /* if we are in debug mode, always announce new devices */
 #ifdef DEBUG
 #ifndef CONFIG_USB_ANNOUNCE_NEW_DEVICES
 #define CONFIG_USB_ANNOUNCE_NEW_DEVICES
 #endif
+#endif
+
+#ifdef AP_USB_LED_GPIO
+extern void ap_usb_led_on(void);
+extern void ap_usb_led_off(void);
 #endif
 
 struct usb_hub {
@@ -83,6 +98,14 @@ struct usb_hub {
 	void			**port_owners;
 };
 
+#ifdef CONFIG_MACH_AR7240
+#include <ar7240.h>
+#endif
+
+static inline int hub_is_superspeed(struct usb_device *hdev)
+{
+        return (hdev->descriptor.bDeviceProtocol == 3);
+}
 
 /* Protect struct usb_device->state and ->children members
  * Note: Both are also protected by ->dev.sem, except that ->state can
@@ -149,6 +172,53 @@ EXPORT_SYMBOL_GPL(ehci_cf_port_reset_rwsem);
 #define HUB_DEBOUNCE_STEP	  25
 #define HUB_DEBOUNCE_STABLE	 100
 
+#ifdef CONFIG_MACH_QCA955x
+
+#define SERIAL_MODE   1
+#define PARALLEL_MODE 0
+
+static inline void ath_usb_set_phy_type(int mode, u32 ath_port_reg)
+{
+	if(mode == SERIAL_MODE) {
+		/* Set PHY type in serial mode*/
+		ath_reg_wr(ath_port_reg,((ath_reg_rd(ath_port_reg) | ATH_USB_SET_SERIAL_MODE)));
+	} else {
+		/* Set PHY type in parallel mode*/
+		ath_reg_wr(ath_port_reg,((ath_reg_rd(ath_port_reg) & ~(ATH_USB_SET_SERIAL_MODE))));
+	}
+	return;
+}
+#endif /* CONFIG_MACH_QCA955x */
+
+#if defined(CONFIG_MACH_AR934x) || \
+    defined(CONFIG_MACH_QCA955x)
+/*
+ * Scorpion and Wasp Specific
+ * USB Enumeration Failure Fix: Refer EV 101139
+ */
+static inline void ath_usb_dig_phy_rst(u32 ath_usb_sts_reg, u32 ath_usb_sts_sof, u32 ath_reset_reg, u32 ath_reset_usb_phy)
+{
+	int count = 0;
+
+	ath_reg_rmw_set(ath_usb_sts_reg, ath_usb_sts_sof); /* Clear prev SOF status */
+	udelay(5);
+	count = 0;
+	/* Wait for one SOF(SOF sent every 125 usec) to sent out before Reset. */
+	while(1) {
+		if (ath_reg_rd(ath_usb_sts_reg) & ath_usb_sts_sof) {
+			break;
+		}
+		if (count && (count % 5000 == 0))
+			printk("%s[%d] count %d USBSTS = 0x%08x\n", __func__, __LINE__, count, ath_reg_rd(ath_usb_sts_reg));
+		count++;
+	}
+	udelay(5);
+	/* Reset USB PHY */
+	ath_reg_rmw_set(ath_reset_reg, ath_reset_usb_phy);
+	ath_reg_rmw_clear(ath_reset_reg, ath_reset_usb_phy);
+	udelay(250);
+}
+#endif /* CONFIG_MACH_AR934x or CONFIG_MACH_QCA955x */
 
 static int usb_reset_and_verify_device(struct usb_device *udev);
 
@@ -176,11 +246,19 @@ static struct usb_hub *hdev_to_hub(struct usb_device *hdev)
 static int get_hub_descriptor(struct usb_device *hdev, void *data, int size)
 {
 	int i, ret;
+	unsigned dtype;
+	
+	dtype = USB_DT_HUB;
+	
+	if (hub_is_superspeed(hdev)) {
+		dtype +=1;
+		size=12;
+	}
 
 	for (i = 0; i < 3; i++) {
 		ret = usb_control_msg(hdev, usb_rcvctrlpipe(hdev, 0),
 			USB_REQ_GET_DESCRIPTOR, USB_DIR_IN | USB_RT_HUB,
-			USB_DT_HUB << 8, 0, data, size,
+			dtype << 8, 0, data, size,
 			USB_CTRL_GET_TIMEOUT);
 		if (ret >= (USB_DT_HUB_NONVAR_SIZE + 2))
 			return ret;
@@ -613,7 +691,7 @@ static int hub_hub_status(struct usb_hub *hub,
 			"%s failed (err = %d)\n", __func__, ret);
 	else {
 		*status = le16_to_cpu(hub->status->hub.wHubStatus);
-		*change = le16_to_cpu(hub->status->hub.wHubChange); 
+		*change = le16_to_cpu(hub->status->hub.wHubChange);
 		ret = 0;
 	}
 	mutex_unlock(&hub->status_mutex);
@@ -759,8 +837,21 @@ static void hub_activate(struct usb_hub *hub, enum hub_activation_type type)
 				!(portstatus & USB_PORT_STAT_CONNECTION) ||
 				!udev ||
 				udev->state == USB_STATE_NOTATTACHED)) {
-			clear_port_feature(hdev, port1, USB_PORT_FEAT_ENABLE);
-			portstatus &= ~USB_PORT_STAT_ENABLE;
+		/* 20131204 AVM/WK Fix ported from Kernel 2.6.39 */
+			
+			/*
+			 * USB3 protocol ports will automatically transition
+			 * to Enabled state when detect an USB3.0 device attach.
+			 * Do not disable USB3 protocol ports.
+			 */
+			if (!hub_is_superspeed(hdev)) {
+				clear_port_feature(hdev, port1,
+						   USB_PORT_FEAT_ENABLE);
+				portstatus &= ~USB_PORT_STAT_ENABLE;
+			} else {
+				/* Pretend that power was lost for USB3 devs */
+				portstatus &= ~USB_PORT_STAT_ENABLE;
+			}
 		}
 
 		/* Clear status-change flags; we'll debounce later */
@@ -931,6 +1022,18 @@ static int hub_configure(struct usb_hub *hub,
 	if (!hub->descriptor) {
 		ret = -ENOMEM;
 		goto fail;
+	}
+
+	if (hub_is_superspeed(hdev) && (hdev->parent != NULL)) {
+		ret = usb_control_msg(hdev, usb_sndctrlpipe(hdev, 0),
+				HUB_SET_DEPTH, USB_RT_HUB,
+				hdev->level - 1, 0, NULL, 0,
+				USB_CTRL_SET_TIMEOUT);
+
+		if (ret < 0) {
+			message = "can't set hub depth";
+			goto fail;
+		}
 	}
 
 	/* Request the entire hub descriptor.
@@ -1434,6 +1537,12 @@ void usb_set_device_state(struct usb_device *udev,
 	unsigned long flags;
 
 	spin_lock_irqsave(&device_state_lock, flags);
+#ifdef CONFIG_FUSIV_USB_LED
+	if (new_state == USB_STATE_NOTATTACHED)
+           fusiv_usb_led_clear(udev->portnum -1 ,FUSIV_USB_LED_ATTCHD_BIT);
+         else
+           fusiv_usb_led_set(udev->portnum - 1,FUSIV_USB_LED_ATTCHD_BIT);
+#endif
 	if (udev->state == USB_STATE_NOTATTACHED)
 		;	/* do nothing */
 	else if (new_state != USB_STATE_NOTATTACHED) {
@@ -1593,6 +1702,49 @@ void usb_disconnect(struct usb_device **pdev)
 	 */
 	usb_set_device_state(udev, USB_STATE_NOTATTACHED);
 	dev_info (&udev->dev, "USB disconnect, address %d\n", udev->devnum);
+
+#if defined(CONFIG_AVM_POWERMETER)
+	{
+		unsigned nextmA = 0;
+		unsigned avm_powerdevice = 0;
+		int	hub_port;
+		enum _avm_hw_param param;
+
+#if defined (CONFIG_MACH_AR934x) || defined (CONFIG_MACH_QCA955x)
+		//check if internal hub is not present
+		if (avm_get_hw_config(AVM_HW_CONFIG_VERSION, "usb_hub_external_port1", &hub_port, &param) != 0) {
+#else
+		if (1) {
+#endif
+			if (udev->level == 1) {
+#if defined (CONFIG_FUSIV_VX180)
+				avm_powerdevice = (udev->portnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+				printk (KERN_INFO "Port#%u disconnect: AVM Powermeter changed to %u mA\n", udev->portnum, nextmA);
+#else
+				avm_powerdevice = (udev->bus->busnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+				printk (KERN_INFO "Bus#%u disconnect: AVM Powermeter changed to %u mA\n", udev->bus->busnum, nextmA);
+#endif
+				PowerManagmentRessourceInfo(avm_powerdevice, nextmA);
+			}
+		} else {
+			if (udev->level == 2) {
+				if (udev->portnum == hub_port) {
+					avm_powerdevice = powerdevice_usb_host;
+				} else {
+					if (avm_get_hw_config(AVM_HW_CONFIG_VERSION, "usb_hub_external_port2", &hub_port, &param) == 0) {
+						if (udev->portnum == hub_port) {
+							avm_powerdevice = powerdevice_usb_host2;
+						}
+					}
+				}
+				if (avm_powerdevice) {
+					printk (KERN_INFO "HubPort#%u disconnect: AVM Powermeter changed to %u mA\n", udev->portnum, nextmA);
+					PowerManagmentRessourceInfo(avm_powerdevice, nextmA);
+				}
+			}
+		}
+	}
+#endif // CONFIG_AVM_POWERMETER
 
 	usb_lock_device(udev);
 
@@ -1804,9 +1956,54 @@ fail:
  *
  * Only the hub driver or root-hub registrar should ever call this.
  */
+#ifdef CONFIG_USB_WARNING_WAR
+#ifdef CONFIG_MACH_HORNET
+/**
+ * Take AP121 4MB for example, AP121 4MB only support 3 tiers of USB HUB,
+ * and it supports Mass storage or HUB USB devices currently.
+ */
+#define USB_MAX_HUB_TIERS   3
+static int support_device_clas[] =
+{
+	{USB_CLASS_MASS_STORAGE},
+	{USB_CLASS_HUB},
+	{-1}		/* leave as last */
+};
+#else
+#define USB_MAX_HUB_TIERS   5
+static int support_device_clas[] =
+{
+	{USB_CLASS_PER_INTERFACE},
+	{USB_CLASS_AUDIO},
+	{USB_CLASS_COMM},
+	{USB_CLASS_HID},
+	{USB_CLASS_PHYSICAL},
+	{USB_CLASS_STILL_IMAGE},
+	{USB_CLASS_PRINTER},
+	{USB_CLASS_MASS_STORAGE},
+	{USB_CLASS_HUB},
+	{USB_CLASS_CDC_DATA},
+	{USB_CLASS_CSCID},
+	{USB_CLASS_CONTENT_SEC},
+	{USB_CLASS_VIDEO},
+	{USB_CLASS_WIRELESS_CONTROLLER},
+	{USB_CLASS_MISC},
+	{USB_CLASS_APP_SPEC},
+	{USB_CLASS_VENDOR_SPEC},
+	{-1}		/* leave as last */
+};
+#endif
+#endif
 int usb_new_device(struct usb_device *udev)
 {
 	int err;
+#ifdef CONFIG_USB_WARNING_WAR
+    int ncfg, nintf;
+    struct usb_interface_cache *intfc;
+    struct usb_host_config *config;
+    unsigned int cfgno = 0;
+    int i, j, ix, support_dev_flag = 0;
+#endif
 
 	if (udev->parent) {
 		/* Increment the parent's count of unsuspended children */
@@ -1828,9 +2025,84 @@ int usb_new_device(struct usb_device *udev)
 	/* export the usbdev device-node for libusb */
 	udev->dev.devt = MKDEV(USB_DEVICE_MAJOR,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
-
+#ifdef CONFIG_USB_WARNING_WAR
+    ncfg = udev->descriptor.bNumConfigurations;
+    for (cfgno = 0; cfgno < ncfg; cfgno++) {
+        config = &udev->config[cfgno];
+        nintf = config->desc.bNumInterfaces;
+        for (i = 0; i < nintf; ++i) {
+            intfc = config->intf_cache[i];
+            for (j = 0; j < intfc->num_altsetting; ++j) {
+                support_dev_flag = 0;
+                for (ix = 0; support_device_clas[ix] != -1; ix++) {
+                    if (intfc->altsetting[j].desc.bInterfaceClass == support_device_clas[ix]) {
+                        support_dev_flag = 1;
+#ifdef CONFIG_MACH_AR934x
+	                if ((intfc->altsetting[j].desc.bInterfaceClass != USB_CLASS_HUB) && (intfc->altsetting[j].desc.bInterfaceClass != USB_CLASS_MASS_STORAGE)) {
+                    		dev_warn(&udev->dev, "Unsupported USB devices bInterfaceClass %d\n", intfc->altsetting[j].desc.bInterfaceClass);
+				goto noclass;
+	                }
+#endif
+                        break;
+                    }
+                }
+                if (support_dev_flag == 0) {
+                    dev_warn(&udev->dev, "Unsupported USB devices bInterfaceClass %d\n", intfc->altsetting[j].desc.bInterfaceClass);
+                    err = -ENXIO;
+                    goto fail;
+                }
+            }
+        }
+    }
+#ifdef CONFIG_MACH_AR934x
+noclass:
+#endif
+#endif
 	/* Tell the world! */
 	announce_device(udev);
+
+#if defined(CONFIG_AVM_POWERMETER)
+	{
+		unsigned nextmA = 100;
+		unsigned avm_powerdevice = 0;
+		int	hub_port;
+		enum _avm_hw_param param;
+
+#if defined (CONFIG_MACH_AR934x) || defined (CONFIG_MACH_QCA955x)
+		//check if internal hub is not present
+		if (avm_get_hw_config(AVM_HW_CONFIG_VERSION, "usb_hub_external_port1", &hub_port, &param) != 0) {
+#else
+		if (1) {
+#endif
+			if (udev->level == 1) {
+#if defined (CONFIG_FUSIV_VX180)
+				avm_powerdevice = (udev->portnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+				printk (KERN_INFO "Port#%u connect: AVM Powermeter changed to %u mA\n", udev->portnum, nextmA);
+#else
+				avm_powerdevice = (udev->bus->busnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+				printk (KERN_INFO "Bus#%u connect: AVM Powermeter changed to %u mA\n", udev->bus->busnum, nextmA);
+#endif
+				PowerManagmentRessourceInfo(avm_powerdevice, nextmA);
+			}
+		} else {
+			if (udev->level == 2) {
+				if (udev->portnum == hub_port) {
+					avm_powerdevice = powerdevice_usb_host;
+				} else {
+					if (avm_get_hw_config(AVM_HW_CONFIG_VERSION, "usb_hub_external_port2", &hub_port, &param) == 0) {
+						if (udev->portnum == hub_port) {
+							avm_powerdevice = powerdevice_usb_host2;
+						}
+					}
+				}
+				if (avm_powerdevice) {
+					printk (KERN_INFO "HubPort#%u connect: AVM Powermeter changed to %u mA\n", udev->portnum, nextmA);
+					PowerManagmentRessourceInfo(avm_powerdevice, nextmA);
+				}
+			}
+		}
+	}
+#endif // CONFIG_AVM_POWERMETER
 
 	if (udev->serial)
 		add_device_randomness(udev->serial, strlen(udev->serial));
@@ -2005,9 +2277,39 @@ static int hub_port_wait_reset(struct usb_hub *hub, int port1,
 		    (portstatus & USB_PORT_STAT_ENABLE)) {
 			if (hub_is_wusb(hub))
 				udev->speed = USB_SPEED_VARIABLE;
-			else if (portstatus & USB_PORT_STAT_HIGH_SPEED)
+			else if (portstatus & USB_PORT_STAT_HIGH_SPEED) {
 				udev->speed = USB_SPEED_HIGH;
-			else if (portstatus & USB_PORT_STAT_LOW_SPEED)
+#ifdef CONFIG_MACH_AR934x
+				/*
+				 * Wasp Specific
+				 * USB Enumeration Failure Fix: Refer EV 101139
+				 */
+				if (is_ar934x_13_or_later() && !(hub->hdev->parent)) {
+					ath_usb_dig_phy_rst(ATH_USB_STS, ATH_USB_STS_SOF, RST_RESET_ADDRESS, RST_RESET_USB_PHY_RESET_MASK);
+				}
+#endif /* CONFIG_MACH_AR934x */
+
+#ifdef CONFIG_MACH_QCA955x
+				/*
+				 * Scorpion Specific
+				 * USB Enumeration Failure Fix: Refer EV 101139
+				 */
+				if (!(hub->hdev->parent)) {
+					if(!(udev->bus->controller->driver->mod_name)) {
+						/*
+						 * Host controller 1
+						 */
+						ath_usb_dig_phy_rst(ATH_USB_STS, ATH_USB_STS_SOF, RST_RESET_ADDRESS, RST_RESET_USB_PHY_RESET_MASK);
+					} else {
+						/*
+						 * Host controller 2
+						 */
+						ath_usb_dig_phy_rst(ATH_USB2_STS, ATH_USB2_STS_SOF, RST_RESET2_ADDRESS, RST_RESET2_USB_PHY2_RESET_MASK);
+					}
+				}
+#endif /* CONFIG_MACH_QCA955x */
+
+			} else if (portstatus & USB_PORT_STAT_LOW_SPEED)
 				udev->speed = USB_SPEED_LOW;
 			else
 				udev->speed = USB_SPEED_FULL;
@@ -2532,7 +2834,7 @@ static inline int remote_wakeup(struct usb_device *udev)
  * Between connect detection and reset signaling there must be a delay
  * of 100ms at least for debounce and power-settling.  The corresponding
  * timer shall restart whenever the downstream port detects a disconnect.
- * 
+ *
  * Apparently there are some bluetooth and irda-dongles and a number of
  * low-speed devices for which this debounce period may last over a second.
  * Not covered by the spec - but easy to deal with.
@@ -2648,7 +2950,9 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	enum usb_device_speed	oldspeed = udev->speed;
 	char 			*speed, *type;
 	int			devnum = udev->devnum;
-
+#ifdef CONFIG_MACH_QCA955x
+	u32 portscx_add;
+#endif
 	/* root hub ports have a slightly longer reset period
 	 * (from USB 2.0 spec, section 7.1.7.5)
 	 */
@@ -2657,6 +2961,8 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 		if (port1 == hdev->bus->otg_port)
 			hdev->bus->b_hnp_enable = 0;
 	}
+		dev_dbg(&udev->dev,
+				"hub_port_init oldspeed=%x config=%p HCD3flag=%x\n", oldspeed, udev->config, (hcd->driver->flags & HCD_USB3));
 
 	/* Some low speed devices have problems with the quick delay, so */
 	/*  be a bit pessimistic with those devices. RHbug #23670 */
@@ -2717,7 +3023,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 	default:
 		goto fail;
 	}
- 
+
 	type = "";
 	switch (udev->speed) {
 	case USB_SPEED_LOW:	speed = "low";	break;
@@ -2732,11 +3038,49 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 				break;
 	default: 		speed = "?";	break;
 	}
+#ifdef CONFIG_MACH_QCA955x
+	/*
+	 * Scorpion Specific
+	 * PATCH for USB
+	 * The host with a LOW or FULL speed device on its root hub to be operated in serial mode
+	 * High speed devices will continue to operate in default parallel mode
+	 */
+	if(!(udev->bus->controller->driver->mod_name)) {
+		/* Host controller 1 */
+		portscx_add = ATH_USB_PORTSCX;
+
+	} else {
+		/* Host controller 2 */
+		 portscx_add = ATH_USB2_PORTSCX;
+	}
+	if (((hdev->bus->root_hub->children[0]) &&
+			((hdev->bus->root_hub->children[0]->speed == USB_SPEED_FULL))) ||
+			((hdev->level==0) && (udev->speed == USB_SPEED_LOW))) {
+		ath_usb_set_phy_type(SERIAL_MODE, portscx_add);
+		retval = hub_port_reset(hub, port1, udev, delay);
+		if (retval < 0)		/* error or disconnect */
+			goto fail;
+	} else {
+		ath_usb_set_phy_type(PARALLEL_MODE, portscx_add);
+	}
+
+#endif /* CONFIG_MACH_QCA955x */
+
 	if (udev->speed != USB_SPEED_SUPER)
 		dev_info(&udev->dev,
 				"%s %s speed %sUSB device using %s and address %d\n",
 				(udev->config) ? "reset" : "new", speed, type,
 				udev->bus->controller->driver->name, devnum);
+
+#ifdef CONFIG_MACH_AR934x
+	if (is_ar934x_13_or_later()) {
+		if (!(hub->hdev->parent) && ((udev->speed == USB_SPEED_LOW) || (udev->speed == USB_SPEED_FULL))) {
+			ath_reg_rmw_set(ATH_RESET, ATH_RESET_USB_PHY);
+			udelay(1000);
+			ath_reg_rmw_clear(ATH_RESET, ATH_RESET_USB_PHY);
+		}
+	}
+#endif /* CONFIG_MACH_AR934x */
 
 	/* Set up TT records, if needed  */
 	if (hdev->tt) {
@@ -2752,7 +3096,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 		udev->tt = &hub->tt;
 		udev->ttport = port1;
 	}
- 
+
 	/* Why interleave GET_DESCRIPTOR and SET_ADDRESS this way?
 	 * Because device hardware and firmware is sometimes buggy in
 	 * this area, and this is how Linux has done it for ages.
@@ -2900,7 +3244,7 @@ hub_port_init (struct usb_hub *hub, struct usb_device *udev, int port1,
 		udev->ep0.desc.wMaxPacketSize = cpu_to_le16(i);
 		usb_ep0_reinit(udev);
 	}
-  
+
 	retval = usb_get_device_descriptor(udev, USB_DT_DEVICE_SIZE);
 	if (retval < (signed)sizeof(udev->descriptor)) {
 		dev_err(&udev->dev, "device descriptor read/all, error %d\n",
@@ -3007,6 +3351,23 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 	dev_dbg (hub_dev,
 		"port %d, status %04x, change %04x, %s\n",
 		port1, portstatus, portchange, portspeed (portstatus));
+#ifdef CONFIG_MACH_AR934x
+	if ( is_ar934x_13_or_later() ) {
+		/*
+		 * WASP 1.3 Specific.
+		 * WAR for USB
+		 * Not to accept the low speed devices if connected over a full speed hub.
+		 * Such configuration not supported by WASP
+		 */
+		if (portstatus & (1 << USB_PORT_FEAT_LOWSPEED)) {
+			if ((hdev->bus->root_hub->children[0]) &&
+					(hdev->bus->root_hub->children[0]->speed == USB_SPEED_FULL)) {
+				printk("Unsupported configuration - Lowspeed device connected via Fullspeed hub\n");
+				return;
+			}
+		}
+	}
+#endif /* CONFIG_MACH_AR934x */
 
 	if (hub->has_indicators) {
 		set_port_led(hub, port1, HUB_LED_AUTO);
@@ -3105,14 +3466,19 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 		 * an external USB 3.0 hub, but this isn't handled correctly yet
 		 * FIXME.
 		 */
+	dev_dbg(hub->intfdev, "hub_cc hub_is_superspeed = %x parent %p portstatus %x\n" ,
+ hub_is_superspeed(hdev), hdev->parent,portstatus);
 
 		if (!(hcd->driver->flags & HCD_USB3))
 			udev->speed = USB_SPEED_UNKNOWN;
-		else if ((hdev->parent == NULL) &&
-				(portstatus & (1 << USB_PORT_FEAT_SUPERSPEED)))
+//		else if ((hdev->parent == NULL) &&
+//				(portstatus & (1 << USB_PORT_FEAT_SUPERSPEED)))
+		else if (hub_is_superspeed(hdev) && ((hdev->parent != NULL) || (portstatus & (1 << USB_PORT_FEAT_SUPERSPEED)) ) )
 			udev->speed = USB_SPEED_SUPER;
 		else
 			udev->speed = USB_SPEED_UNKNOWN;
+
+	dev_dbg(hub->intfdev, "hub_cc speed = %s\n" , (udev->speed ==  USB_SPEED_SUPER)? "SUPER":"UNKNOWN" );
 
 		/*
 		 * xHCI needs to issue an address device command later
@@ -3131,6 +3497,14 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 		status = hub_port_init(hub, udev, port1, i);
 		if (status < 0)
 			goto loop;
+#ifdef CONFIG_USB_WARNING_WAR
+		if (udev->descriptor.bDeviceClass == USB_CLASS_HUB && udev->level > USB_MAX_HUB_TIERS)
+		{
+			dev_warn(&udev->dev, "Too long Hub tiers level is %d\n", udev->level);
+			status =-ENXIO;
+			goto loop_disable;
+		}
+#endif
 
 		usb_detect_quirks(udev);
 		if (udev->quirks & USB_QUIRK_DELAY_INIT)
@@ -3166,7 +3540,7 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 				goto loop_disable;
 			}
 		}
- 
+
 		/* check for devices running slower than they could */
 		if (le16_to_cpu(udev->descriptor.bcdUSB) >= 0x0200
 				&& udev->speed == USB_SPEED_FULL
@@ -3208,7 +3582,6 @@ static void hub_port_connect_change(struct usb_hub *hub, int port1,
 			dev_dbg(hub_dev, "%dmA power budget left\n", status);
 
 		return;
-
 loop_disable:
 		hub_port_disable(hub, port1, 1);
 loop:
@@ -3224,7 +3597,7 @@ loop:
 			!(hcd->driver->port_handed_over)(hcd, port1))
 		dev_err(hub_dev, "unable to enumerate USB device on port %d\n",
 				port1);
- 
+
 done:
 	hub_port_disable(hub, port1, 1);
 	if (hcd->driver->relinquish_port && !hub->hdev->parent)
@@ -3354,7 +3727,7 @@ static void hub_events(void)
 				 * EM interference sometimes causes badly
 				 * shielded USB devices to be shutdown by
 				 * the hub, this hack enables them again.
-				 * Works at least with mouse driver. 
+				 * Works at least with mouse driver.
 				 */
 				if (!(portstatus & USB_PORT_STAT_ENABLE)
 				    && !connect_change
@@ -3392,7 +3765,7 @@ static void hub_events(void)
 					"resume on port %d, status %d\n",
 					i, ret);
 			}
-			
+
 			if (portchange & USB_PORT_STAT_C_OVERCURRENT) {
 				dev_err (hub_dev,
 					"over-current change on port %d\n",
@@ -3666,7 +4039,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 
 	if (ret < 0)
 		goto re_enumerate;
- 
+
 	/* Device might have changed firmware (DFU or similar) */
 	if (descriptors_changed(udev, &descriptor)) {
 		dev_info(&udev->dev, "device firmware changed\n");
@@ -3720,7 +4093,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev)
 
 done:
 	return 0;
- 
+
 re_enumerate:
 	hub_port_logical_disconnect(parent_hub, port1);
 	return -ENODEV;

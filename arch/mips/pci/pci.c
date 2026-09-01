@@ -51,12 +51,13 @@ static int pci_initialized;
  */
 void
 pcibios_align_resource(void *data, struct resource *res,
-		       resource_size_t size, resource_size_t align)
+		               resource_size_t size, resource_size_t align)
 {
 	struct pci_dev *dev = data;
 	struct pci_controller *hose = dev->sysdata;
 	resource_size_t start = res->start;
 
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	if (res->flags & IORESOURCE_IO) {
 		/* Make sure we start at our min on all hoses */
 		if (start < PCIBIOS_MIN_IO + hose->io_resource->start)
@@ -88,6 +89,7 @@ static void __devinit pcibios_scanbus(struct pci_controller *hose)
 	if (hose->get_busno && pci_probe_only)
 		next_busno = (*hose->get_busno)();
 
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	bus = pci_scan_bus(next_busno, hose->pci_ops, hose);
 	hose->bus = bus;
 
@@ -114,6 +116,7 @@ static DEFINE_MUTEX(pci_scan_mutex);
 
 void __devinit register_pci_controller(struct pci_controller *hose)
 {
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	if (request_resource(&iomem_resource, hose->mem_resource) < 0)
 		goto out;
 	if (request_resource(&ioport_resource, hose->io_resource) < 0) {
@@ -128,8 +131,7 @@ void __devinit register_pci_controller(struct pci_controller *hose)
 	 * Do not panic here but later - this might hapen before console init.
 	 */
 	if (!hose->io_map_base) {
-		printk(KERN_WARNING
-		       "registering PCI controller with io_map_base unset\n");
+		printk(KERN_WARNING "registering PCI controller with io_map_base unset\n");
 	}
 
 	/*
@@ -142,9 +144,11 @@ void __devinit register_pci_controller(struct pci_controller *hose)
 		mutex_unlock(&pci_scan_mutex);
 	}
 
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	return;
 
 out:
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	printk(KERN_WARNING
 	       "Skipping PCI bus scan due to resource conflict\n");
 }
@@ -153,11 +157,12 @@ static int __init pcibios_init(void)
 {
 	struct pci_controller *hose;
 
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	/* Scan all of the recorded PCI controllers.  */
 	for (hose = hose_head; hose; hose = hose->next)
 		pcibios_scanbus(hose);
 
-	pci_fixup_irqs(pci_common_swizzle, pcibios_map_irq);
+	pci_fixup_irqs(pci_common_swizzle, (int (*)(struct pci_dev*, u8, u8))pcibios_map_irq);
 
 	pci_initialized = 1;
 
@@ -165,6 +170,31 @@ static int __init pcibios_init(void)
 }
 
 subsys_initcall(pcibios_init);
+
+int pcibios_host_nr(void)
+{
+    int count;
+    struct pci_controller *hose;
+    for (count = 0, hose = hose_head; hose; hose = hose->next, count++) {
+        ;
+    }
+    return count;
+}
+EXPORT_SYMBOL(pcibios_host_nr);
+
+int pcibios_1st_host_bus_nr(void)
+{
+    int bus_nr = 0;
+    struct pci_controller *hose = hose_head;
+
+    if (hose != NULL) {
+        if (hose->bus != NULL) {
+            bus_nr = hose->bus->subordinate + 1;
+        }
+    }
+    return bus_nr;
+}
+EXPORT_SYMBOL(pcibios_1st_host_bus_nr);
 
 static int pcibios_enable_resources(struct pci_dev *dev, int mask)
 {
@@ -174,6 +204,7 @@ static int pcibios_enable_resources(struct pci_dev *dev, int mask)
 
 	pci_read_config_word(dev, PCI_COMMAND, &cmd);
 	old_cmd = cmd;
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	for (idx=0; idx < PCI_NUM_RESOURCES; idx++) {
 		/* Only set up the requested stuff */
 		if (!(mask & (1<<idx)))
@@ -198,7 +229,7 @@ static int pcibios_enable_resources(struct pci_dev *dev, int mask)
 	}
 	if (cmd != old_cmd) {
 		printk("PCI: Enabling device %s (%04x -> %04x)\n",
-		       pci_name(dev), old_cmd, cmd);
+				pci_name(dev), old_cmd, cmd);
 		pci_write_config_word(dev, PCI_COMMAND, cmd);
 	}
 	return 0;
@@ -214,6 +245,7 @@ void pcibios_set_master(struct pci_dev *dev)
 {
 	u8 lat;
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	if (lat < 16)
 		lat = (64 <= pcibios_max_latency) ? 64 : pcibios_max_latency;
 	else if (lat > pcibios_max_latency)
@@ -221,18 +253,20 @@ void pcibios_set_master(struct pci_dev *dev)
 	else
 		return;
 	printk(KERN_DEBUG "PCI: Setting latency timer of device %s to %d\n",
-	       pci_name(dev), lat);
+			pci_name(dev), lat);
 	pci_write_config_byte(dev, PCI_LATENCY_TIMER, lat);
 }
 
 unsigned int pcibios_assign_all_busses(void)
 {
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	return (pci_probe & PCI_ASSIGN_ALL_BUSSES) ? 1 : 0;
 }
 
 int pcibios_enable_device(struct pci_dev *dev, int mask)
 {
 	int err;
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 
 	if ((err = pcibios_enable_resources(dev, mask)) < 0)
 		return err;
@@ -247,6 +281,7 @@ static void pcibios_fixup_device_resources(struct pci_dev *dev,
 	struct pci_controller *hose = (struct pci_controller *)bus->sysdata;
 	unsigned long offset = 0;
 	int i;
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 
 	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
 		if (!dev->resource[i].start)
@@ -271,6 +306,7 @@ void __devinit pcibios_fixup_bus(struct pci_bus *bus)
 	struct list_head *ln;
 	struct pci_dev *dev = bus->self;
 
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	if (!dev) {
 		bus->resource[0] = hose->io_resource;
 		bus->resource[1] = hose->mem_resource;
@@ -299,6 +335,7 @@ void pcibios_resource_to_bus(struct pci_dev *dev, struct pci_bus_region *region,
 {
 	struct pci_controller *hose = (struct pci_controller *)dev->sysdata;
 	unsigned long offset = 0;
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 
 	if (res->flags & IORESOURCE_IO)
 		offset = hose->io_offset;
@@ -311,10 +348,11 @@ void pcibios_resource_to_bus(struct pci_dev *dev, struct pci_bus_region *region,
 
 void __devinit
 pcibios_bus_to_resource(struct pci_dev *dev, struct resource *res,
-			struct pci_bus_region *region)
+		struct pci_bus_region *region)
 {
 	struct pci_controller *hose = (struct pci_controller *)dev->sysdata;
 	unsigned long offset = 0;
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 
 	if (res->flags & IORESOURCE_IO)
 		offset = hose->io_offset;
@@ -333,9 +371,10 @@ EXPORT_SYMBOL(PCIBIOS_MIN_MEM);
 #endif
 
 int pci_mmap_page_range(struct pci_dev *dev, struct vm_area_struct *vma,
-			enum pci_mmap_state mmap_state, int write_combine)
+		enum pci_mmap_state mmap_state, int write_combine)
 {
 	unsigned long prot;
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 
 	/*
 	 * I/O space can be accessed via normal processor loads and stores on
@@ -360,6 +399,7 @@ char * (*pcibios_plat_setup)(char *str) __devinitdata;
 
 char *__devinit pcibios_setup(char *str)
 {
+	/*--- printk("[%s] line=%d\n", __FUNCTION__, __LINE__); ---*/
 	if (pcibios_plat_setup)
 		return pcibios_plat_setup(str);
 	return str;

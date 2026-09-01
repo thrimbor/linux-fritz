@@ -215,7 +215,7 @@ err_free:
 	return NET_RX_DROP;
 }
 
-static inline u16
+u16
 vlan_dev_get_egress_qos_mask(struct net_device *dev, struct sk_buff *skb)
 {
 	struct vlan_priority_tci_mapping *mp;
@@ -516,6 +516,24 @@ static int vlan_dev_stop(struct net_device *dev)
 	return 0;
 }
 
+int vlan_dev_get_vid(const char *dev_name, unsigned short* result)
+{
+	struct net_device *dev = dev_get_by_name(&init_net, dev_name);
+    
+	int rv = 0;
+	if (dev) {
+		if (dev->priv_flags & IFF_802_1Q_VLAN) {
+			*result = vlan_dev_info(dev)->vlan_id;
+			rv = 0;
+		} else {
+			rv = -EINVAL;
+		}
+		dev_put(dev);
+	} else {
+		rv = -ENODEV;
+	}
+	return rv;
+}
 static int vlan_dev_set_mac_address(struct net_device *dev, void *p)
 {
 	struct net_device *real_dev = vlan_dev_info(dev)->real_dev;
@@ -830,3 +848,7 @@ void vlan_setup(struct net_device *dev)
 
 	memset(dev->broadcast, 0, ETH_ALEN);
 }
+#if defined(CONFIG_IFX_PPA_API_MODULE) || defined(CONFIG_IFX_PPA_AVM_USAGE)
+EXPORT_SYMBOL(vlan_dev_get_vid);
+EXPORT_SYMBOL(vlan_dev_get_egress_qos_mask);
+#endif

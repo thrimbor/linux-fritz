@@ -119,7 +119,7 @@ static inline void smp_send_stop(void) { }
  *	These macros fold the SMP functionality into a single CPU system
  */
 #define raw_smp_processor_id()			0
-static inline int up_smp_call_function(void (*func)(void *), void *info)
+static inline int up_smp_call_function(void (*func)(void *) __attribute__ ((unused)), void *info __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -132,7 +132,7 @@ static inline int up_smp_call_function(void (*func)(void *), void *info)
 		local_irq_enable();		\
 		0;				\
 	})
-static inline void smp_send_reschedule(int cpu) { }
+static inline void smp_send_reschedule(int cpu __attribute__ ((unused))) { }
 #define num_booting_cpus()			1
 #define smp_prepare_boot_cpu()			do {} while (0)
 #define smp_call_function_many(mask, func, info, wait) \

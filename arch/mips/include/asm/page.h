@@ -55,8 +55,8 @@ extern void build_copy_page(void);
  */
 #define ARCH_PFN_OFFSET		PFN_UP(PHYS_OFFSET)
 
-extern void clear_page(void * page);
-extern void copy_page(void * to, void * from);
+extern void (*clear_page)(void * page);
+extern void (*copy_page)(void * to, void * from);
 
 extern unsigned long shm_align_mask;
 
@@ -69,7 +69,7 @@ static inline unsigned long pages_do_alias(unsigned long addr1,
 struct page;
 
 static inline void clear_user_page(void *addr, unsigned long vaddr,
-	struct page *page)
+	struct page *page __attribute__ ((unused)))
 {
 	extern void (*flush_data_cache_page)(unsigned long addr);
 
@@ -200,8 +200,10 @@ typedef struct { unsigned long pgprot; } pgprot_t;
 #define VM_DATA_DEFAULT_FLAGS	(VM_READ | VM_WRITE | VM_EXEC | \
 				 VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC)
 
-#define UNCAC_ADDR(addr)	((addr) - PAGE_OFFSET + UNCAC_BASE)
-#define CAC_ADDR(addr)		((addr) - UNCAC_BASE + PAGE_OFFSET)
+/*--- #define UNCAC_ADDR(addr)	((addr) - PAGE_OFFSET + UNCAC_BASE) ---*/
+/*--- #define CAC_ADDR(addr)		((addr) - UNCAC_BASE + PAGE_OFFSET) ---*/
+#define UNCAC_ADDR(addr)	(typeof((addr)))KSEG1ADDR((unsigned long)(addr))
+#define CAC_ADDR(addr)		(typeof((addr)))KSEG0ADDR((unsigned long)(addr))
 
 #include <asm-generic/memory_model.h>
 #include <asm-generic/getorder.h>

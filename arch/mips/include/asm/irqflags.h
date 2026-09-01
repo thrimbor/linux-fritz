@@ -15,6 +15,9 @@
 
 #include <linux/compiler.h>
 #include <asm/hazards.h>
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) 
+void avm_simple_profiling_irq_onoff(unsigned int switch_on, unsigned int addr, unsigned int id);
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
 
 __asm__(
 	"	.macro	raw_local_irq_enable				\n"
@@ -54,6 +57,14 @@ static inline void raw_local_irq_enable(void)
 		: /* no outputs */
 		: /* no inputs */
 		: "memory");
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) && defined(CONFIG_AVM_SIMPLE_PROFILING_IRQ_ON_OFF)
+    { 
+        register unsigned int pc = (unsigned int)&&raw_local_irq_enable_label;
+        register unsigned int lr = (unsigned int)__builtin_return_address(0);
+raw_local_irq_enable_label:
+        avm_simple_profiling_irq_onoff(1, pc, lr); 
+    }
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
 }
 
 
@@ -99,6 +110,14 @@ __asm__(
 
 static inline void raw_local_irq_disable(void)
 {
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) && defined(CONFIG_AVM_SIMPLE_PROFILING_IRQ_ON_OFF)
+    { 
+        register unsigned int pc = (unsigned int)&&raw_local_irq_disable_label;
+        register unsigned int lr = (unsigned int)__builtin_return_address(0);
+raw_local_irq_disable_label:
+        avm_simple_profiling_irq_onoff(0, pc, lr); 
+    }
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
 	__asm__ __volatile__(
 		"raw_local_irq_disable"
 		: /* no outputs */
@@ -154,6 +173,7 @@ __asm__ __volatile__(							\
 	: "=r" (x)							\
 	: /* no inputs */						\
 	: "memory")
+
 
 __asm__(
 	"	.macro	raw_local_irq_restore flags			\n"

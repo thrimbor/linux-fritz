@@ -106,6 +106,10 @@
 #include <net/xfrm.h>
 #include "udp_impl.h"
 
+#if defined(CONFIG_LTQ_UDP_REDIRECT) || defined(CONFIG_LTQ_UDP_REDIRECT_MODULE)
+#include <linux/udp_redirect.h>
+#endif
+
 struct udp_table udp_table;
 EXPORT_SYMBOL(udp_table);
 
@@ -329,10 +333,18 @@ static inline struct sock *__udp4_lib_lookup_skb(struct sk_buff *skb,
 
 	if (unlikely(sk = skb_steal_sock(skb)))
 		return sk;
-	else
-		return __udp4_lib_lookup(dev_net(skb_dst(skb)->dev), iph->saddr, sport,
-					 iph->daddr, dport, inet_iif(skb),
-					 udptable);
+#ifdef CONFIG_AVM_PA
+    sk = __udp4_lib_lookup(dev_net(skb_dst(skb)->dev), iph->saddr, sport,
+                           iph->daddr, dport, inet_iif(skb),
+                           udptable);
+    if (sk)
+       avm_pa_add_local_session(skb, sk);
+    return sk;
+#else
+    return __udp4_lib_lookup(dev_net(skb_dst(skb)->dev), iph->saddr, sport,
+                             iph->daddr, dport, inet_iif(skb),
+                             udptable);
+#endif
 }
 
 struct sock *udp4_lib_lookup(struct net *net, __be32 saddr, __be16 sport,
@@ -753,6 +765,13 @@ back_from_confirm:
 
 do_append_data:
 	up->len += ulen;
+
+       /* UDPREDIRECT */
+#if defined(CONFIG_LTQ_UDP_REDIRECT) || defined(CONFIG_LTQ_UDP_REDIRECT_MODULE)
+       if(udpredirect_getfrag_fn && sk->sk_user_data == UDP_REDIRECT_MAGIC)
+               getfrag = udpredirect_getfrag_fn;
+       else
+#endif /* LTQ_UDP_REDIRECT */
 	getfrag  =  is_udplite ?  udplite_getfrag : ip_generic_getfrag;
 	err = ip_append_data(sk, getfrag, msg->msg_iov, ulen,
 			sizeof(struct udphdr), &ipc, &rt,
@@ -1318,6 +1337,16 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	sk = __udp4_lib_lookup_skb(skb, uh->source, uh->dest, udptable);
 
 	if (sk != NULL) {
+
+       /* UDPREDIRECT */
+#if defined(CONFIG_LTQ_UDP_REDIRECT) || defined(CONFIG_LTQ_UDP_REDIRECT_MODULE)
+      if(udp_do_redirect_fn && sk->sk_user_data == UDP_REDIRECT_MAGIC)
+      {
+         udp_do_redirect_fn(sk,skb);
+         kfree_skb(skb);
+         return(0);
+      }
+#endif
 		int ret = udp_queue_rcv_skb(sk, skb);
 		sock_put(sk);
 

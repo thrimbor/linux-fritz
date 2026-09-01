@@ -28,6 +28,11 @@
 
 #define LLC_RESERVE sizeof(struct llc_pdu_un)
 
+#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) ||     defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
+extern int brnf_filter_local_out_enable;
+#endif
+
+
 static void br_send_bpdu(struct net_bridge_port *p,
 			 const unsigned char *data, int length)
 {
@@ -49,6 +54,10 @@ static void br_send_bpdu(struct net_bridge_port *p,
 
 	llc_mac_hdr_init(skb, p->dev->dev_addr, p->br->group_addr);
 
+#if defined(CONFIG_LTQ_NETFILTER_PROCFS) && (defined(CONFIG_BRIDGE_NF_EBTABLES) || defined(CONFIG_BRIDGE_NF_EBTABLES_MODULE))
+       if (!brnf_filter_local_out_enable)
+              return dev_queue_xmit(skb);
+#endif
 	NF_HOOK(PF_BRIDGE, NF_BR_LOCAL_OUT, skb, NULL, skb->dev,
 		dev_queue_xmit);
 }

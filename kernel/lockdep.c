@@ -538,10 +538,10 @@ static void lockdep_print_held_locks(struct task_struct *curr)
 	int i, depth = curr->lockdep_depth;
 
 	if (!depth) {
-		printk("no locks held by %s/%d.\n", curr->comm, task_pid_nr(curr));
+		printk(KERN_ERR "[%s]no locks held by %s/%d.\n", __FUNCTION__, curr->comm, task_pid_nr(curr));
 		return;
 	}
-	printk("%d lock%s held by %s/%d:\n",
+	printk(KERN_ERR "[%s] %d lock%s held by %s/%d:\n", __FUNCTION__,
 		depth, depth > 1 ? "s" : "", curr->comm, task_pid_nr(curr));
 
 	for (i = 0; i < depth; i++) {
@@ -3772,7 +3772,7 @@ EXPORT_SYMBOL_GPL(debug_show_all_locks);
 void __debug_show_held_locks(struct task_struct *task)
 {
 	if (unlikely(!debug_locks)) {
-		printk("INFO: lockdep is turned off.\n");
+		printk(KERN_ERR "[%s]INFO: lockdep is turned off.\n", __FUNCTION__);
 		return;
 	}
 	lockdep_print_held_locks(task);

@@ -166,6 +166,10 @@ static inline int nf_hook_thresh(u_int8_t pf, unsigned int hook,
 				 int (*okfn)(struct sk_buff *), int thresh,
 				 int cond)
 {
+#ifdef CONFIG_ATH_HW_NAT
+        if (skb->ath_hw_nat_fw_flags)
+                return 1;
+#endif
 	if (!cond)
 		return 1;
 #ifndef CONFIG_NETFILTER_DEBUG
@@ -181,7 +185,7 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct sk_buff *skb,
 {
 	return nf_hook_thresh(pf, hook, skb, indev, outdev, okfn, INT_MIN, 1);
 }
-                   
+
 /* Activate hook; either okfn or kfree_skb called, unless a hook
    returns NF_STOLEN (in which case, it's up to the hook to deal with
    the consequences).
@@ -300,7 +304,7 @@ extern void nf_unregister_afinfo(const struct nf_afinfo *afinfo);
 extern void (*ip_nat_decode_session)(struct sk_buff *, struct flowi *);
 
 static inline void
-nf_nat_decode_session(struct sk_buff *skb, struct flowi *fl, u_int8_t family)
+nf_nat_decode_session(struct sk_buff *skb __attribute__ ((unused)), struct flowi *fl __attribute__ ((unused)), u_int8_t family __attribute__ ((unused)))
 {
 #ifdef CONFIG_NF_NAT_NEEDED
 	void (*decodefn)(struct sk_buff *, struct flowi *);
@@ -350,7 +354,7 @@ extern void (*ip_ct_attach)(struct sk_buff *, struct sk_buff *);
 extern void nf_ct_attach(struct sk_buff *, struct sk_buff *);
 extern void (*nf_ct_destroy)(struct nf_conntrack *);
 #else
-static inline void nf_ct_attach(struct sk_buff *new, struct sk_buff *skb) {}
+static inline void nf_ct_attach(struct sk_buff *new __attribute__ ((unused)), struct sk_buff *skb __attribute__ ((unused))) {}
 #endif
 
 #endif /*__KERNEL__*/

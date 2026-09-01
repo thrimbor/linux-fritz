@@ -96,6 +96,12 @@
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <linux/rtnetlink.h>
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+#include <linux/imq.h>
+#endif
+#ifdef CONFIG_AVM_PA
+#include <linux/avm_pa.h>
+#endif
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/stat.h>
@@ -129,6 +135,11 @@
 #include <trace/events/napi.h>
 
 #include "net-sysfs.h"
+
+#if defined(CONFIG_LTQ_UDP_REDIRECT) || defined(CONFIG_LTQ_UDP_REDIRECT_MODULE)
+#include <net/udp.h>
+#include <linux/udp_redirect.h>
+#endif
 
 /* Instead of increasing this, you should create a hash table. */
 #define MAX_GRO_SKBS 8
@@ -170,6 +181,8 @@
 static DEFINE_SPINLOCK(ptype_lock);
 static struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 static struct list_head ptype_all __read_mostly;	/* Taps */
+static int (*avm_recvhook)(struct sk_buff *skb);
+static int (*avm_early_recvhook)(struct sk_buff *skb);
 
 /*
  * The @dev_base_head list is protected by @dev_base_lock and the rtnl
@@ -338,6 +351,18 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
 		Protocol management and registration routines
 
 *******************************************************************************/
+
+void set_avm_recvhook(int (*recvhook)(struct sk_buff *skb))
+{
+	avm_recvhook = recvhook;
+}
+EXPORT_SYMBOL(set_avm_recvhook);
+
+void set_avm_early_recvhook(int (*recvhook)(struct sk_buff *skb))
+{
+	avm_early_recvhook = recvhook;
+}
+EXPORT_SYMBOL(set_avm_early_recvhook);
 
 /*
  *	Add a protocol ID to the list. Now that the input handler is
@@ -613,7 +638,12 @@ EXPORT_SYMBOL(__dev_get_by_name);
 struct net_device *dev_get_by_name(struct net *net, const char *name)
 {
 	struct net_device *dev;
-
+	
+#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+	if (net == NULL) {
+		net = &init_net;
+	}
+#endif
 	read_lock(&dev_base_lock);
 	dev = __dev_get_by_name(net, name);
 	if (dev)
@@ -1036,6 +1066,7 @@ EXPORT_SYMBOL(netdev_bonding_change);
 
 void dev_load(struct net *net, const char *name)
 {
+#ifdef CONFIG_NET_DEV_LOAD
 	struct net_device *dev;
 	int no_module;
 
@@ -1052,6 +1083,7 @@ void dev_load(struct net *net, const char *name)
 "with CAP_SYS_MODULE (deprecated).  Use CAP_NET_ADMIN and alias netdev-%s "
 "instead\n", name);
 	}
+#endif /*--- #ifdef CONFIG_NET_DEV_LOAD ---*/
 }
 EXPORT_SYMBOL(dev_load);
 
@@ -1713,7 +1745,11 @@ int dev_hard_start_xmit(struct sk_buff *skb, struct net_device *dev,
 	int rc;
 
 	if (likely(!skb->next)) {
-		if (!list_empty(&ptype_all))
+		if (!list_empty(&ptype_all)
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+		    && !(skb->imq_flags & IMQ_F_ENQUEUE)
+#endif
+		    )
 			dev_queue_xmit_nit(skb, dev);
 
 		if (netif_needs_gso(dev, skb)) {
@@ -1806,7 +1842,7 @@ u16 skb_tx_hash(const struct net_device *dev, const struct sk_buff *skb)
 }
 EXPORT_SYMBOL(skb_tx_hash);
 
-static struct netdev_queue *dev_pick_tx(struct net_device *dev,
+struct netdev_queue *dev_pick_tx(struct net_device *dev,
 					struct sk_buff *skb)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
@@ -1820,6 +1856,9 @@ static struct netdev_queue *dev_pick_tx(struct net_device *dev,
 	skb_set_queue_mapping(skb, queue_index);
 	return netdev_get_tx_queue(dev, queue_index);
 }
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+EXPORT_SYMBOL(dev_pick_tx);
+#endif
 
 static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 				 struct net_device *dev,
@@ -1916,6 +1955,11 @@ int dev_queue_xmit(struct sk_buff *skb)
 	}
 
 gso:
+
+#ifdef CONFIG_AVM_PA
+    (void)avm_pa_dev_snoop_transmit(AVM_PA_DEVINFO(dev), skb);
+#endif
+
 	/* Disable soft irqs for various locks below. Also
 	 * stops preemption for RCU.
 	 */
@@ -2010,10 +2054,17 @@ DEFINE_PER_CPU(struct netif_rx_stats, netdev_rx_stat) = { 0, };
  *
  */
 
+#ifdef CONFIG_LTQ_BR_OPT
+int __bridge netif_rx(struct sk_buff *skb)
+#else
 int netif_rx(struct sk_buff *skb)
+#endif
 {
 	struct softnet_data *queue;
 	unsigned long flags;
+#ifdef	CONFIG_MAPPING
+	if (skb->dev != NULL)
+#endif
 
 	/* if netpoll wants it, pretend we never saw it */
 	if (netpoll_rx(skb))
@@ -2033,6 +2084,9 @@ int netif_rx(struct sk_buff *skb)
 	if (queue->input_pkt_queue.qlen <= netdev_max_backlog) {
 		if (queue->input_pkt_queue.qlen) {
 enqueue:
+#ifdef	CONFIG_MAPPING
+			if (skb->dev != NULL)
+#endif
 			__skb_queue_tail(&queue->input_pkt_queue, skb);
 			local_irq_restore(flags);
 			return NET_RX_SUCCESS;
@@ -2298,7 +2352,12 @@ void netif_nit_deliver(struct sk_buff *skb)
  *	NET_RX_SUCCESS: no congestion
  *	NET_RX_DROP: packet was dropped
  */
+
+#ifdef CONFIG_LTQ_BR_OPT
+int __bridge netif_receive_skb(struct sk_buff *skb)
+#else
 int netif_receive_skb(struct sk_buff *skb)
+#endif
 {
 	struct packet_type *ptype, *pt_prev;
 	struct net_device *orig_dev;
@@ -2313,11 +2372,16 @@ int netif_receive_skb(struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 
 	/* if we've gotten here through NAPI, check netpoll */
+#ifdef	CONFIG_MAPPING
+	if (skb->dev)
+#endif
 	if (netpoll_receive_skb(skb))
 		return NET_RX_DROP;
 
 	if (!skb->iif)
 		skb->iif = skb->dev->ifindex;
+	if (!skb->input_dev)
+		skb->input_dev = skb->dev;
 
 	null_or_orig = NULL;
 	orig_dev = skb->dev;
@@ -2361,9 +2425,33 @@ int netif_receive_skb(struct sk_buff *skb)
 ncls:
 #endif
 
+#ifdef CONFIG_AVM_PA
+    if (avm_pa_dev_receive(AVM_PA_DEVINFO(skb->dev), skb) == 0) {
+		ret = NET_RX_SUCCESS;
+		goto out;
+    }
+#endif
+
+	if (avm_early_recvhook && (*avm_early_recvhook)(skb)) {
+		/*
+		 * paket consumed by hook
+		 */
+		ret = NET_RX_SUCCESS;
+		goto out;
+	}
+
 	skb = handle_bridge(skb, &pt_prev, &ret, orig_dev);
 	if (!skb)
 		goto out;
+
+	if (avm_recvhook && (*avm_recvhook)(skb)) {
+		/*
+		 * paket consumed by hook
+		 */
+		ret = NET_RX_SUCCESS;
+		goto out;
+	}
+
 	skb = handle_macvlan(skb, &pt_prev, &ret, orig_dev);
 	if (!skb)
 		goto out;
@@ -2719,7 +2807,11 @@ int napi_gro_frags(struct napi_struct *napi)
 }
 EXPORT_SYMBOL(napi_gro_frags);
 
+#ifdef CONFIG_LTQ_BR_OPT
+static int __bridge process_backlog(struct napi_struct *napi, int quota)
+#else
 static int process_backlog(struct napi_struct *napi, int quota)
+#endif
 {
 	int work = 0;
 	struct softnet_data *queue = &__get_cpu_var(softnet_data);
@@ -3642,10 +3734,10 @@ static void __hw_addr_del_multiple(struct netdev_hw_addr_list *to_list,
 				   unsigned char addr_type)
 {
 	struct netdev_hw_addr *ha;
-	unsigned char type;
+	/*--- unsigned char type; ---*/
 
 	list_for_each_entry(ha, &from_list->list, list) {
-		type = addr_type ? addr_type : ha->type;
+		/*--- type = addr_type ? addr_type : ha->type; ---*/
 		__hw_addr_del(to_list, ha->addr, addr_len, addr_type);
 	}
 }
@@ -4430,6 +4522,11 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, unsigned int cmd)
 		    cmd == SIOCSMIIREG ||
 		    cmd == SIOCBRADDIF ||
 		    cmd == SIOCBRDELIF ||
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+			cmd == SIOCBRADDMGREC ||
+			cmd == SIOCBRDELMGREC ||
+			cmd == SIOCBRSETROUTERPORT ||
+#endif
 		    cmd == SIOCSHWTSTAMP ||
 		    cmd == SIOCWANDEV) {
 			err = -EOPNOTSUPP;
@@ -4450,6 +4547,24 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, unsigned int cmd)
  *	This function handles all "interface"-type I/O control requests. The actual
  *	'doing' part of this is dev_ifsioc above.
  */
+static void release_offload_lock(int in_offload_lock){
+    if (in_offload_lock)
+        rtnl_offload_read_unlock();
+}
+
+static int acquire_offload_lock(struct net *net, const char *name){
+	struct net_device *dev;
+	int need_lock;
+
+    read_lock(&dev_base_lock);
+    dev = __dev_get_by_name(net, name);
+    need_lock = ( dev && (dev->priv_flags & IFF_AVM_WLAN_OFFLOAD_DEVICE));
+    read_unlock(&dev_base_lock);
+
+    if (need_lock)
+        rtnl_offload_read_lock();
+    return need_lock;
+}
 
 /**
  *	dev_ioctl	-	network device ioctl
@@ -4468,6 +4583,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	struct ifreq ifr;
 	int ret;
 	char *colon;
+	int in_offload_lock = 0;
 
 	/* One special case: SIOCGIFCONF takes ifconf argument
 	   and requires shared lock, because it sleeps writing
@@ -4512,9 +4628,11 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	case SIOCGIFINDEX:
 	case SIOCGIFTXQLEN:
 		dev_load(net, ifr.ifr_name);
+		in_offload_lock = acquire_offload_lock(net, ifr.ifr_name);
 		read_lock(&dev_base_lock);
 		ret = dev_ifsioc_locked(net, &ifr, cmd);
 		read_unlock(&dev_base_lock);
+		release_offload_lock(in_offload_lock);
 		if (!ret) {
 			if (colon)
 				*colon = ':';
@@ -4526,9 +4644,11 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 
 	case SIOCETHTOOL:
 		dev_load(net, ifr.ifr_name);
+		in_offload_lock = acquire_offload_lock(net, ifr.ifr_name);
 		rtnl_lock();
 		ret = dev_ethtool(net, &ifr);
 		rtnl_unlock();
+		release_offload_lock(in_offload_lock);
 		if (!ret) {
 			if (colon)
 				*colon = ':';
@@ -4550,9 +4670,11 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		dev_load(net, ifr.ifr_name);
+		in_offload_lock = acquire_offload_lock(net, ifr.ifr_name);
 		rtnl_lock();
 		ret = dev_ifsioc(net, &ifr, cmd);
 		rtnl_unlock();
+        release_offload_lock(in_offload_lock);
 		if (!ret) {
 			if (colon)
 				*colon = ':';
@@ -4585,6 +4707,11 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	case SIOCBONDCHANGEACTIVE:
 	case SIOCBRADDIF:
 	case SIOCBRDELIF:
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	case SIOCBRADDMGREC:
+	case SIOCBRDELMGREC:
+	case SIOCBRSETROUTERPORT:
+#endif
 	case SIOCSHWTSTAMP:
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
@@ -4592,9 +4719,11 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	case SIOCBONDSLAVEINFOQUERY:
 	case SIOCBONDINFOQUERY:
 		dev_load(net, ifr.ifr_name);
+		in_offload_lock = acquire_offload_lock(net, ifr.ifr_name);
 		rtnl_lock();
 		ret = dev_ifsioc(net, &ifr, cmd);
 		rtnl_unlock();
+        release_offload_lock(in_offload_lock);
 		return ret;
 
 	case SIOCGIFMEM:
@@ -4614,17 +4743,23 @@ int dev_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 		    (cmd >= SIOCDEVPRIVATE &&
 		     cmd <= SIOCDEVPRIVATE + 15)) {
 			dev_load(net, ifr.ifr_name);
+    		in_offload_lock = acquire_offload_lock(net, ifr.ifr_name);
 			rtnl_lock();
 			ret = dev_ifsioc(net, &ifr, cmd);
 			rtnl_unlock();
+            release_offload_lock(in_offload_lock);
 			if (!ret && copy_to_user(arg, &ifr,
 						 sizeof(struct ifreq)))
 				ret = -EFAULT;
 			return ret;
 		}
 		/* Take care of Wireless Extensions */
-		if (cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST)
-			return wext_handle_ioctl(net, &ifr, cmd, arg);
+		if (cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST){
+    		in_offload_lock = acquire_offload_lock(net, ifr.ifr_name);
+		    ret = wext_handle_ioctl(net, &ifr, cmd, arg);
+            release_offload_lock(in_offload_lock);
+			return ret;
+		}
 		return -EINVAL;
 	}
 }
@@ -4642,8 +4777,15 @@ static int dev_new_index(struct net *net)
 {
 	static int ifindex;
 	for (;;) {
+//der FUSIV Source kommt nicht klar mit DEV Counter > 255
+//Absturz bei WLAN Autotest
+#ifdef CONFIG_MACH_FUSIV
+		if (++ifindex >= 256)
+			ifindex = 1;
+#else
 		if (++ifindex <= 0)
 			ifindex = 1;
+#endif
 		if (!__dev_get_by_index(net, ifindex))
 			return ifindex;
 	}
@@ -5080,6 +5222,9 @@ void netdev_run_todo(void)
 		WARN_ON(dev->ip_ptr);
 		WARN_ON(dev->ip6_ptr);
 		WARN_ON(dev->dn_ptr);
+#ifdef CONFIG_AVM_PA
+        avm_pa_dev_unregister(AVM_PA_DEVINFO(dev));
+#endif
 
 		if (dev->destructor)
 			dev->destructor(dev);
@@ -5202,6 +5347,9 @@ struct net_device *alloc_netdev_mq(int sizeof_priv, const char *name,
 
 	INIT_LIST_HEAD(&dev->napi_list);
 	dev->priv_flags = IFF_XMIT_DST_RELEASE;
+#ifdef CONFIG_AVM_PA
+    avm_pa_dev_init(AVM_PA_DEVINFO(dev));
+#endif
 	setup(dev);
 	strcpy(dev->name, name);
 	return dev;

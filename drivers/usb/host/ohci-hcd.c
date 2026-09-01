@@ -80,6 +80,13 @@ static void ohci_dump (struct ohci_hcd *ohci, int verbose);
 static int ohci_init (struct ohci_hcd *ohci);
 static void ohci_stop (struct usb_hcd *hcd);
 
+/* ADI's VOX160 USB host controller & Ikanos's iIKF68XX USB host controller 
+ * do not interface with PCI bus 
+ */
+#ifdef CONFIG_MACH_FUSIV
+#undef  CONFIG_PCI
+#endif
+
 #if defined(CONFIG_PM) || defined(CONFIG_PCI)
 static int ohci_restart (struct ohci_hcd *ohci);
 #endif
@@ -1066,6 +1073,15 @@ MODULE_LICENSE ("GPL");
 #define PLATFORM_DRIVER		ohci_hcd_sh_driver
 #endif
 
+#ifdef CONFIG_FUSIV_VX160
+#include "ohci-vox160.c"
+#define PLATFORM_DRIVER		ohci_hcd_vox160_driver
+#endif
+
+#ifdef CONFIG_FUSIV_VX180
+#include "ohci-ikf68xx.c"
+#define PLATFORM_DRIVER		ohci_hcd_ikf68xx_driver
+#endif
 
 #ifdef CONFIG_USB_OHCI_HCD_PPC_OF
 #include "ohci-ppc-of.c"

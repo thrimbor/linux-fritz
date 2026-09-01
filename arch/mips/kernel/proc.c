@@ -12,6 +12,11 @@
 #include <asm/cpu-features.h>
 #include <asm/mipsregs.h>
 #include <asm/processor.h>
+#include <asm/mips_machine.h>
+
+#include <asm/uaccess.h>
+#include <linux/proc_fs.h>
+
 
 unsigned int vced_count, vcei_count;
 
@@ -31,8 +36,12 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	/*
 	 * For the first processor also print the system type
 	 */
-	if (n == 0)
+	if (n == 0) {
 		seq_printf(m, "system type\t\t: %s\n", get_system_type());
+#ifdef CONFIG_MIPS_MACHINE
+		seq_printf(m, "machine\t\t\t: %s\n", mips_machine_name);
+#endif
+	}
 
 	seq_printf(m, "processor\t\t: %ld\n", n);
 	sprintf(fmt, "cpu model\t\t: %%s V%%d.%%d%s\n",
@@ -40,7 +49,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	seq_printf(m, fmt, __cpu_name[n],
 	                           (version >> 4) & 0x0f, version & 0x0f,
 	                           (fp_vers >> 4) & 0x0f, fp_vers & 0x0f);
-	seq_printf(m, "BogoMIPS\t\t: %u.%02u\n",
+	seq_printf(m, "BogoMIPS\t\t: %lu.%02lu\n",
 	              cpu_data[n].udelay_val / (500000/HZ),
 	              (cpu_data[n].udelay_val / (5000/HZ)) % 100);
 	seq_printf(m, "wait instruction\t: %s\n", cpu_wait ? "yes" : "no");
@@ -103,3 +112,19 @@ const struct seq_operations cpuinfo_op = {
 	.stop	= c_stop,
 	.show	= show_cpuinfo,
 };
+
+/*
+* Support for MIPS/local /proc hooks in /proc/mips/
+*/
+
+static struct proc_dir_entry *mips_proc = NULL;
+
+struct proc_dir_entry *get_mips_proc_dir(void)
+{
+	/*
+	* This ought not to be preemptable.
+	*/
+	if(mips_proc == NULL)
+		mips_proc = proc_mkdir("mips", NULL);
+	return(mips_proc);
+}

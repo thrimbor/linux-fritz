@@ -175,26 +175,26 @@ static inline int __TestClearPage##uname(struct page *page)		\
 	__SETPAGEFLAG(uname, lname)  __CLEARPAGEFLAG(uname, lname)
 
 #define PAGEFLAG_FALSE(uname) 						\
-static inline int Page##uname(struct page *page) 			\
+static inline int Page##uname(struct page *page __attribute__ ((unused))) 			\
 			{ return 0; }
 
 #define TESTSCFLAG(uname, lname)					\
 	TESTSETFLAG(uname, lname) TESTCLEARFLAG(uname, lname)
 
 #define SETPAGEFLAG_NOOP(uname)						\
-static inline void SetPage##uname(struct page *page) {  }
+static inline void SetPage##uname(struct page *page __attribute__ ((unused))) {  }
 
 #define CLEARPAGEFLAG_NOOP(uname)					\
-static inline void ClearPage##uname(struct page *page) {  }
+static inline void ClearPage##uname(struct page *page __attribute__ ((unused))) {  }
 
 #define __CLEARPAGEFLAG_NOOP(uname)					\
-static inline void __ClearPage##uname(struct page *page) {  }
+static inline void __ClearPage##uname(struct page *page __attribute__ ((unused))) {  }
 
 #define TESTCLEARFLAG_FALSE(uname)					\
-static inline int TestClearPage##uname(struct page *page) { return 0; }
+static inline int TestClearPage##uname(struct page *page __attribute__ ((unused))) { return 0; }
 
 #define __TESTCLEARFLAG_FALSE(uname)					\
-static inline int __TestClearPage##uname(struct page *page) { return 0; }
+static inline int __TestClearPage##uname(struct page *page __attribute__ ((unused))) { return 0; }
 
 struct page;	/* forward declaration */
 

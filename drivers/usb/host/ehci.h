@@ -159,6 +159,28 @@ struct ehci_hcd {			/* one per controller */
 	struct dentry		*debug_periodic;
 	struct dentry		*debug_registers;
 #endif
+
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+	
+	#define NMI_WA_DELAY_MS 30000
+	#define NMI_WA_DELAY_MS_INITFAILED 1000
+	#define NMI_WA_TIMECOUNT_IDLE (ATH_NMI_TRIGGER * 10)
+	#define NMI_WA_TIMECOUNT_WORK ATH_NMI_TRIGGER
+	
+	int nmi_wa_handle;
+	struct timer_list nmi_wa_timer;
+
+	#define NMI_WA_STATUS_NOINIT 0
+	#define NMI_WA_STATUS_IDLE 	1
+	#define NMI_WA_STATUS_WORK 	2
+	unsigned nmi_wa_status;
+	spinlock_t nmi_wa_lock;
+
+#endif
+
+#ifdef CONFIG_MACH_AR934x
+	unsigned int is_port_active;
+#endif
 };
 
 /* convert between an HCD pointer and the corresponding EHCI_HCD */
@@ -368,6 +390,11 @@ struct ehci_qh {
 	struct usb_device	*dev;		/* access to TT */
 	unsigned		is_out:1;	/* bulk or intr OUT */
 	unsigned		clearing_tt:1;	/* Clear-TT-Buf in progress */
+
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+	unsigned needs_nmi_wa;
+#endif
+
 };
 
 /*-------------------------------------------------------------------------*/

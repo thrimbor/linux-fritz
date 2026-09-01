@@ -508,24 +508,24 @@ extern void tty_audit_push(struct tty_struct *tty);
 extern void tty_audit_push_task(struct task_struct *tsk,
 					uid_t loginuid, u32 sessionid);
 #else
-static inline void tty_audit_add_data(struct tty_struct *tty,
-				      unsigned char *data, size_t size)
+static inline void tty_audit_add_data(struct tty_struct *tty __attribute__((unused)),
+				      unsigned char *data __attribute__((unused)), size_t size __attribute__((unused)))
 {
 }
-static inline void tty_audit_tiocsti(struct tty_struct *tty, char ch)
+static inline void tty_audit_tiocsti(struct tty_struct *tty __attribute__((unused)), char ch __attribute__((unused)))
 {
 }
 static inline void tty_audit_exit(void)
 {
 }
-static inline void tty_audit_fork(struct signal_struct *sig)
+static inline void tty_audit_fork(struct signal_struct *sig __attribute__((unused)))
 {
 }
-static inline void tty_audit_push(struct tty_struct *tty)
+static inline void tty_audit_push(struct tty_struct *tty __attribute__((unused)))
 {
 }
-static inline void tty_audit_push_task(struct task_struct *tsk,
-					uid_t loginuid, u32 sessionid)
+static inline void tty_audit_push_task(struct task_struct *tsk __attribute__((unused)),
+					uid_t loginuid __attribute__((unused)), u32 sessionid __attribute__((unused)))
 {
 }
 #endif

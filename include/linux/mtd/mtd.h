@@ -46,6 +46,10 @@ struct erase_info {
 	u_long priv;
 	u_char state;
 	struct erase_info *next;
+
+	u8 *erase_buf;
+	u32 erase_buf_ofs;
+	bool partial_start;
 };
 
 struct mtd_erase_region_info {
@@ -240,6 +244,9 @@ struct mtd_info {
 	struct module *owner;
 	struct device dev;
 	int usecount;
+
+	int (*refresh_device)(struct mtd_info *mtd);
+	struct mtd_info *split;
 
 	/* If the driver is something smart, like UBI, it may need to maintain
 	 * its own reference counting. The below functions are only for driver.

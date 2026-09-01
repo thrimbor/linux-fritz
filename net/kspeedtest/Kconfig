@@ -1,0 +1,11 @@
+#
+# Packet configuration
+#
+
+config KSPEEDTEST
+	tristate "AVM Kernel Speedtest"
+	default m
+	---help---
+	  With kspeedtest one can run a TCP or UDP server in the kernel
+	  to measure performance. It is compatible to iperf and
+	  can be managed via proc interface.

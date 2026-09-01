@@ -39,11 +39,11 @@ void clear_all_latency_tracing(struct task_struct *p);
 #else
 
 static inline void
-account_scheduler_latency(struct task_struct *task, int usecs, int inter)
+account_scheduler_latency(struct task_struct *task __attribute__ ((unused)), int usecs __attribute__ ((unused)), int inter __attribute__ ((unused)))
 {
 }
 
-static inline void clear_all_latency_tracing(struct task_struct *p)
+static inline void clear_all_latency_tracing(struct task_struct *p __attribute__ ((unused)))
 {
 }
 

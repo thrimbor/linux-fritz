@@ -87,7 +87,11 @@ struct inet_bind_bucket {
 	struct hlist_head	owners;
 };
 
-static inline struct net *ib_net(struct inet_bind_bucket *ib)
+static inline struct net *ib_net(struct inet_bind_bucket *ib
+#ifndef CONFIG_NET_NS
+        __attribute__((unused))
+#endif/*--- #ifndef CONFIG_NET_NS ---*/
+        )
 {
 	return read_pnet(&ib->ib_net);
 }
@@ -384,10 +388,18 @@ static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 
 	if (unlikely(sk = skb_steal_sock(skb)))
 		return sk;
-	else
-		return __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo,
-				     iph->saddr, sport,
-				     iph->daddr, dport, inet_iif(skb));
+#ifdef CONFIG_AVM_PA
+    sk = __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo,
+                       iph->saddr, sport,
+                       iph->daddr, dport, inet_iif(skb));
+    if (sk)
+       avm_pa_add_local_session(skb, sk);
+    return sk;
+#else
+    return __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo,
+                         iph->saddr, sport,
+                         iph->daddr, dport, inet_iif(skb));
+#endif
 }
 
 extern int __inet_hash_connect(struct inet_timewait_death_row *death_row,

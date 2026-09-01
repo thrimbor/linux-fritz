@@ -33,3 +33,7 @@ obj-$(CONFIG_ATM_HE)		+= he.o
 ifeq ($(CONFIG_ATM_HE_USE_SUNI),y)
   obj-$(CONFIG_ATM_HE)		+= suni.o
 endif
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/atm/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

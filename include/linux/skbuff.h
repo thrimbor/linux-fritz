@@ -29,6 +29,15 @@
 #include <linux/rcupdate.h>
 #include <linux/dmaengine.h>
 #include <linux/hrtimer.h>
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+#include <linux/imq.h>
+#endif
+#ifdef CONFIG_AVM_PA
+#include <linux/avm_pa.h>
+#endif
+#ifdef CONFIG_GENERIC_CONNTRACK
+#include <linux/generic-ct.h>
+#endif
 
 /* Don't change this without changing skb_csum_unnecessary! */
 #define CHECKSUM_NONE 0
@@ -44,7 +53,7 @@
 	SKB_WITH_OVERHEAD((PAGE_SIZE << (ORDER)) - (X))
 #define SKB_MAX_HEAD(X)		(SKB_MAX_ORDER((X), 0))
 #define SKB_MAX_ALLOC		(SKB_MAX_ORDER(0, 2))
-
+#define NFMARK_SHIFT_MASK 0x0000000f
 /* A. Checksumming of received packets by device.
  *
  *	NONE: device failed to checksum this packet.
@@ -95,9 +104,123 @@ struct net_device;
 struct scatterlist;
 struct pipe_inode_info;
 
+/* Structure Definition for QoS */
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+typedef struct
+{
+  /* Action */
+  unsigned char  qos_map;              /* QoS Mapping Information   */
+  unsigned char  qos_mark;             /* QoS Marking Information   */
+
+  /* Information */
+  unsigned char  qos_drop_prob;        /* QoS Drop Probability      */
+  unsigned char  qos_cos;              /* QoS VLAN-COS value        */
+  unsigned char  qos_priority;         /* QoS Traffic Priority      */
+  unsigned char  qos_marking_priority; /* QoS Marking Info          */
+  unsigned char  qos_cos_marking_priority; /* QoS COS Marking Info  */
+}QoSFlowInfo_t;
+#endif
+
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+
+// Added for AP_FRAGMENTATION ....Start.......
+
+# define RESERVED_SPACE_FOR_FRAGMENT     20
+
+// Module Types
+
+# define MODULE_TYPE_ADSL       1
+# define MODULE_TYPE_WLAN       2
+
+// Packet Types for ADSL
+
+# define PKT_TYPE_PPPOE         0
+# define PKT_TYPE_VLAN          1
+
+// Packet Types for WLAN
+
+# define PKT_TYPE_ATHEROS_ETH_HDR_CONVERT      2
+# define PKT_TYPE_ATHEROS_NO_ETH_HDR_CONVERT   3
+# define PKT_TYPE_RALINK_11N                   4
+# define PKT_TYPE_RALINK_11G                   5
+
+// Information required for Fragmentation
+
+struct fragmentInfo {
+        unsigned int   mtuSize;
+        unsigned short l2HeaderLen;
+        unsigned short totalLength;
+        unsigned char  moduleType;
+        unsigned char  pktType;
+        int (*fragment_xmit_ptr)(struct sk_buff *skb, struct net_device *dev);
+};
+
+// Added for AP_FRAGMENTATION ....End.......
+
+/* This file is modified with new ADI ap-ap frame work */
+/* apEntryInfo structure is defined here */
+
+struct apEntryInfo {
+        void           *RftPtrs[3];
+        unsigned short hashValue[3];
+        unsigned char  apId[3];
+        unsigned long  adi_nfmark;
+        unsigned long  pktCount[3];
+};
+
+struct apFlowInfo {
+        unsigned char rxApId;
+        unsigned char txApId;
+
+        struct net_device *rxDev;
+        struct net_device *txDev;
+
+        struct nf_conntrack     *nfct;
+
+        unsigned short hash;
+
+        unsigned short flags1;
+        unsigned short flags2;
+
+        // For ADSL modules like PPPoE, PPPoA, IPoA
+        int sessionId;
+        int connId;
+        char encap;
+
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+		    QoSFlowInfo_t qosInfo; /* For IPQOS  */
+#endif
+
+        struct net_device *postRtDev;
+        unsigned char controlFlags;
+#ifdef CONFIG_BRIDGE
+        struct net_bridge_fdb_entry *smac_entry;
+        struct net_bridge_fdb_entry *dmac_entry;
+#endif
+
+        unsigned int txHandle;
+        unsigned int rxHandle;
+        void* neigh;
+#if defined(CONFIG_FUSIV_KERNEL_PERI_AP) || defined(CONFIG_FUSIV_KERNEL_PERI_AP_MODULE)
+        void *wlanNode;
+        unsigned char wlanFlags;
+        unsigned char secHdrLen;
+        void *secKey;
+#endif
+
+#if defined(CONFIG_IP_NF_IPSEC) || defined(CONFIG_IP_NF_IPSEC_MODULE)
+        unsigned int spi;
+#endif
+};
+#endif
+
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 struct nf_conntrack {
 	atomic_t use;
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+        struct apEntryInfo apEntryData;
+#endif
 };
 #endif
 
@@ -122,8 +245,17 @@ struct sk_buff_head {
 
 struct sk_buff;
 
+#if defined(CONFIG_PRIV_SKB_MEM)
+/*
+ * Atheros doesn't use this facility. This increases the size
+ * of skb and makes it go to the next slab, unnecesarily wasting
+ * memory
+ */
+#define MAX_SKB_FRAGS (2)
+#else
 /* To allow 64K frame to be packed as single skb without frag_list */
 #define MAX_SKB_FRAGS (65536/PAGE_SIZE + 2)
+#endif
 
 typedef struct skb_frag_struct skb_frag_t;
 
@@ -190,7 +322,7 @@ struct skb_shared_info {
 	atomic_t	dataref;
 	unsigned short	nr_frags;
 	unsigned short	gso_size;
-#ifdef CONFIG_HAS_DMA
+#if defined(CONFIG_HAS_DMA) && !defined(CONFIG_PRIV_SKB_MEM)
 	dma_addr_t	dma_head;
 #endif
 	/* Warning: this field is not always filled in (UFO)! */
@@ -201,7 +333,7 @@ struct skb_shared_info {
 	struct sk_buff	*frag_list;
 	struct skb_shared_hwtstamps hwtstamps;
 	skb_frag_t	frags[MAX_SKB_FRAGS];
-#ifdef CONFIG_HAS_DMA
+#if defined(CONFIG_HAS_DMA) && !defined(CONFIG_PRIV_SKB_MEM)
 	dma_addr_t	dma_maps[MAX_SKB_FRAGS];
 #endif
 	/* Intermediate layers must ensure that destructor_arg
@@ -304,6 +436,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@tc_index: Traffic control index
  *	@tc_verd: traffic control verdict
  *	@ndisc_nodetype: router type (from link layer)
+ *	@do_not_encrypt: set to prevent encryption of this frame
  *	@dma_cookie: a cookie to one of several possible DMA operations
  *		done by skb DMA functions
  *	@secmark: security marking
@@ -318,6 +451,7 @@ struct sk_buff {
 	struct sock		*sk;
 	ktime_t			tstamp;
 	struct net_device	*dev;
+	struct net_device	*input_dev;
 
 	unsigned long		_skb_dst;
 #ifdef CONFIG_XFRM
@@ -330,6 +464,26 @@ struct sk_buff {
 	 * first. This is owned by whoever has the skb queued ATM.
 	 */
 	char			cb[48];
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	void			*cb_next;
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+       struct                  apFlowInfo apFlowData; /* ADI Structure for
+                                                        * AP-AP fast path */
+#else
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+  QoSFlowInfo_t  qosInfo; /* QoS Info structure when AP is disabled */
+#endif
+#endif
+
+#if defined(CONFIG_FUSIV_ENABLE_AP_MBUF) || defined(CONFIG_FUSIV_ENABLE_MBUF_AP)
+#if (CONFIG_FUSIV_ENABLE_AP_MBUF | CONFIG_FUSIV_ENABLE_MBUF_AP)
+        /* Specific to FUSIV, used to map AP cluster to SK BUF and Vice
+           versa. */
+        unsigned char*          apAllocAddr;
+#endif
+#endif
 
 	unsigned int		len,
 				data_len;
@@ -358,9 +512,20 @@ struct sk_buff {
 	kmemcheck_bitfield_end(flags1);
 
 	void			(*destructor)(struct sk_buff *skb);
+
+    /*
+	 * uniq_id: Attention! This field does not exist in the 2.6.32 kernel
+	 * anymore. We just use it to pass port and queue information between
+	 * avm_cpmac and multid/dsld in the upper eight bits.
+	 */
+    unsigned long uniq_id;
+
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	struct nf_conntrack	*nfct;
 	struct sk_buff		*nfct_reasm;
+#endif
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	struct nf_queue_entry	*nf_queue_entry;
 #endif
 #ifdef CONFIG_BRIDGE_NETFILTER
 	struct nf_bridge_info	*nf_bridge;
@@ -381,7 +546,10 @@ struct sk_buff {
 #endif
 	kmemcheck_bitfield_end(flags2);
 
-	/* 0/14 bit hole */
+	/* 0/13/14 bit hole */
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	__u8			imq_flags:IMQ_F_BITS;
+#endif
 
 #ifdef CONFIG_NET_DMA
 	dma_cookie_t		dma_cookie;
@@ -389,6 +557,18 @@ struct sk_buff {
 #ifdef CONFIG_NETWORK_SECMARK
 	__u32			secmark;
 #endif
+
+#ifdef CONFIG_AVM_PA
+	union {
+		struct avm_pa_pkt_info	pktinfo;
+		__u8                    buf[256];
+	} avm_pa;
+#define AVM_PKT_INFO(skb)	(&(skb)->avm_pa.pktinfo)
+#endif
+#ifdef CONFIG_GENERIC_CONNTRACK
+	struct generic_ct *generic_ct;
+#endif
+    void *destructor_info;
 
 	__u32			mark;
 
@@ -404,6 +584,9 @@ struct sk_buff {
 				*data;
 	unsigned int		truesize;
 	atomic_t		users;
+#ifdef CONFIG_ATHRS_HW_NAT
+        __u32                   ath_hw_nat_fw_flags;
+#endif
 };
 
 #ifdef __KERNEL__
@@ -436,6 +619,12 @@ static inline struct rtable *skb_rtable(const struct sk_buff *skb)
 {
 	return (struct rtable *)skb_dst(skb);
 }
+
+
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+extern int skb_save_cb(struct sk_buff *skb);
+extern int skb_restore_cb(struct sk_buff *skb);
+#endif
 
 extern void kfree_skb(struct sk_buff *skb);
 extern void consume_skb(struct sk_buff *skb);
@@ -488,6 +677,9 @@ extern int skb_append_datato_frags(struct sock *sk, struct sk_buff *skb,
 			int getfrag(void *from, char *to, int offset,
 			int len,int odd, struct sk_buff *skb),
 			void *from, int length);
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+struct netdev_queue *dev_pick_tx(struct net_device *dev, struct sk_buff *skb);
+#endif
 
 struct skb_seq_state
 {
@@ -511,6 +703,16 @@ extern unsigned int   skb_find_text(struct sk_buff *skb, unsigned int from,
 				    unsigned int to, struct ts_config *config,
 				    struct ts_state *state);
 
+
+#ifdef CONFIG_AVM_SIMPLE_PROFILING
+# include <linux/avm_profile.h>
+# define skb_trace(skb, where)  					\
+	do {								\
+		avm_simple_profiling_skb((unsigned int)__builtin_return_address(0), where, skb);		\
+	} while (0)
+#else
+# define skb_trace(skb, where)	do { } while (0)
+#endif
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
 static inline unsigned char *skb_end_pointer(const struct sk_buff *skb)
 {
@@ -1375,9 +1577,20 @@ static inline int skb_network_offset(const struct sk_buff *skb)
  *
  * Various parts of the networking layer expect at least 32 bytes of
  * headroom, you should not reduce this.
+ *
+ * This has been changed to 64 to acommodate for routing between ethernet
+ * and wireless, but only for new allocations
  */
 #ifndef NET_SKB_PAD
+#if defined (CONFIG_LANTIQ)  || defined(CONFIG_MACH_ATHEROS)
+#define NET_SKB_PAD     64
+#else
 #define NET_SKB_PAD	32
+#endif
+#endif
+
+#ifndef NET_SKB_PAD_ALLOC
+#define NET_SKB_PAD_ALLOC	64
 #endif
 
 extern int ___pskb_trim(struct sk_buff *skb, unsigned int len);
@@ -1469,9 +1682,9 @@ static inline void __skb_queue_purge(struct sk_buff_head *list)
 static inline struct sk_buff *__dev_alloc_skb(unsigned int length,
 					      gfp_t gfp_mask)
 {
-	struct sk_buff *skb = alloc_skb(length + NET_SKB_PAD, gfp_mask);
+	struct sk_buff *skb = alloc_skb(length + NET_SKB_PAD_ALLOC, gfp_mask);
 	if (likely(skb))
-		skb_reserve(skb, NET_SKB_PAD);
+		skb_reserve(skb, NET_SKB_PAD_ALLOC);
 	return skb;
 }
 
@@ -1514,7 +1727,7 @@ static inline struct page *netdev_alloc_page(struct net_device *dev)
 	return __netdev_alloc_page(dev, GFP_ATOMIC);
 }
 
-static inline void netdev_free_page(struct net_device *dev, struct page *page)
+static inline void netdev_free_page(struct net_device *dev __attribute__ ((unused)), struct page *page)
 {
 	__free_page(page);
 }
@@ -1544,7 +1757,7 @@ static inline int __skb_cow(struct sk_buff *skb, unsigned int headroom,
 		delta = headroom - skb_headroom(skb);
 
 	if (delta || cloned)
-		return pskb_expand_head(skb, ALIGN(delta, NET_SKB_PAD), 0,
+		return pskb_expand_head(skb, ALIGN(delta, NET_SKB_PAD_ALLOC), 0,
 					GFP_ATOMIC);
 	return 0;
 }
@@ -1627,7 +1840,7 @@ static inline int skb_can_coalesce(struct sk_buff *skb, int i,
 		struct skb_frag_struct *frag = &skb_shinfo(skb)->frags[i - 1];
 
 		return page == frag->page &&
-		       off == frag->page_offset + frag->size;
+		       (__u32)off == frag->page_offset + frag->size;
 	}
 	return 0;
 }
@@ -1793,6 +2006,8 @@ extern int	       skb_shift(struct sk_buff *tgt, struct sk_buff *skb,
 
 extern struct sk_buff *skb_segment(struct sk_buff *skb, int features);
 
+extern int skb_mark_priority(struct sk_buff *skb);
+
 static inline void *skb_header_pointer(const struct sk_buff *skb, int offset,
 				       int len, void *buffer)
 {
@@ -1923,6 +2138,19 @@ static inline __sum16 skb_checksum_complete(struct sk_buff *skb)
 	       0 : __skb_checksum_complete(skb);
 }
 
+#ifdef CONFIG_GENERIC_CONNTRACK
+static inline enum generic_ct_dir skb_get_ct_dir(struct sk_buff *skb)
+{
+	return skb->nfctinfo ? GENERIC_CT_DIR_REPLY : GENERIC_CT_DIR_ORIGINAL;
+}
+
+static inline void skb_set_ct_dir(struct sk_buff *skb, enum generic_ct_dir dir)
+{
+	skb->nfctinfo = (dir & 1);
+}
+#endif
+
+
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 extern void nf_conntrack_destroy(struct nf_conntrack *nfct);
 static inline void nf_conntrack_put(struct nf_conntrack *nfct)
@@ -1958,8 +2186,12 @@ static inline void nf_bridge_get(struct nf_bridge_info *nf_bridge)
 		atomic_inc(&nf_bridge->use);
 }
 #endif /* CONFIG_BRIDGE_NETFILTER */
-static inline void nf_reset(struct sk_buff *skb)
+static inline void nf_reset(struct sk_buff *skb __attribute__ ((unused)))
 {
+#ifdef CONFIG_GENERIC_CONNTRACK
+	generic_ct_put(skb->generic_ct);
+	skb->generic_ct = 0;
+#endif
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
@@ -1973,14 +2205,22 @@ static inline void nf_reset(struct sk_buff *skb)
 }
 
 /* Note: This doesn't put any conntrack and bridge info in dst. */
-static inline void __nf_copy(struct sk_buff *dst, const struct sk_buff *src)
+static inline void __nf_copy(struct sk_buff *dst __attribute__ ((unused)), const struct sk_buff *src __attribute__ ((unused)))
 {
+#ifdef CONFIG_GENERIC_CONNTRACK
+	dst->generic_ct = generic_ct_get(src->generic_ct);
+	dst->nfctinfo = src->nfctinfo;
+#endif
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	dst->nfct = src->nfct;
 	nf_conntrack_get(src->nfct);
 	dst->nfctinfo = src->nfctinfo;
 	dst->nfct_reasm = src->nfct_reasm;
 	nf_conntrack_get_reasm(src->nfct_reasm);
+#endif
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	dst->imq_flags = src->imq_flags;
+	dst->nf_queue_entry = src->nf_queue_entry;
 #endif
 #ifdef CONFIG_BRIDGE_NETFILTER
 	dst->nf_bridge  = src->nf_bridge;
@@ -1990,6 +2230,9 @@ static inline void __nf_copy(struct sk_buff *dst, const struct sk_buff *src)
 
 static inline void nf_copy(struct sk_buff *dst, const struct sk_buff *src)
 {
+#ifdef CONFIG_GENERIC_CONNTRACK
+	generic_ct_put(dst->generic_ct);
+#endif
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	nf_conntrack_put(dst->nfct);
 	nf_conntrack_put_reasm(dst->nfct_reasm);
@@ -2011,10 +2254,10 @@ static inline void skb_init_secmark(struct sk_buff *skb)
 	skb->secmark = 0;
 }
 #else
-static inline void skb_copy_secmark(struct sk_buff *to, const struct sk_buff *from)
+static inline void skb_copy_secmark(struct sk_buff *to __attribute__ ((unused)), const struct sk_buff *from __attribute__ ((unused)))
 { }
 
-static inline void skb_init_secmark(struct sk_buff *skb)
+static inline void skb_init_secmark(struct sk_buff *skb __attribute__ ((unused)))
 { }
 #endif
 
@@ -2057,7 +2300,7 @@ static inline struct sec_path *skb_sec_path(struct sk_buff *skb)
 	return skb->sp;
 }
 #else
-static inline struct sec_path *skb_sec_path(struct sk_buff *skb)
+static inline struct sec_path *skb_sec_path(struct sk_buff *skb __attribute__ ((unused)))
 {
 	return NULL;
 }
@@ -2095,5 +2338,74 @@ static inline void skb_forward_csum(struct sk_buff *skb)
 }
 
 bool skb_partial_csum_set(struct sk_buff *skb, u16 start, u16 off);
+#ifdef CONFIG_ATHRS_HW_NAT
+
+#define NF_NAT_MODULE           1
+#define NF_FIREWALL_MODULE      2
+
+#define NAT_EGRESS              0x1
+#define NAT_INGRESS             0x2
+
+#define NAT_PROTO_TCP           0x1
+#define NAT_PROTO_UDP           0x2
+#define NAT_PROTO_ICMP          0x3
+
+#define inv_dir(dir) \
+(dir == NAT_EGRESS) ? NAT_INGRESS : NAT_EGRESS
+
+#define ATHR_GET_NF_NAT_FIREWALL_STATUS(skb, flags) \
+(skb->ath_hw_nat_fw_flags & (1 << flags))
+
+#define ATHR_DISABLE_NF_NAT_FIREWALL(skb, flags) \
+(skb->ath_hw_nat_fw_flags |= (1 << flags))
+
+#define ATHR_ENABLE_NF_NAT_FIREWALL(skb, flags) \
+(skb->ath_hw_nat_fw_flags &= ~(1 << flags))
+
+extern int (*athrs_hw_nat_add_entry_hook)(uint32_t oldip, uint16_t oldport,
+                                           uint32_t newip, uint16_t newport,
+                                           u_int8_t protocol, int maniptype);
+
+extern void (*athrs_hw_nat_del_entry_hook)(uint32_t ipaddr, uint16_t port,
+                                           u_int8_t protocol, int maniptype);
+
+extern int (*athrs_hw_nat_lkup_entry_hook)( uint32_t ipaddr, uint16_t port, 
+					     u_int8_t maniptype, u_int8_t protocol,
+					     uint32_t *newipaddr, uint16_t *newport);
+
+extern unsigned long (*athrs_hw_nat_get_ingress_pkt_count_hook)(void);
+extern unsigned long (*athrs_hw_nat_get_egress_pkt_count_hook)(void);
+extern uint32_t (*athrs_hw_nat_get_wan_ip_addr_hook)(void);
+
+//extern void (*athrs_add_wan_next_hop_info_hook)(struct sockaddr *sockin);
+
+#else
+
+#define NF_NAT_MODULE           1
+#define NF_FIREWALL_MODULE      2
+
+#define NAT_EGRESS              0x1
+#define NAT_INGRESS             0x2
+
+#define NAT_PROTO_TCP           0x1
+#define NAT_PROTO_UDP           0x2
+#define NAT_PROTO_ICMP          0x3
+
+
+#define ATHR_GET_NF_NAT_FIREWALL_STATUS(skb, flags) 0
+#define ATHR_DISABLE_NF_NAT_FIREWALL(skb, flags) /* Do nothing */
+#define ATHR_ENABLE_NF_NAT_FIREWALL(skb, flags)  /* Do nothing */
+
+#endif /* CONFIG_ATHRS_HW_NAT */
+
+#ifdef CONFIG_AVM_PA
+static inline void avm_pa_add_local_session(PKT *pkt, struct sock *sk)
+{
+   struct avm_pa_pkt_info *info = AVM_PKT_INFO(pkt);
+   if (info->ptype_pid_handle && info->is_accelerated == 0)
+      _avm_pa_add_local_session(pkt, sk);
+}
+#endif
+
 #endif	/* __KERNEL__ */
 #endif	/* _LINUX_SKBUFF_H */

@@ -43,7 +43,7 @@
 #include <asm/fixmap.h>
 
 /* Atomicity and interruptability */
-#ifdef CONFIG_MIPS_MT_SMTC
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
 
 #include <asm/mipsmtregs.h>
 
@@ -298,7 +298,8 @@ void __init fixrange_init(unsigned long start, unsigned long end,
 }
 
 #ifndef CONFIG_NEED_MULTIPLE_NODES
-static int __init page_is_ram(unsigned long pagenr)
+/*--- static int __init page_is_ram(unsigned long pagenr) ---*/
+int page_is_ram(unsigned long pagenr)
 {
 	int i;
 
@@ -323,7 +324,7 @@ static int __init page_is_ram(unsigned long pagenr)
 void __init paging_init(void)
 {
 	unsigned long max_zone_pfns[MAX_NR_ZONES];
-	unsigned long lastpfn;
+	unsigned long lastpfn __maybe_unused__;
 
 	pagetable_init();
 
@@ -375,8 +376,11 @@ void __init mem_init(void)
 #endif
 	high_memory = (void *) __va(max_low_pfn << PAGE_SHIFT);
 
+    /*--- printk("[%s] totalram_pages = 0x%lx\n", __FUNCTION__, totalram_pages); ---*/
 	totalram_pages += free_all_bootmem();
+    /*--- printk("[%s] totalram_pages = 0x%lx\n", __FUNCTION__, totalram_pages); ---*/
 	totalram_pages -= setup_zero_pages();	/* Setup zeroed pages.  */
+    /*--- printk("[%s] totalram_pages = 0x%lx\n", __FUNCTION__, totalram_pages); ---*/
 
 	reservedpages = ram = 0;
 	for (tmp = 0; tmp < max_low_pfn; tmp++)
@@ -386,6 +390,8 @@ void __init mem_init(void)
 				reservedpages++;
 		}
 	num_physpages = ram;
+    /*--- printk("[%s] num_physpages = 0x%lx\n", __FUNCTION__, num_physpages); ---*/
+    /*--- printk("[%s] reservedpages= 0x%lx\n", __FUNCTION__, reservedpages); ---*/
 
 #ifdef CONFIG_HIGHMEM
 	for (tmp = highstart_pfn; tmp < highend_pfn; tmp++) {
@@ -432,10 +438,17 @@ void free_init_pages(const char *what, unsigned long begin, unsigned long end)
 {
 	unsigned long pfn;
 
+    /*--- printk(KERN_ERR "[%s] free 0x%lx - 0x%lx  '%s'\n", __FUNCTION__, begin, end, what); ---*/
+    /*--- printk(KERN_ERR "[%s] pfn 0x%lx - 0x%lx\n", __FUNCTION__, PFN_UP(begin), PFN_DOWN(end)); ---*/
+    /*--- printk(KERN_ERR "[%s] first page 0x%p\n", __FUNCTION__, pfn_to_page(PFN_UP(begin))); ---*/
+
 	for (pfn = PFN_UP(begin); pfn < PFN_DOWN(end); pfn++) {
 		struct page *page = pfn_to_page(pfn);
 		void *addr = phys_to_virt(PFN_PHYS(pfn));
 
+        if (!PageReserved(page)) {
+            panic("try to free a non reserved page\n");
+        }
 		ClearPageReserved(page);
 		init_page_count(page);
 		memset(addr, POISON_FREE_INITMEM, PAGE_SIZE);

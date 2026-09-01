@@ -31,6 +31,15 @@ typedef unsigned short umode_t;
  * These aren't exported outside the kernel to avoid name space clashes
  */
 #ifdef __KERNEL__
+
+#if defined(BITS_PER_LONG)
+    #if BITS_PER_LONG != _MIPS_SZLONG
+        #error "BITS_PER_LONG is not the same as _MIPS_SZLONG. Configuration error..."
+    #endif /*--- #if BITS_PER_LONG != _MIPS_SZLONG ---*/
+#else /*--- #if defined(BITS_PER_LONG) ---*/
+    #define BITS_PER_LONG _MIPS_SZLONG
+#endif /*--- #else ---*/ /*--- #if defined(BITS_PER_LONG) ---*/
+
 #ifndef __ASSEMBLY__
 
 #if (defined(CONFIG_HIGHMEM) && defined(CONFIG_64BIT_PHYS_ADDR)) \

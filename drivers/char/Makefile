@@ -96,9 +96,11 @@ obj-$(CONFIG_SCx200_GPIO)	+= scx200_gpio.o
 obj-$(CONFIG_PC8736x_GPIO)	+= pc8736x_gpio.o
 obj-$(CONFIG_NSC_GPIO)		+= nsc_gpio.o
 obj-$(CONFIG_CS5535_GPIO)	+= cs5535_gpio.o
+obj-$(CONFIG_GPIO_DEVICE)	+= gpio_dev.o
 obj-$(CONFIG_GPIO_TB0219)	+= tb0219.o
 obj-$(CONFIG_TELCLOCK)		+= tlclk.o
 
+obj-$(CONFIG_AVM_NET_TRACE) += avm_net_trace/
 obj-$(CONFIG_MWAVE)		+= mwave/
 obj-$(CONFIG_AGP)		+= agp/
 obj-$(CONFIG_PCMCIA)		+= pcmcia/
@@ -106,6 +108,14 @@ obj-$(CONFIG_IPMI_HANDLER)	+= ipmi/
 
 obj-$(CONFIG_HANGCHECK_TIMER)	+= hangcheck-timer.o
 obj-$(CONFIG_TCG_TPM)		+= tpm/
+obj-$(CONFIG_TFFS)		+= tffs-2.0/
+obj-$(CONFIG_AVM_PIGLET_NOEMIF)    += Piglet_noemif/
+# obj-$(CONFIG_AVM_AUDIO)     += audio/
+obj-$(CONFIG_AVM_POWER)     += avm_power/
+obj-$(CONFIG_AVM_SAMMEL)    += avm_new/
+obj-$(CONFIG_UBIK2)		    += ubik2/
+obj-$(CONFIG_AVM_FLASH_UPDATE)	+= flash_update/
+obj-$(CONFIG_AVM_DECT_IO)	+= dect_io/
 
 obj-$(CONFIG_PS3_FLASH)		+= ps3flash.o
 
@@ -136,3 +146,7 @@ $(obj)/defkeymap.c: $(obj)/%.c: $(src)/%.map
 	rm $@.tmp
 
 endif
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/char/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

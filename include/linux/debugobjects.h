@@ -64,17 +64,17 @@ extern void debug_objects_early_init(void);
 extern void debug_objects_mem_init(void);
 #else
 static inline void
-debug_object_init      (void *addr, struct debug_obj_descr *descr) { }
+debug_object_init      (void *addr __attribute__ ((unused)), struct debug_obj_descr *descr __attribute__ ((unused))) { }
 static inline void
-debug_object_init_on_stack(void *addr, struct debug_obj_descr *descr) { }
+debug_object_init_on_stack(void *addr __attribute__ ((unused)), struct debug_obj_descr *descr __attribute__ ((unused))) { }
 static inline void
-debug_object_activate  (void *addr, struct debug_obj_descr *descr) { }
+debug_object_activate  (void *addr __attribute__ ((unused)), struct debug_obj_descr *descr __attribute__ ((unused))) { }
 static inline void
-debug_object_deactivate(void *addr, struct debug_obj_descr *descr) { }
+debug_object_deactivate(void *addr __attribute__ ((unused)), struct debug_obj_descr *descr __attribute__ ((unused))) { }
 static inline void
-debug_object_destroy   (void *addr, struct debug_obj_descr *descr) { }
+debug_object_destroy   (void *addr __attribute__ ((unused)), struct debug_obj_descr *descr __attribute__ ((unused))) { }
 static inline void
-debug_object_free      (void *addr, struct debug_obj_descr *descr) { }
+debug_object_free      (void *addr __attribute__ ((unused)), struct debug_obj_descr *descr __attribute__ ((unused))) { }
 
 static inline void debug_objects_early_init(void) { }
 static inline void debug_objects_mem_init(void) { }
@@ -84,7 +84,7 @@ static inline void debug_objects_mem_init(void) { }
 extern void debug_check_no_obj_freed(const void *address, unsigned long size);
 #else
 static inline void
-debug_check_no_obj_freed(const void *address, unsigned long size) { }
+debug_check_no_obj_freed(const void *address __attribute__ ((unused)), unsigned long size __attribute__ ((unused))) { }
 #endif
 
 #endif

@@ -848,6 +848,34 @@ int __isolate_lru_page(struct page *page, int mode, int file)
 
 	ret = -EBUSY;
 
+#if defined(CONFIG_AVM_LOW_MEMORY_STRATEGY)
+    /*--------------------------------------------------------------------------------------*\
+     * ACHTUNG:
+     *
+     * Dynamischer Speicherfreigabe Hack zum Verhindern der Freigabe mehrfach 
+     * belegter Blöcke
+    \*--------------------------------------------------------------------------------------*/
+    {
+        static unsigned int busy_level = 1 << 2;
+        const unsigned int MAX_BUSY_LEVEL = 10 << 2;
+        const unsigned int MIN_BUSY_LEVEL = 1 << 2;
+        if(unlikely(atomic_read(&(page->_count)) > (busy_level >> 2))) {
+            /*------------------------------------------------------------------------------*\
+             * wir haben einen Block nicht freigegeben. Der countwert dieses Blockes war
+             * größer als busylevel/4. Der Busylevel soll etwas gesenkt werden um die 
+             * Wahrscheinlichkeit start belegt Blöcke freizugeben zu erhöhen
+            \*------------------------------------------------------------------------------*/
+            busy_level--;
+            if(busy_level < MIN_BUSY_LEVEL) busy_level = MIN_BUSY_LEVEL;
+            return ret;
+        }
+        busy_level++;
+        if(busy_level > MAX_BUSY_LEVEL) busy_level = MAX_BUSY_LEVEL;
+    }
+    /*--------------------------------------------------------------------------------------*\
+    \*--------------------------------------------------------------------------------------*/
+#endif /*--- #if defined(CONFIG_AVM_LOW_MEMORY_STRATEGY) ---*/
+
 	if (likely(get_page_unless_zero(page))) {
 		/*
 		 * Be careful not to clear PageLRU until after we're
@@ -888,6 +916,8 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 	unsigned long nr_taken = 0;
 	unsigned long scan;
 
+    /*--- struct page *prev_page = NULL; ---*/
+
 	for (scan = 0; scan < nr_to_scan && !list_empty(src); scan++) {
 		struct page *page;
 		unsigned long pfn;
@@ -895,7 +925,50 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 		unsigned long page_pfn;
 		int zone_id;
 
-		page = lru_to_page(src);
+		page = lru_to_page(src);    
+#if 0
+        if(prev_page && (prev_page + 1 == page)) {
+            printk(KERN_ERR "[in order]\n");
+        }
+        prev_page = page;
+        
+        printk(KERN_ERR "[%s] count=%d flags=0x%08lx %s%s %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+            __FUNCTION__, (unsigned int)atomic_read(&(page->_count)), page->flags,
+            mode == ISOLATE_INACTIVE ? "ISOLATE_INACTIVE " :
+            mode == ISOLATE_ACTIVE ? "ISOLATE_ACTIVE " :
+            mode == ISOLATE_BOTH ? "ISOLATE_BOTH " : "unknwon ",
+            file ? "FILE " : " ANON",
+            
+            page->flags & (1 << PG_locked) ? "PG_locked " : "",
+            page->flags & (1 << PG_error) ? "PG_error " : "",
+            page->flags & (1 << PG_referenced) ? "PG_referenced " : "",
+            page->flags & (1 << PG_uptodate) ? "PG_uptodate " : "",
+            page->flags & (1 << PG_dirty) ? "PG_dirty " : "",
+            page->flags & (1 << PG_lru) ? "PG_lru " : "",
+            page->flags & (1 << PG_active) ? "PG_active " : "",
+            page->flags & (1 << PG_slab) ? "PG_slab " : "",
+            page->flags & (1 << PG_owner_priv_1) ? "PG_owner_priv_1 " : "",
+            page->flags & (1 << PG_arch_1) ? "PG_arch_1 " : "",
+            page->flags & (1 << PG_reserved) ? "PG_reserved " : "",
+            page->flags & (1 << PG_private) ? "PG_private " : "",
+            page->flags & (1 << PG_private_2) ? "PG_private_2 " : "",
+            page->flags & (1 << PG_writeback) ? "PG_writeback " : "",
+#ifdef CONFIG_PAGEFLAGS_EXTENDED
+            page->flags & (1 << PG_head) ? "PG_head " : "",
+#else /*--- #ifdef CONFIG_PAGEFLAGS_EXTENDED ---*/
+            page->flags & (1 << PG_compound) ? "PG_compound " : "",
+#endif /*--- #ifdef CONFIG_PAGEFLAGS_EXTENDED ---*/
+            page->flags & (1 << PG_swapcache) ? "PG_swapcache " : "",
+            page->flags & (1 << PG_mappedtodisk) ? "PG_mappedtodisk " : "",
+            page->flags & (1 << PG_reclaim) ? "PG_reclaim " : "",
+            page->flags & (1 << PG_buddy) ? "PG_buddy " : "",
+            page->flags & (1 << PG_swapbacked) ? "PG_swapbacked " : "",
+            page->flags & (1 << PG_unevictable) ? "PG_unevictable " : ""
+            
+            );
+#endif
+
+
 		prefetchw_prev_lru_page(page, src, flags);
 
 		VM_BUG_ON(!PageLRU(page));
@@ -908,6 +981,7 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 			break;
 
 		case -EBUSY:
+            /*--- printk(KERN_ERR "=> BUSY\n"); ---*/
 			/* else it is being freed elsewhere */
 			list_move(&page->lru, src);
 			mem_cgroup_rotate_lru_list(page, page_lru(page));
@@ -984,6 +1058,18 @@ static unsigned long isolate_pages_global(unsigned long nr,
 		lru += LRU_ACTIVE;
 	if (file)
 		lru += LRU_FILE;
+#if 0
+    printk(KERN_ERR "[%s/%pF] %s\n",
+
+            __FUNCTION__, __builtin_return_address(0),
+	lru == LRU_INACTIVE_ANON  ? "LRU_INACTIVE_ANON" : 
+	lru == LRU_ACTIVE_ANON  ? "LRU_ACTIVE_ANON" : 
+	lru == LRU_INACTIVE_FILE  ? "LRU_INACTIVE_FILE" : 
+	lru == LRU_ACTIVE_FILE  ? "LRU_ACTIVE_FILE" : 
+	lru == LRU_UNEVICTABLE  ? "LRU_UNEVICTABLE" : 
+	lru == NR_LRU_LISTS  ? "NR_LRU_LISTS" : "unknown");
+#endif
+
 	return isolate_lru_pages(nr, &z->lru[lru].list, dst, scanned, order,
 								mode, file);
 }
@@ -1472,7 +1558,17 @@ static int inactive_file_is_low_global(struct zone *zone)
 	active = zone_page_state(zone, NR_ACTIVE_FILE);
 	inactive = zone_page_state(zone, NR_INACTIVE_FILE);
 
+#if defined(CONFIG_AVM_LOW_MEMORY_STRATEGY)
+    /*--------------------------------------------------------------------------------------*\
+     * Hier wird das Verhältniss zwischen activen und inactiven Blöcken geregelt
+     * Da es sehr teuer ist einen aktiven Block wieder zu rekonstruieren wird das Verhältnis
+     * nicht 1:1 sondern 1:2 gehalten.
+    \*--------------------------------------------------------------------------------------*/
+    /*--- printk(KERN_ERR "[%s] is %slow\n", __FUNCTION__, ((active >> 1) > inactive) ? "" : "not "); ---*/
+	return ((active >> 1) > inactive);
+#else
 	return (active > inactive);
+#endif
 }
 
 /**

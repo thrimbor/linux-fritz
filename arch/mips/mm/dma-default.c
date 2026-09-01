@@ -20,11 +20,8 @@
 
 #include <dma-coherence.h>
 
-static inline unsigned long dma_addr_to_virt(struct device *dev,
-	dma_addr_t dma_addr)
-{
+static inline unsigned long dma_addr_to_virt(struct device *dev, dma_addr_t dma_addr) {
 	unsigned long addr = plat_dma_addr_to_phys(dev, dma_addr);
-
 	return (unsigned long)phys_to_virt(addr);
 }
 
@@ -36,9 +33,11 @@ static inline unsigned long dma_addr_to_virt(struct device *dev,
 
 static inline int cpu_is_noncoherent_r10000(struct device *dev)
 {
-	return !plat_device_is_coherent(dev) &&
-	       (current_cpu_type() == CPU_R10000 ||
-	       current_cpu_type() == CPU_R12000);
+	return !plat_device_is_coherent(dev) 
+           /*--- && ---*/
+	       /*--- (current_cpu_type() == CPU_R10000 || ---*/
+	       /*--- current_cpu_type() == CPU_R12000) ---*/
+           ;
 }
 
 static gfp_t massage_gfp_flags(const struct device *dev, gfp_t gfp)
@@ -177,8 +176,12 @@ dma_addr_t dma_map_single(struct device *dev, void *ptr, size_t size,
 	enum dma_data_direction direction)
 {
 	unsigned long addr = (unsigned long) ptr;
+    /*--- if((addr & 0xE0000000) == 0x80000000) { ---*/
+        /*--- printk(KERN_ERR "[%s] ERROR use of cached addr (0x%x) on dma_memory !\n", __FUNCTION__, (unsigned int)addr); ---*/
+        /*--- dump_stack(); ---*/
+    /*--- } ---*/
 
-	if (!plat_device_is_coherent(dev))
+	if (addr && !plat_addr_is_coherent(addr) && !plat_device_is_coherent(dev))
 		__dma_sync(addr, size, direction);
 
 	return plat_map_dma_mem(dev, ptr, size);
@@ -189,6 +192,10 @@ EXPORT_SYMBOL(dma_map_single);
 void dma_unmap_single(struct device *dev, dma_addr_t dma_addr, size_t size,
 	enum dma_data_direction direction)
 {
+    /*--- if((dma_addr & 0xE0000000) == 0x80000000) { ---*/
+        /*--- printk(KERN_ERR "[%s] ERROR use of cached addr (0x%x) on dma_memory !\n", __FUNCTION__, (unsigned int)dma_addr); ---*/
+        /*--- dump_stack(); ---*/
+    /*--- } ---*/
 	if (cpu_is_noncoherent_r10000(dev))
 		__dma_sync(dma_addr_to_virt(dev, dma_addr), size,
 		           direction);

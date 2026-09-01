@@ -839,9 +839,16 @@ static noinline int init_post(void)
 		printk(KERN_WARNING "Failed to execute %s.  Attempting "
 					"defaults...\n", execute_command);
 	}
+    printk("trying /sbin/init\n");
 	run_init_process("/sbin/init");
+
+    printk("trying /etc/init\n");
 	run_init_process("/etc/init");
+    
+    printk("trying /bin/init\n");
 	run_init_process("/bin/init");
+    
+    printk("trying /bin/sh\n");
 	run_init_process("/bin/sh");
 
 	panic("No init found.  Try passing init= option to kernel.");
@@ -853,7 +860,9 @@ static int __init kernel_init(void * unused)
 	 * Wait until kthreadd is all set-up.
 	 */
 	wait_for_completion(&kthreadd_done);
+    printk("kernel_init: started\n");
 	lock_kernel();
+    printk("kernel_init: kernel locked\n");
 
 	/*
 	 * init can allocate pages on any node
@@ -884,6 +893,7 @@ static int __init kernel_init(void * unused)
 	sched_init_smp();
 
 	do_basic_setup();
+    printk("kernel_init: basic setup done\n");
 
 	/*
 	 * check if there is an early userspace init.  If yes, let it do all
@@ -905,5 +915,6 @@ static int __init kernel_init(void * unused)
 	 */
 
 	init_post();
+    printk("kernel_init: ended\n");
 	return 0;
 }

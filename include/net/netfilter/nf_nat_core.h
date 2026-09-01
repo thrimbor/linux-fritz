@@ -33,4 +33,8 @@ extern int
 				  enum nf_nat_manip_type manip,
 				  const struct nlattr *attr);
 
+#ifndef CONFIG_ATH_HW_NAT
+#define athrs_hw_nat_add_entry(a,b,c,d,e,f)
+#endif
+
 #endif /* _NF_NAT_CORE_H */

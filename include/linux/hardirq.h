@@ -60,11 +60,11 @@
 #define NMI_MASK	(__IRQ_MASK(NMI_BITS)     << NMI_SHIFT)
 
 #define PREEMPT_OFFSET	(1UL << PREEMPT_SHIFT)
-#define SOFTIRQ_OFFSET	(1UL << SOFTIRQ_SHIFT)
+#define SOFTIRQ_OFFSET	(1UL << SOFTIRQ_SHIFT) /* 265 */
 #define HARDIRQ_OFFSET	(1UL << HARDIRQ_SHIFT)
 #define NMI_OFFSET	(1UL << NMI_SHIFT)
 
-#define SOFTIRQ_DISABLE_OFFSET	(2 * SOFTIRQ_OFFSET)
+#define SOFTIRQ_DISABLE_OFFSET	(2 * SOFTIRQ_OFFSET) /* 512 */
 
 #ifndef PREEMPT_ACTIVE
 #define PREEMPT_ACTIVE_BITS	1
@@ -138,7 +138,7 @@ extern void synchronize_irq(unsigned int irq);
 struct task_struct;
 
 #if !defined(CONFIG_VIRT_CPU_ACCOUNTING) && !defined(CONFIG_IRQ_TIME_ACCOUNTING)
-static inline void account_system_vtime(struct task_struct *tsk)
+static inline void account_system_vtime(struct task_struct *tsk __attribute__ ((unused)))
 {
 }
 #else

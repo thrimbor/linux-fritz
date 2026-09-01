@@ -1846,6 +1846,7 @@ got_driver:
 static int tty_open(struct inode *inode, struct file *filp)
 {
 	int ret;
+    /*--- printk("tty opened by (%s)\n", current->comm); ---*/
 
 	lock_kernel();
 	ret = __tty_open(inode, filp);

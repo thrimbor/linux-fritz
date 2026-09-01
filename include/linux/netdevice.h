@@ -807,6 +807,7 @@ struct net_device
 	void			*ax25_ptr;	/* AX.25 specific data */
 	struct wireless_dev	*ieee80211_ptr;	/* IEEE 802.11 specific data,
 						   assign before registering */
+	void			*phy_ptr; /* PHY device specific data */
 
 /*
  * Cache line mostly used on receive path (including eth_type_trans())
@@ -885,6 +886,14 @@ struct net_device
 	/* mid-layer private */
 	void			*ml_priv;
 
+#ifdef CONFIG_AVM_PA
+	union {
+		struct avm_pa_dev_info	devinfo;
+		u8			buf[32];
+	} avm_pa;
+#define AVM_PA_DEVINFO(dev)	(&(dev)->avm_pa.devinfo)
+#endif
+
 	/* bridge stuff */
 	struct net_bridge_port	*br_port;
 	/* macvlan */
@@ -944,7 +953,7 @@ static inline void netdev_for_each_tx_queue(struct net_device *dev,
  * Net namespace inlines
  */
 static inline
-struct net *dev_net(const struct net_device *dev)
+struct net *dev_net(const struct net_device *dev __attribute__ ((unused)))
 {
 #ifdef CONFIG_NET_NS
 	return dev->nd_net;
@@ -954,7 +963,7 @@ struct net *dev_net(const struct net_device *dev)
 }
 
 static inline
-void dev_net_set(struct net_device *dev, struct net *net)
+void dev_net_set(struct net_device *dev __attribute__ ((unused)), struct net *net __attribute__ ((unused)))
 {
 #ifdef CONFIG_NET_NS
 	release_net(dev->nd_net);
@@ -962,7 +971,7 @@ void dev_net_set(struct net_device *dev, struct net *net)
 #endif
 }
 
-static inline bool netdev_uses_dsa_tags(struct net_device *dev)
+static inline bool netdev_uses_dsa_tags(struct net_device *dev __attribute__ ((unused)))
 {
 #ifdef CONFIG_NET_DSA_TAG_DSA
 	if (dev->dsa_ptr != NULL)
@@ -972,7 +981,7 @@ static inline bool netdev_uses_dsa_tags(struct net_device *dev)
 	return 0;
 }
 
-static inline bool netdev_uses_trailer_tags(struct net_device *dev)
+static inline bool netdev_uses_trailer_tags(struct net_device *dev __attribute__ ((unused)))
 {
 #ifdef CONFIG_NET_DSA_TAG_TRAILER
 	if (dev->dsa_ptr != NULL)
@@ -1065,6 +1074,13 @@ struct packet_type {
 	int			(*gro_complete)(struct sk_buff *skb);
 	void			*af_packet_priv;
 	struct list_head	list;
+#ifdef CONFIG_AVM_PA
+	union {
+		struct avm_pa_dev_info	devinfo;
+		u8			buf[32];
+	} avm_pa;
+#define AVM_PA_PTYPE_DEVINFO(ptype)	(&(ptype)->avm_pa.devinfo)
+#endif
 };
 
 #include <linux/interrupt.h>
@@ -1114,6 +1130,7 @@ extern int		dev_alloc_name(struct net_device *dev, const char *name);
 extern int		dev_open(struct net_device *dev);
 extern int		dev_close(struct net_device *dev);
 extern void		dev_disable_lro(struct net_device *dev);
+extern struct netdev_queue *dev_pick_tx(struct net_device *dev, struct sk_buff *skb);
 extern int		dev_queue_xmit(struct sk_buff *skb);
 extern int		register_netdevice(struct net_device *dev);
 extern void		unregister_netdevice(struct net_device *dev);
@@ -1676,7 +1693,7 @@ enum {
 static inline u32 netif_msg_init(int debug_value, int default_msg_enable_bits)
 {
 	/* use default */
-	if (debug_value < 0 || debug_value >= (sizeof(u32) * 8))
+	if (debug_value < 0 || debug_value >= (int) (sizeof(u32) * 8))
 		return default_msg_enable_bits;
 	if (debug_value == 0)	/* no output */
 		return 0;
@@ -1894,7 +1911,7 @@ extern struct sk_buff *skb_gso_segment(struct sk_buff *skb, int features);
 #ifdef CONFIG_BUG
 extern void netdev_rx_csum_fault(struct net_device *dev);
 #else
-static inline void netdev_rx_csum_fault(struct net_device *dev)
+static inline void netdev_rx_csum_fault(struct net_device *dev __attribute__ ((unused)))
 {
 }
 #endif

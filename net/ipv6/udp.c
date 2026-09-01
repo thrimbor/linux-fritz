@@ -177,9 +177,18 @@ static struct sock *__udp6_lib_lookup_skb(struct sk_buff *skb,
 
 	if (unlikely(sk = skb_steal_sock(skb)))
 		return sk;
+#ifdef CONFIG_AVM_PA
+	sk = __udp6_lib_lookup(dev_net(skb_dst(skb)->dev), &iph->saddr, sport,
+				 &iph->daddr, dport, inet6_iif(skb),
+				 udptable);
+    if (sk)
+       avm_pa_add_local_session(skb, sk);
+    return sk;
+#else
 	return __udp6_lib_lookup(dev_net(skb_dst(skb)->dev), &iph->saddr, sport,
 				 &iph->daddr, dport, inet6_iif(skb),
 				 udptable);
+#endif
 }
 
 /*

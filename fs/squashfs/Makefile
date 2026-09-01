@@ -3,5 +3,9 @@
 #
 
 obj-$(CONFIG_SQUASHFS) += squashfs.o
-squashfs-y += block.o cache.o dir.o export.o file.o fragment.o id.o inode.o
-squashfs-y += namei.o super.o symlink.o
+squashfs-y += inode.o
+squashfs-y += squashfs2_0.o
+squashfs-y += LzmaDecode.o 
+
+
+EXTRA_CFLAGS += -DSQUASHFS_TRACE

@@ -957,12 +957,26 @@ static struct packet_type ipv6_packet_type __read_mostly = {
 
 static int __init ipv6_packet_init(void)
 {
+#ifdef CONFIG_AVM_PA
+    {
+        struct avm_pa_pid_cfg cfg;
+        snprintf(cfg.name, sizeof(cfg.name), "ipv6");
+        cfg.framing = avm_pa_framing_ptype;
+        cfg.default_mtu = 0xffff;
+        cfg.ptype = &ipv6_packet_type;
+        if(avm_pa_dev_pid_register(AVM_PA_PTYPE_DEVINFO(&ipv6_packet_type), &cfg) < 0)
+            printk(KERN_ERR "%s: failed to register PA PID\n", cfg.name);
+    }
+#endif
 	dev_add_pack(&ipv6_packet_type);
 	return 0;
 }
 
 static void ipv6_packet_cleanup(void)
 {
+#ifdef CONFIG_AVM_PA
+    avm_pa_dev_unregister(AVM_PA_PTYPE_DEVINFO(&ipv6_packet_type));
+#endif
 	dev_remove_pack(&ipv6_packet_type);
 }
 

@@ -13,6 +13,9 @@ tmp-$(CONFIG_COMPAT) 		:= compat.o
 obj-$(CONFIG_NET)		+= $(tmp-y)
 
 # LLC has to be linked before the files in net/802/
+obj-$(CONFIG_AVM_PA)	+= avm_pa/
+obj-$(CONFIG_AVM_RTP_TIMESTAMP)	+= avm_rtp_timestamp/
+obj-$(CONFIG_KSPEEDTEST)+= kspeedtest/
 obj-$(CONFIG_LLC)		+= llc/
 obj-$(CONFIG_NET)		+= ethernet/ 802/ sched/ netlink/
 obj-$(CONFIG_NETFILTER)		+= netfilter/
@@ -40,6 +43,7 @@ obj-$(CONFIG_BT)		+= bluetooth/
 obj-$(CONFIG_SUNRPC)		+= sunrpc/
 obj-$(CONFIG_AF_RXRPC)		+= rxrpc/
 obj-$(CONFIG_ATM)		+= atm/
+obj-$(CONFIG_L2TP)		+= l2tp/
 obj-$(CONFIG_DECNET)		+= decnet/
 obj-$(CONFIG_ECONET)		+= econet/
 obj-$(CONFIG_PHONET)		+= phonet/
@@ -65,3 +69,7 @@ ifeq ($(CONFIG_NET),y)
 obj-$(CONFIG_SYSCTL)		+= sysctl_net.o
 endif
 obj-$(CONFIG_WIMAX)		+= wimax/
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/net/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

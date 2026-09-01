@@ -260,6 +260,10 @@ struct ar9170_tx_info {
 #define IS_STARTED(a)		(((struct ar9170 *)a)->state >= AR9170_STARTED)
 #define IS_ACCEPTING_CMD(a)	(((struct ar9170 *)a)->state >= AR9170_IDLE)
 
+#define AR9170_FILTER_CHANGED_MODE		BIT(0)
+#define AR9170_FILTER_CHANGED_MULTICAST		BIT(1)
+#define AR9170_FILTER_CHANGED_FRAMEFILTER	BIT(2)
+
 /* exported interface */
 void *ar9170_alloc(size_t priv_size);
 int ar9170_register(struct ar9170 *ar, struct device *pdev);

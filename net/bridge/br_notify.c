@@ -49,7 +49,8 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 	case NETDEV_CHANGEADDR:
 		spin_lock_bh(&br->lock);
 		br_fdb_changeaddr(p, dev->dev_addr);
-		br_stp_recalculate_bridge_id(br);
+		if (!p->br->automatic_mac_disabled)
+			br_stp_recalculate_bridge_id(br);
 		spin_unlock_bh(&br->lock);
 		break;
 

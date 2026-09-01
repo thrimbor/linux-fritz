@@ -58,15 +58,19 @@ static int configure_kgdboc(void)
 	err = -ENODEV;
 
 	p = tty_find_polling_driver(config, &tty_line);
-	if (!p)
+	if (!p){
+		printk(KERN_ERR "kgdboc: no valid polling driver\n");
 		goto noconfig;
+	}
 
 	kgdb_tty_driver = p;
 	kgdb_tty_line = tty_line;
 
 	err = kgdb_register_io_module(&kgdboc_io_ops);
-	if (err)
+	if (err){
+		printk(KERN_ERR "kgdboc: register io failed\n");
 		goto noconfig;
+	}
 
 	configured = 1;
 

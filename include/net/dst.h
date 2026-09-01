@@ -84,9 +84,18 @@ struct dst_entry
 	 * (L1_CACHE_SIZE would be too much)
 	 */
 #ifdef CONFIG_64BIT
-	long			__pad_to_align_refcnt[2];
+#ifdef CONFIG_MAPPING
+	long		mapping;
+	long		__pad_to_align_refcnt[1];
 #else
-	long			__pad_to_align_refcnt[1];
+	long		__pad_to_align_refcnt[2];
+#endif
+#else
+#ifdef CONFIG_MAPPING
+	long		mapping;
+#else
+	long		__pad_to_align_refcnt[1];
+#endif
 #endif
 	/*
 	 * __refcnt wants to be on a different cache line from
@@ -276,13 +285,13 @@ enum {
 
 struct flowi;
 #ifndef CONFIG_XFRM
-static inline int xfrm_lookup(struct net *net, struct dst_entry **dst_p,
-			      struct flowi *fl, struct sock *sk, int flags)
+static inline int xfrm_lookup(struct net *net __attribute__((unused)), struct dst_entry **dst_p __attribute__((unused)),
+			      struct flowi *fl __attribute__((unused)), struct sock *sk __attribute__((unused)), int flags __attribute__((unused)))
 {
 	return 0;
 } 
-static inline int __xfrm_lookup(struct net *net, struct dst_entry **dst_p,
-				struct flowi *fl, struct sock *sk, int flags)
+static inline int __xfrm_lookup(struct net *net __attribute__((unused)), struct dst_entry **dst_p __attribute__((unused)),
+				struct flowi *fl __attribute__((unused)), struct sock *sk __attribute__((unused)), int flags __attribute__((unused)))
 {
 	return 0;
 }

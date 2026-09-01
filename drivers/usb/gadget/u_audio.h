@@ -23,6 +23,11 @@
 
 #include "gadget_chips.h"
 
+#define WLAN_AOW_ENABLED         (1)
+
+/* Note: Driver debugging not yet fully supported for 24-bit operation.  */
+#define USB_24BIT_AUDIO_ENABLED  (1)
+
 /*
  * This represents the USB side of an audio card device, managed by a USB
  * function which provides control and stream interfaces.

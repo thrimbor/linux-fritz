@@ -424,7 +424,13 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
 		action = action->next;
 	} while (action);
 
-	add_interrupt_randomness(irq, flags);
+    /*--------------------------------------------------------------------------------*\
+     * mbahr: aus performanec-Gruenden randomness nur bei ausgewaehlten Interrupts 
+     * (identisch mit 2.6.41)
+    \*--------------------------------------------------------------------------------*/
+	if (flags & IRQF_SAMPLE_RANDOM) {
+        add_interrupt_randomness(irq, flags);
+    }
 	local_irq_disable();
 
 	return retval;
@@ -447,7 +453,12 @@ irqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)
  * This is the original x86 implementation which is used for every
  * interrupt type.
  */
+
+#ifdef CONFIG_LTQ_SYS_OPT
+unsigned int __system __do_IRQ(unsigned int irq) 
+#else
 unsigned int __do_IRQ(unsigned int irq)
+#endif
 {
 	struct irq_desc *desc = irq_to_desc(irq);
 	struct irqaction *action;
@@ -557,4 +568,3 @@ unsigned int kstat_irqs_cpu(unsigned int irq, int cpu)
 	return desc ? desc->kstat_irqs[cpu] : 0;
 }
 EXPORT_SYMBOL(kstat_irqs_cpu);
-

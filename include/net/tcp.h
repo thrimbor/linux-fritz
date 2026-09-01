@@ -1042,17 +1042,17 @@ extern void tcp_enter_memory_pressure(struct sock *sk);
 
 static inline int keepalive_intvl_when(const struct tcp_sock *tp)
 {
-	return tp->keepalive_intvl ? : sysctl_tcp_keepalive_intvl;
+	return (int)tp->keepalive_intvl ? : sysctl_tcp_keepalive_intvl;
 }
 
 static inline int keepalive_time_when(const struct tcp_sock *tp)
 {
-	return tp->keepalive_time ? : sysctl_tcp_keepalive_time;
+	return (int)tp->keepalive_time ? : sysctl_tcp_keepalive_time;
 }
 
 static inline int keepalive_probes(const struct tcp_sock *tp)
 {
-	return tp->keepalive_probes ? : sysctl_tcp_keepalive_probes;
+	return (int)tp->keepalive_probes ? : sysctl_tcp_keepalive_probes;
 }
 
 static inline int tcp_fin_time(const struct sock *sk)
@@ -1071,7 +1071,7 @@ static inline int tcp_paws_check(const struct tcp_options_received *rx_opt,
 {
 	if ((s32)(rx_opt->ts_recent - rx_opt->rcv_tsval) <= paws_win)
 		return 1;
-	if (unlikely(get_seconds() >= rx_opt->ts_recent_stamp + TCP_PAWS_24DAYS))
+	if (unlikely(get_seconds() >= (unsigned)(rx_opt->ts_recent_stamp + TCP_PAWS_24DAYS)))
 		return 1;
 
 	return 0;
@@ -1095,7 +1095,7 @@ static inline int tcp_paws_reject(const struct tcp_options_received *rx_opt,
 
 	   However, we can relax time bounds for RST segments to MSL.
 	 */
-	if (rst && get_seconds() >= rx_opt->ts_recent_stamp + TCP_PAWS_MSL)
+	if (rst && get_seconds() >= (unsigned)(rx_opt->ts_recent_stamp + TCP_PAWS_MSL))
 		return 0;
 	return 1;
 }

@@ -130,7 +130,7 @@ extern int		ip4_datagram_connect(struct sock *sk,
  *      multicast packets.
  */
 
-static inline void ip_tr_mc_map(__be32 addr, char *buf)
+static inline void ip_tr_mc_map(__be32 addr __attribute__((unused)), char *buf)
 {
 	buf[0]=0xC0;
 	buf[1]=0x00;

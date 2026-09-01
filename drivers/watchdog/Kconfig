@@ -28,6 +28,14 @@ menuconfig WATCHDOG
 
 if WATCHDOG
 
+config WATCHDOG_AR7240
+    tristate "Atheros AR7240 Hardware Watchdog support"
+    depends on WATCHDOG
+    help
+      Say Y here to support the hardware watchdog capability on AR7240.
+      The watchdog timeout period is normally one minute but 
+      can be changed with a boot-time parameter.
+
 config WATCHDOG_NOWAYOUT
 	bool "Disable watchdog shutdown on close"
 	help
@@ -54,6 +62,12 @@ config SOFT_WATCHDOG
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called softdog.
+
+config SOFT_WATCHDOG_VPE
+	tristate "Software watchdog for vpe1"
+	depends on WATCHDOG && IFX_VPE_EXT
+	help
+	 A software watchdog for vpe1
 
 config WM831X_WATCHDOG
 	tristate "WM831x watchdog"

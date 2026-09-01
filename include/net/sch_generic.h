@@ -487,7 +487,7 @@ static inline struct sk_buff *qdisc_dequeue_peeked(struct Qdisc *sch)
 	return skb;
 }
 
-static inline void __qdisc_reset_queue(struct Qdisc *sch,
+static inline void __qdisc_reset_queue(struct Qdisc *sch __attribute__ ((unused)),
 				       struct sk_buff_head *list)
 {
 	/*

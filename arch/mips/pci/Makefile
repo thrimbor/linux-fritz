@@ -16,8 +16,16 @@ obj-$(CONFIG_PCI_VR41XX)	+= ops-vr41xx.o pci-vr41xx.o
 obj-$(CONFIG_NEC_MARKEINS)	+= ops-emma2rh.o pci-emma2rh.o fixup-emma2rh.o
 obj-$(CONFIG_PCI_TX4927)	+= ops-tx4927.o
 obj-$(CONFIG_BCM47XX)		+= pci-bcm47xx.o
-obj-$(CONFIG_BCM63XX)		+= pci-bcm63xx.o fixup-bcm63xx.o \
-					ops-bcm63xx.o
+obj-$(CONFIG_MACH_AR7240)	+= fixup-ar7240.o ops-ar7240.o pci-ar7240.o
+obj-$(CONFIG_BCM63XX)		+= pci-bcm63xx.o fixup-bcm63xx.o ops-bcm63xx.o
+ifeq ($(CONFIG_ATH_LOW_POWER_ENABLE),y)
+CFLAGS_pci-ath.o += -DATH_LOW_POWER_ENABLE=1
+endif
+
+obj-$(CONFIG_MACH_AR724x)	+= fixup-ath.o ops-ath.o pci-ar7240.o
+obj-$(CONFIG_MACH_AR934x)	+= fixup-ath.o ops-ath.o pci-ath.o
+obj-$(CONFIG_MACH_QCA955x)	+= fixup-ath.o ops-ath.o pci-ath.o
+obj-$(CONFIG_MACH_AR7100)   += fixup-ar7100.o ops-ar7100.o pci-ar7100.o
 
 #
 # These are still pretty much in the old state, watch, go blind.
@@ -55,7 +63,12 @@ obj-$(CONFIG_ZAO_CAPCELLA)	+= fixup-capcella.o
 obj-$(CONFIG_WR_PPMC)		+= fixup-wrppmc.o
 obj-$(CONFIG_MIKROTIK_RB532)	+= pci-rc32434.o ops-rc32434.o fixup-rc32434.o
 obj-$(CONFIG_CPU_CAVIUM_OCTEON)	+= pci-octeon.o pcie-octeon.o
+obj-$(CONFIG_MACH_FUSIV)	+= pci-fusiv.o
 
 ifdef CONFIG_PCI_MSI
 obj-$(CONFIG_CPU_CAVIUM_OCTEON)	+= msi-octeon.o
 endif
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/arch/mips/pci/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

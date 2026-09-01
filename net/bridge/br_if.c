@@ -20,8 +20,31 @@
 #include <linux/rtnetlink.h>
 #include <linux/if_ether.h>
 #include <net/sock.h>
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+#include <netpro/apload.h>
+#endif /*--- #if defined(CONFIG_FUSIV_VX180) ---*/
 
 #include "br_private.h"
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+char (*get_apid_by_name_ptr)(char *name) = NULL;
+int (*apResetBridgePorts_ptr)(struct net_device *dev) = NULL;
+simResult_t (*apBridgeTable_ptr)( unsigned char, unsigned char, unsigned long) = NULL;
+short (*apAddNewBridgePort_ptr)( struct net_bridge_port* p) = NULL;
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+void (*br_dev_mcast_cleanup)(struct net_bridge* br, struct net_device* dev) =
+                                                                NULL;
+void (*br_mcast_cleanup)(struct net_bridge* br) = NULL;
+#endif
+
+#if (defined(CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) && CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) || (defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH)
+int (*checkPPPoERelayIf_ptr)(struct net_bridge *br, struct net_device *dev) = NULL;
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH
+int (*check_PPPoERelay_bridge_if_ptr)(struct net_bridge *br) = NULL;
+#endif
 
 /*
  * Determine initial path cost based on speed.
@@ -104,6 +127,7 @@ static void destroy_nbp(struct net_bridge_port *p)
 	struct net_device *dev = p->dev;
 
 	p->br = NULL;
+	p->dev->br_port = NULL;
 	p->dev = NULL;
 	dev_put(dev);
 
@@ -131,6 +155,19 @@ static void del_nbp(struct net_bridge_port *p)
 	struct net_bridge *br = p->br;
 	struct net_device *dev = p->dev;
 
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	char apId = -1;
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	if(apResetBridgePorts_ptr != NULL)
+		(*apResetBridgePorts_ptr)(dev);
+#endif
+
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	br_mcast_port_cleanup(p);
+#endif
+
 	sysfs_remove_link(br->ifobj, dev->name);
 
 	dev_set_promiscuity(dev, -1);
@@ -151,6 +188,22 @@ static void del_nbp(struct net_bridge_port *p)
 	kobject_del(&p->kobj);
 
 	call_rcu(&p->rcu, destroy_nbp_rcu);
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	if(get_apid_by_name_ptr != NULL) {
+		apId = (*get_apid_by_name_ptr)(dev->name);
+	} else
+		printk("\nbr_del_if: ap2ap_lkm not initialized properly...\n");
+
+	if(apId != -1) {
+		if(apBridgeTable_ptr != NULL) {
+			(*apBridgeTable_ptr)(apId, 0xDD, 0xff);
+		} else
+			printk("\nbr_del_if: ap2ap_lkm not initialized properly. ..\n");
+        }
+        printk("br_del_if() : is called with apId %d -> %s\n",apId,dev->name);
+#endif
+
 }
 
 /* called with RTNL */
@@ -158,11 +211,34 @@ static void del_br(struct net_bridge *br)
 {
 	struct net_bridge_port *p, *n;
 
+#if (defined(CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) && CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH ) || (defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH)
+
+	/* Check if any of the bridge interfaces are part of PPPoE Relay
+		configuration, if yes, then return */
+
+	if (checkPPPoERelayIf_ptr) {
+		if (!checkPPPoERelayIf_ptr(br, NULL)) {
+			printk("PPPoE Relay/Passthrough is configured on this bridge...." \
+				"First delete PPPoE Relay/Passthrough and then delete the " \
+				"bridge configuration....\r\n");
+			return;
+		}
+	}
+#endif
+
 	list_for_each_entry_safe(p, n, &br->port_list, list) {
 		del_nbp(p);
 	}
 
 	del_timer_sync(&br->gc_timer);
+
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+        // For IGMP Snoop cleanup
+	if (br->mfdb) {
+		if(br_mcast_cleanup)
+		br_mcast_cleanup(br);
+	}
+#endif
 
 	br_sysfs_delbr(br->dev);
 	unregister_netdevice(br->dev);
@@ -205,6 +281,13 @@ static struct net_device *new_bridge_dev(struct net *net, const char *name)
 	br->ageing_time = 300 * HZ;
 
 	br_netfilter_rtable_init(br);
+
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+	br->mfdb = NULL; //Init for IGMP Snoop
+#endif
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	br->bridgeVlanAddr = 0;
+#endif
 
 	INIT_LIST_HEAD(&br->age_list);
 
@@ -258,6 +341,10 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	p->port_no = index;
 	p->flags = 0;
 	br_init_port(p);
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	br_mcast_port_init(p);
+	spin_lock_init(&p->mghash_lock);
+#endif
 	p->state = BR_STATE_DISABLED;
 	br_stp_port_timer_init(p);
 
@@ -376,6 +463,9 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 {
 	struct net_bridge_port *p;
 	int err = 0;
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	int ret = 0;
+#endif
 
 	/* Don't allow bridging non-ethernet like devices */
 	if ((dev->flags & IFF_LOOPBACK) ||
@@ -389,6 +479,21 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	/* Device is already being bridged */
 	if (dev->br_port != NULL)
 		return -EBUSY;
+
+#if defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH
+	/* Check if any of the bridge interfaces are part of PPPoE Relay
+	   configuration, if yes, then return */
+	if (check_PPPoERelay_bridge_if_ptr) {
+		if (!check_PPPoERelay_bridge_if_ptr(br)) {
+			printk("PPPoE Relay is configured on this bridge [%s]....\n" \
+				"First delete PPPoE Relay and then add the " \
+				"interface %s to bridge....\r\n",br->dev->name, dev->name);
+			/* returning 0 even on a failure case, as the function
+                           is getting called twice if FAILURE is returned...*/
+			return 0;
+           }
+       }
+#endif
 
 	p = new_nbp(br, dev);
 	if (IS_ERR(p))
@@ -417,7 +522,16 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	list_add_rcu(&p->list, &br->port_list);
 
 	spin_lock_bh(&br->lock);
-	br_stp_recalculate_bridge_id(br);
+	if (!br->automatic_mac_disabled) {
+		br_stp_recalculate_bridge_id(br);
+	} else {
+		/*
+		 * AVM: be sure that the bridge id is still in the fdb
+		 * note the the port in the fdb-entry will not be overwritten with 0,
+		 * if the entry exists
+		 */
+		br_fdb_insert(br, 0, br->bridge_id.addr);
+	}
 	br_features_recompute(br);
 
 	if ((dev->flags & IFF_UP) && netif_carrier_ok(dev) &&
@@ -430,6 +544,21 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 	dev_set_mtu(br->dev, br_min_mtu(br));
 
 	kobject_uevent(&p->kobj, KOBJ_ADD);
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	if(apAddNewBridgePort_ptr != NULL)
+		ret = (*apAddNewBridgePort_ptr)(p);
+#endif
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	br_ifinfo_notify(RTM_NEWLINK, p);
+#endif
+
+	/*
+	 * AVM/RSP 20100408
+	 * Raise needed_headroom to the maximum of all interfaces in the bridge
+	 */
+	if (dev->needed_headroom > br->dev->needed_headroom) 
+		br->dev->needed_headroom = dev->needed_headroom;
 
 	return 0;
 err2:
@@ -450,15 +579,50 @@ int br_del_if(struct net_bridge *br, struct net_device *dev)
 {
 	struct net_bridge_port *p = dev->br_port;
 
+#if (defined(CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) && CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) || (defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH)
+
+	/* Check if any of the bridge interfaces are part of PPPoE Relay
+	   configuration, if yes, then return */
+	if (checkPPPoERelayIf_ptr) {
+		if (!checkPPPoERelayIf_ptr(br, dev)) {
+			printk("PPPoE Relay/Passthrough is configured on this interface...." \
+				"First delete PPPoE Relay/Passthrough and then delete the " \
+				"bridge configuration....\r\n");
+			/* returning 0 even on a failure case, as the function
+				is getting called twice if FAILURE is returned...*/
+			return 0;
+           }
+       }
+#endif
+
 	if (!p || p->br != br)
 		return -EINVAL;
 
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+	// Cleaning for IGMP Snooping
+	if (br->mfdb) {
+		if (br_dev_mcast_cleanup)
+		br_dev_mcast_cleanup(br , dev);
+	} 
+#endif
 	del_nbp(p);
 
 	spin_lock_bh(&br->lock);
-	br_stp_recalculate_bridge_id(br);
+	if (!br->automatic_mac_disabled) {
+		br_stp_recalculate_bridge_id(br);
+	} else {
+		/*
+		 * AVM: be sure that the bridge id is still in the fdb
+		 * note the the port in the fdb-entry will not be overwritten with 0,
+		 * if the entry exists
+		 */
+		br_fdb_insert(br, 0, br->bridge_id.addr);
+	}
 	br_features_recompute(br);
 	spin_unlock_bh(&br->lock);
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	br_ifinfo_notify(RTM_DELLINK, p);
+#endif
 
 	return 0;
 }
@@ -478,3 +642,23 @@ restart:
 	rtnl_unlock();
 
 }
+
+#if (defined(CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) && CONFIG_FUSIV_KERNEL_PPPOE_PASSTHROUGH) || (defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH)
+EXPORT_SYMBOL(checkPPPoERelayIf_ptr);
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH) && CONFIG_FUSIV_KERNEL_PPPOE_RELAY_FASTPATH
+EXPORT_SYMBOL(check_PPPoERelay_bridge_if_ptr);
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+EXPORT_SYMBOL(br_dev_mcast_cleanup);
+EXPORT_SYMBOL(br_mcast_cleanup);
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+EXPORT_SYMBOL(apResetBridgePorts_ptr);
+EXPORT_SYMBOL(get_apid_by_name_ptr);
+EXPORT_SYMBOL(apBridgeTable_ptr);
+EXPORT_SYMBOL(apAddNewBridgePort_ptr);
+#endif

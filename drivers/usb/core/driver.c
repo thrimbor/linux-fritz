@@ -215,6 +215,13 @@ static int usb_probe_interface(struct device *dev)
 		return -ENODEV;
 	}
 
+#if 1 /* == 20101129 AVM/WK Extension == */
+	if (udev->noprobe) {
+		dev_err(&intf->dev, "Probing is disabled for this device\n");
+		return -ENODEV;
+	}
+#endif
+
 	id = usb_match_id(intf, driver->id_table);
 	if (!id)
 		id = usb_match_dynamic_id(intf, driver);

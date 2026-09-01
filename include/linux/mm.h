@@ -530,7 +530,7 @@ static inline int page_zone_id(struct page *page)
 	return (page->flags >> ZONEID_PGSHIFT) & ZONEID_MASK;
 }
 
-static inline int zone_to_nid(struct zone *zone)
+static inline int zone_to_nid(struct zone *zone __attribute__ ((unused)))
 {
 #ifdef CONFIG_NUMA
 	return zone->node;
@@ -717,6 +717,7 @@ extern void show_free_areas(void);
 
 int shmem_lock(struct file *file, int lock, struct user_struct *user);
 struct file *shmem_file_setup(const char *name, loff_t size, unsigned long flags);
+void shmem_set_file(struct vm_area_struct *vma, struct file *file);
 int shmem_zero_setup(struct vm_area_struct *);
 
 #ifndef CONFIG_MMU
@@ -895,8 +896,8 @@ int vma_wants_writenotify(struct vm_area_struct *vma);
 extern pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr, spinlock_t **ptl);
 
 #ifdef __PAGETABLE_PUD_FOLDED
-static inline int __pud_alloc(struct mm_struct *mm, pgd_t *pgd,
-						unsigned long address)
+static inline int __pud_alloc(struct mm_struct *mm __attribute__ ((unused)), pgd_t *pgd __attribute__ ((unused)),
+						unsigned long address __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -905,8 +906,8 @@ int __pud_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address);
 #endif
 
 #ifdef __PAGETABLE_PMD_FOLDED
-static inline int __pmd_alloc(struct mm_struct *mm, pud_t *pud,
-						unsigned long address)
+static inline int __pmd_alloc(struct mm_struct *mm __attribute__ ((unused)), pud_t *pud __attribute__ ((unused)),
+						unsigned long address __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -1127,10 +1128,10 @@ extern void mm_drop_all_locks(struct mm_struct *mm);
 extern void added_exe_file_vma(struct mm_struct *mm);
 extern void removed_exe_file_vma(struct mm_struct *mm);
 #else
-static inline void added_exe_file_vma(struct mm_struct *mm)
+static inline void added_exe_file_vma(struct mm_struct *mm __attribute__ ((unused)))
 {}
 
-static inline void removed_exe_file_vma(struct mm_struct *mm)
+static inline void removed_exe_file_vma(struct mm_struct *mm __attribute__ ((unused)))
 {}
 #endif /* CONFIG_PROC_FS */
 
@@ -1260,8 +1261,8 @@ extern int apply_to_page_range(struct mm_struct *mm, unsigned long address,
 #ifdef CONFIG_PROC_FS
 void vm_stat_account(struct mm_struct *, unsigned long, struct file *, long);
 #else
-static inline void vm_stat_account(struct mm_struct *mm,
-			unsigned long flags, struct file *file, long pages)
+static inline void vm_stat_account(struct mm_struct *mm __attribute__ ((unused)),
+			unsigned long flags __attribute__ ((unused)), struct file *file __attribute__ ((unused)), long pages __attribute__ ((unused)))
 {
 }
 #endif /* CONFIG_PROC_FS */
@@ -1280,12 +1281,12 @@ extern bool kernel_page_present(struct page *page);
 #endif /* CONFIG_HIBERNATION */
 #else
 static inline void
-kernel_map_pages(struct page *page, int numpages, int enable) {}
+kernel_map_pages(struct page *page __attribute__ ((unused)), int numpages __attribute__ ((unused)), int enable __attribute__ ((unused))) {}
 static inline void enable_debug_pagealloc(void)
 {
 }
 #ifdef CONFIG_HIBERNATION
-static inline bool kernel_page_present(struct page *page) { return true; }
+static inline bool kernel_page_present(struct page *page __attribute__ ((unused))) { return true; }
 #endif /* CONFIG_HIBERNATION */
 #endif
 
@@ -1322,7 +1323,15 @@ void vmemmap_verify(pte_t *, int, unsigned long, unsigned long);
 int vmemmap_populate_basepages(struct page *start_page,
 						unsigned long pages, int node);
 int vmemmap_populate(struct page *start_page, unsigned long pages, int node);
+
 void vmemmap_populate_print_last(void);
+#ifdef CONFIG_FUSIV_USB_OPTIMIZATION
+/*
+ * Function checks read/write page cache and if there are more pages then try
+ * to free unused pages
+ */
+#define FUSIV_MAX_CACHE_MEM_THRHLD  (10*1024*1024)/PAGE_SIZE // No of pages
+#endif
 
 extern int account_locked_memory(struct mm_struct *mm, struct rlimit *rlim,
 				 size_t size);

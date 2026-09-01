@@ -235,7 +235,7 @@ void free_pgd_range(struct mmu_gather *tlb,
 {
 	pgd_t *pgd;
 	unsigned long next;
-	unsigned long start;
+	unsigned long start __maybe_unused__;
 
 	/*
 	 * The next few lines have given us lots of grief...
@@ -1100,6 +1100,7 @@ unsigned long zap_page_range(struct vm_area_struct *vma, unsigned long address,
 		tlb_finish_mmu(tlb, address, end);
 	return end;
 }
+EXPORT_SYMBOL_GPL(zap_page_range);
 
 /**
  * zap_vma_ptes - remove ptes mapping the vma
@@ -2498,6 +2499,7 @@ int vmtruncate_range(struct inode *inode, loff_t offset, loff_t end)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(vmtruncate_range);
 
 /*
  * We enter with non-exclusive mmap_sem (to exclude vma changes,
@@ -3025,8 +3027,41 @@ static inline int handle_pte_fault(struct mm_struct *mm,
 		 * This still avoids useless tlb flushes for .text page faults
 		 * with threads.
 		 */
-		if (flags & FAULT_FLAG_WRITE)
+		if (flags & FAULT_FLAG_WRITE) {
+            /*--------------------------------------------------------------------------*\
+                TC 0:
+                Call Trace:
+                [<80092dc0>] generic_exec_single+0xa0/0x120
+                [<80092f48>] smp_call_function_single+0x108/0x200
+                [<80093448>] smp_call_function+0x28/0x40
+                [<8002bf58>] flush_tlb_page+0x58/0x1a0
+                [<800c8f80>] do_wp_page+0x280/0xc80
+                [<800cba7c>] handle_mm_fault+0x2dc/0x340
+                [<80031324>] do_page_fault+0x1c4/0x520
+                [<80002e20>] ret_from_exception+0x0/0xc
+
+                TC 1:
+                Call Trace:
+                [<8002cb30>] mips_mt_prepare_frametrace+0xd0/0x160
+                [<800276d8>] arch_trigger_all_cpu_backtrace+0x98/0xc0
+                [<8025a7ec>] __spin_lock_debug+0x14c/0x194
+                [<8025aa48>] _raw_spin_lock+0xa8/0x100
+                [<800cb96c>] handle_mm_fault+0x1cc/0x340
+                [<80031324>] do_page_fault+0x1c4/0x520
+                [<80002e20>] ret_from_exception+0x0/0xc
+                [<80101648>] do_sys_poll+0x1c8/0x260
+                [<801017f0>] sys_poll+0x90/0x120
+                [<80005130>] stack_done+0x20/0x3c
+            \*--------------------------------------------------------------------------*/
+#ifdef CONFIG_SMP
+            pte_unmap_unlock(pte, ptl);
 			flush_tlb_page(vma, address);
+            printk(KERN_ERR "[%s] SMP early unlock\n", __FUNCTION__);
+            return 0;
+#else /*--- #ifdef CONFIG_SMP ---*/
+			flush_tlb_page(vma, address);
+#endif /*--- #else ---*/ /*--- #ifdef CONFIG_SMP ---*/
+        }
 	}
 unlock:
 	pte_unmap_unlock(pte, ptl);

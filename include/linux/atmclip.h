@@ -18,4 +18,8 @@
 
 #define	SIOCMKCLIP	_IO('a',ATMIOC_CLIP)	/* create IP interface */
 
+#ifdef CONFIG_MACH_FUSIV
+#define SIOCDLCLIP	_IO('d',ATMIOC_CLIP)	/* delete IP interface */
+#endif
+
 #endif

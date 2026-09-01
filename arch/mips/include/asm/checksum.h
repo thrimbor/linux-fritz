@@ -27,10 +27,10 @@
  *
  * it's best to have buff aligned on a 32-bit boundary
  */
-__wsum csum_partial(const void *buff, int len, __wsum sum);
+__wsum csum_partial(const void *buff, int len, __wsum sum) __attribute__ ((hot));
 
 __wsum __csum_partial_copy_user(const void *src, void *dst,
-				int len, __wsum sum, int *err_ptr);
+				int len, __wsum sum, int *err_ptr) __attribute__ ((hot));
 
 /*
  * this is a new version of the above that records errors it finds in *errp,
@@ -68,11 +68,12 @@ __wsum csum_and_copy_to_user(const void *src, void __user *dst, int len,
  * we have just one address space, so this is identical to the above)
  */
 __wsum csum_partial_copy_nocheck(const void *src, void *dst,
-				       int len, __wsum sum);
+				       int len, __wsum sum) __attribute__ ((hot));
 
 /*
  *	Fold a partial checksum without adding pseudo headers
  */
+static inline __sum16 csum_fold(__wsum sum) __attribute__ ((hot));
 static inline __sum16 csum_fold(__wsum sum)
 {
 	__asm__(
@@ -91,6 +92,14 @@ static inline __sum16 csum_fold(__wsum sum)
 	return (__force __sum16)sum;
 }
 
+#ifdef CONFIG_ATHRS_HW_CSUM
+typedef struct
+{
+    __sum16 (*compute_csum_hw)(const void *buff, int len);
+} csum_hw_ops;
+extern csum_hw_ops *csum_hw;
+#endif
+
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,
  *	which always checksum on 4 octet boundaries.
@@ -98,12 +107,26 @@ static inline __sum16 csum_fold(__wsum sum)
  *	By Jorge Cwik <jorge@laser.satlink.net>, adapted for linux by
  *	Arnt Gulbrandsen.
  */
+static inline __sum16 ip_fast_csum(const void *iph, unsigned int ihl) __attribute__ ((hot));
 static inline __sum16 ip_fast_csum(const void *iph, unsigned int ihl)
 {
 	const unsigned int *word = iph;
 	const unsigned int *stop = word + ihl;
 	unsigned int csum;
 	int carry;
+#if 0
+#ifdef CONFIG_ATHRS_HW_CSUM
+        __sum16 (*compute_csum)(const void *buff, int len);
+        __sum16 csum;
+        if (csum_hw) {
+                compute_csum = rcu_dereference(csum_hw->compute_csum_hw);
+                if (compute_csum) {
+                        csum = compute_csum(iph, ihl); 
+                        printk("hw checksum = 0x%x\n", csum);
+                }
+        }
+#endif
+#endif
 
 	csum = word[0];
 	csum += word[1];

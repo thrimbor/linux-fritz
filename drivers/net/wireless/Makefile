@@ -62,3 +62,7 @@ obj-$(CONFIG_MAC80211_HWSIM)	+= mac80211_hwsim.o
 obj-$(CONFIG_WL12XX)	+= wl12xx/
 
 obj-$(CONFIG_IWM)	+= iwmc3200wifi/
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/net/wireless/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

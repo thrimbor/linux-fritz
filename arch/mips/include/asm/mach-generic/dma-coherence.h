@@ -68,4 +68,12 @@ static inline int plat_device_is_coherent(struct device *dev)
 #endif
 }
 
+static inline int plat_addr_is_coherent(unsigned long addr)
+{
+    if((addr & 0xE0000000) == 0xA0000000) {
+        return 1;
+    }
+	return 0;
+}
+
 #endif /* __ASM_MACH_GENERIC_DMA_COHERENCE_H */

@@ -32,6 +32,7 @@ struct timezone {
 extern struct timezone sys_tz;
 
 /* Parameters used to convert the timespec values: */
+#undef MSEC_PER_SEC
 #define MSEC_PER_SEC	1000L
 #define USEC_PER_MSEC	1000L
 #define NSEC_PER_USEC	1000L

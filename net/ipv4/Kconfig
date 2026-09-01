@@ -627,3 +627,10 @@ config TCP_MD5SIG
 
 	  If unsure, say N.
 
+config IP_MULTICAST_FASTFORWARD
+	tristate "IP: fast multicasting forwarding (AVM)"
+	depends on IP_MULTICAST
+	help
+	  This code is for fast forwarding of UDP multicast streams.
+
+source "net/ipv4/Kconfig.ifx"

@@ -822,6 +822,10 @@ static void lec_pop(struct atm_vcc *vcc, struct sk_buff *skb)
 	}
 }
 
+#if defined(CONFIG_IFX_PPA_A6) || defined(CONFIG_IFX_PPA_A5) || defined(CONFIG_IFX_PPA_A4)
+extern void (*ppa_hook_mpoa_setup)(struct atm_vcc *, int, int);
+#endif
+
 static int lec_vcc_attach(struct atm_vcc *vcc, void __user *arg)
 {
 	struct lec_vcc_priv *vpriv;
@@ -848,6 +852,11 @@ static int lec_vcc_attach(struct atm_vcc *vcc, void __user *arg)
 		      &ioc_data, vcc, vcc->push);
 	vcc->proto_data = dev_lec[ioc_data.dev_num];
 	vcc->push = lec_push;
+
+#if defined(CONFIG_IFX_PPA_A6) || defined(CONFIG_IFX_PPA_A5) || defined(CONFIG_IFX_PPA_A4)
+	if ( ppa_hook_mpoa_setup )
+		ppa_hook_mpoa_setup(vcc, 0, 0);	//  EoA w/o FCS, VC mux
+#endif
 	return 0;
 }
 

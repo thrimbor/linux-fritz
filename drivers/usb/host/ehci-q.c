@@ -143,6 +143,7 @@ qh_refresh (struct ehci_hcd *ehci, struct ehci_qh *qh)
 
 static void qh_link_async(struct ehci_hcd *ehci, struct ehci_qh *qh);
 
+static void ehci_clear_tt_buffer_complete(struct usb_hcd *hcd, struct usb_host_endpoint *ep) __maybe_unused__;
 static void ehci_clear_tt_buffer_complete(struct usb_hcd *hcd,
 		struct usb_host_endpoint *ep)
 {
@@ -213,6 +214,7 @@ static int qtd_copy_status (
 
 	/* serious "can't proceed" faults reported by the hardware */
 	if (token & QTD_STS_HALT) {
+
 		if (token & QTD_STS_BABBLE) {
 			/* FIXME "must" disable babbling device's port too */
 			status = -EOVERFLOW;
@@ -355,8 +357,13 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		/* clean up any state from previous QTD ...*/
 		if (last) {
 			if (likely (last->urb != urb)) {
+
 				ehci_urb_done(ehci, last->urb, last_status);
 				count++;
+#ifdef CONFIG_FUSIV_USB_LED
+                              if ( last->urb->dev && last->urb->dev->portnum )
+                                usb_port|=(1 << (last->urb->dev->portnum-1));
+#endif
 				last_status = -EINPROGRESS;
 			}
 			ehci_qtd_free (ehci, last);
@@ -371,6 +378,22 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		rmb ();
 		token = hc32_to_cpu(ehci, qtd->hw_token);
 
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+		if ((qh->needs_nmi_wa) && (usb_pipein(urb->pipe)) && ((token & QTD_STS_ACTIVE) == 0)) {
+			unsigned long flags;
+			mod_timer(&ehci->nmi_wa_timer, jiffies + msecs_to_jiffies(NMI_WA_DELAY_MS));
+
+			spin_lock_irqsave(&ehci->nmi_wa_lock, flags);
+			if (ehci->nmi_wa_status == NMI_WA_STATUS_IDLE) {
+				ehci->nmi_wa_status = NMI_WA_STATUS_WORK;
+				spin_unlock_irqrestore(&ehci->nmi_wa_lock, flags);
+				ath_workaround_nmi_link_settimer(ehci->nmi_wa_handle, NMI_WA_TIMECOUNT_WORK);
+			} else {
+				spin_unlock_irqrestore(&ehci->nmi_wa_lock, flags);
+			}
+		}
+#endif
+
 		/* always clean up qtds the hc de-activated */
  retry_xacterr:
 		if ((token & QTD_STS_ACTIVE) == 0) {
@@ -378,6 +401,11 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 			/* on STALL, error, and short reads this urb must
 			 * complete and all its qtds must be recycled.
 			 */
+#ifdef EHCI_DBE_COUNT
+			if (token & QTD_STS_DBE) {
+				DBE_count ++;
+			}
+#endif
 			if ((token & QTD_STS_HALT) != 0) {
 
 				/* retry transaction errors until we
@@ -513,6 +541,10 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		ehci_urb_done(ehci, last->urb, last_status);
 		count++;
 		ehci_qtd_free (ehci, last);
+#ifdef CONFIG_FUSIV_USB_LED
+                if ( last->urb->dev && last->urb->dev->portnum )
+                    usb_port|=(1 << (last->urb->dev->portnum-1));
+#endif
 	}
 
 	/* Do we need to rescan for URBs dequeued during a giveback? */
@@ -561,7 +593,18 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		/* otherwise, unlink already started */
 		}
 	}
-
+#ifdef CONFIG_FUSIV_USB_LED
+       if (usb_port)
+       {
+        u8 i=0;
+        while ( i < FUSIV_USB_MAX_LEDS )
+        {
+          if ( usb_port & 1 << i )
+              fusiv_usb_led_set(i,FUSIV_USB_LED_XTR_BIT);
+          i++;
+        }
+       }
+#endif
 	return count;
 }
 
@@ -916,6 +959,20 @@ done:
 		return NULL;
 	}
 
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+
+	#define MAGIC_VENDOR 0x216F
+	#define MAGIC_DEBUG_EP 0x03
+	if(type == PIPE_BULK) {
+		/* Ignore debug endpoint */
+		if (unlikely((le16_to_cpu(urb->dev->descriptor.idVendor) == MAGIC_VENDOR) && is_input && (usb_pipeendpoint(urb->pipe) == MAGIC_DEBUG_EP))) {
+			qh->needs_nmi_wa = 0;
+		} else {
+			qh->needs_nmi_wa = 1;	
+		}
+	}
+#endif
+
 	/* NOTE:  if (PIPE_INTERRUPT) { scheduler sets s-mask } */
 
 	/* init as live, toggle clear, advance to dummy */
@@ -1074,7 +1131,7 @@ submit_async (
 	struct list_head	*qtd_list,
 	gfp_t			mem_flags
 ) {
-	struct ehci_qtd		*qtd;
+	struct ehci_qtd		*qtd __maybe_unused__;
 	int			epnum;
 	unsigned long		flags;
 	struct ehci_qh		*qh = NULL;
@@ -1109,6 +1166,31 @@ submit_async (
 		goto done;
 	}
 
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+
+	if ((qh->needs_nmi_wa) && (usb_pipeout(urb->pipe))) {
+		unsigned long flags, timer = NMI_WA_DELAY_MS;
+		spin_lock_irqsave(&ehci->nmi_wa_lock, flags);
+        if(ehci->nmi_wa_status == NMI_WA_STATUS_NOINIT) {
+            ehci->nmi_wa_handle = ath_workaround_nmi_link("ehci");
+            if(ehci->nmi_wa_handle >= 0) {
+                ehci->nmi_wa_status = NMI_WA_STATUS_WORK;
+            } else {
+                /*--- printk("%s: link failed\n", __func__); ---*/
+                timer = NMI_WA_DELAY_MS_INITFAILED;
+            }
+        }
+        spin_unlock_irqrestore(&ehci->nmi_wa_lock, flags);
+        mod_timer(&ehci->nmi_wa_timer, jiffies + msecs_to_jiffies(timer));
+		spin_lock_irqsave(&ehci->nmi_wa_lock, flags);
+		if (ehci->nmi_wa_status == NMI_WA_STATUS_IDLE) {
+			ath_workaround_nmi_link_settimer(ehci->nmi_wa_handle, NMI_WA_TIMECOUNT_WORK);
+			ehci->nmi_wa_status = NMI_WA_STATUS_WORK;
+		}
+		spin_unlock_irqrestore(&ehci->nmi_wa_lock, flags);
+	}
+#endif
+
 	/* Control/bulk operations through TTs don't need scheduling,
 	 * the HC and TT handle it when the TT has a buffer ready.
 	 */
@@ -1132,6 +1214,10 @@ static void end_unlink_async (struct ehci_hcd *ehci)
 
 	iaa_watchdog_done(ehci);
 
+#ifdef CONFIG_FUSIV_VX160
+	if(ehci_readl (ehci, &ehci->regs->async_next) == qh->qh_dma)
+		ehci_writel (ehci, (u32)ehci->async->qh_dma, &ehci->regs->async_next);
+#endif
 	// qh->hw_next = cpu_to_hc32(qh->qh_dma);
 	qh->qh_state = QH_STATE_IDLE;
 	qh->qh_next.qh = NULL;

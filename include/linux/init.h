@@ -40,6 +40,15 @@
 
 /* These are for everybody (although not all archs will actually
    discard it in modules) */
+
+#ifdef CONFIG_LTQ_BR_OPT
+#define __bridge	__section(bridge)
+#endif
+
+#ifdef CONFIG_LTQ_SYS_OPT
+#define __system       __section(system)
+#endif
+
 #define __init		__section(.init.text) __cold notrace
 #define __initdata	__section(.init.data)
 #define __initconst	__section(.init.rodata)
@@ -336,5 +345,7 @@ void __init parse_early_options(char *cmdline);
 #else
 #define __exit_p(x) NULL
 #endif
+
+#define __maybe_unused__    __attribute__((unused))
 
 #endif /* _LINUX_INIT_H */

@@ -124,106 +124,106 @@ unsigned long mem_cgroup_soft_limit_reclaim(struct zone *zone, int order,
 #else /* CONFIG_CGROUP_MEM_RES_CTLR */
 struct mem_cgroup;
 
-static inline int mem_cgroup_newpage_charge(struct page *page,
-					struct mm_struct *mm, gfp_t gfp_mask)
+static inline int mem_cgroup_newpage_charge(struct page *page __attribute__ ((unused)),
+					struct mm_struct *mm __attribute__ ((unused)), gfp_t gfp_mask __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int mem_cgroup_cache_charge(struct page *page,
-					struct mm_struct *mm, gfp_t gfp_mask)
+static inline int mem_cgroup_cache_charge(struct page *page __attribute__ ((unused)),
+					struct mm_struct *mm __attribute__ ((unused)), gfp_t gfp_mask __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int mem_cgroup_try_charge_swapin(struct mm_struct *mm,
-		struct page *page, gfp_t gfp_mask, struct mem_cgroup **ptr)
+static inline int mem_cgroup_try_charge_swapin(struct mm_struct *mm __attribute__ ((unused)),
+		struct page *page __attribute__ ((unused)), gfp_t gfp_mask __attribute__ ((unused)), struct mem_cgroup **ptr __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void mem_cgroup_commit_charge_swapin(struct page *page,
-					  struct mem_cgroup *ptr)
+static inline void mem_cgroup_commit_charge_swapin(struct page *page __attribute__ ((unused)),
+					  struct mem_cgroup *ptr __attribute__ ((unused)))
 {
 }
 
-static inline void mem_cgroup_cancel_charge_swapin(struct mem_cgroup *ptr)
+static inline void mem_cgroup_cancel_charge_swapin(struct mem_cgroup *ptr __attribute__ ((unused)))
 {
 }
 
-static inline void mem_cgroup_uncharge_page(struct page *page)
+static inline void mem_cgroup_uncharge_page(struct page *page __attribute__ ((unused)))
 {
 }
 
-static inline void mem_cgroup_uncharge_cache_page(struct page *page)
+static inline void mem_cgroup_uncharge_cache_page(struct page *page __attribute__ ((unused)))
 {
 }
 
-static inline int mem_cgroup_shmem_charge_fallback(struct page *page,
-			struct mm_struct *mm, gfp_t gfp_mask)
+static inline int mem_cgroup_shmem_charge_fallback(struct page *page __attribute__ ((unused)),
+			struct mm_struct *mm __attribute__ ((unused)), gfp_t gfp_mask __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void mem_cgroup_add_lru_list(struct page *page, int lru)
+static inline void mem_cgroup_add_lru_list(struct page *page __attribute__ ((unused)), int lru __attribute__ ((unused)))
 {
 }
 
-static inline void mem_cgroup_del_lru_list(struct page *page, int lru)
+static inline void mem_cgroup_del_lru_list(struct page *page __attribute__ ((unused)), int lru __attribute__ ((unused)))
 {
 	return ;
 }
 
-static inline void mem_cgroup_rotate_lru_list(struct page *page, int lru)
+static inline void mem_cgroup_rotate_lru_list(struct page *page __attribute__ ((unused)), int lru __attribute__ ((unused)))
 {
 	return ;
 }
 
-static inline void mem_cgroup_del_lru(struct page *page)
+static inline void mem_cgroup_del_lru(struct page *page __attribute__ ((unused)))
 {
 	return ;
 }
 
 static inline void
-mem_cgroup_move_lists(struct page *page, enum lru_list from, enum lru_list to)
+mem_cgroup_move_lists(struct page *page __attribute__ ((unused)), enum lru_list from __attribute__ ((unused)), enum lru_list to __attribute__ ((unused)))
 {
 }
 
-static inline int mm_match_cgroup(struct mm_struct *mm, struct mem_cgroup *mem)
+static inline int mm_match_cgroup(struct mm_struct *mm __attribute__ ((unused)), struct mem_cgroup *mem __attribute__ ((unused)))
 {
 	return 1;
 }
 
-static inline int task_in_mem_cgroup(struct task_struct *task,
-				     const struct mem_cgroup *mem)
+static inline int task_in_mem_cgroup(struct task_struct *task __attribute__ ((unused)),
+				     const struct mem_cgroup *mem __attribute__ ((unused)))
 {
 	return 1;
 }
 
 static inline int
-mem_cgroup_prepare_migration(struct page *page, struct mem_cgroup **ptr)
+mem_cgroup_prepare_migration(struct page *page __attribute__ ((unused)), struct mem_cgroup **ptr __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void mem_cgroup_end_migration(struct mem_cgroup *mem,
-					struct page *oldpage,
-					struct page *newpage)
+static inline void mem_cgroup_end_migration(struct mem_cgroup *mem __attribute__ ((unused)),
+					struct page *oldpage __attribute__ ((unused)),
+					struct page *newpage __attribute__ ((unused)))
 {
 }
 
-static inline int mem_cgroup_get_reclaim_priority(struct mem_cgroup *mem)
+static inline int mem_cgroup_get_reclaim_priority(struct mem_cgroup *mem __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void mem_cgroup_note_reclaim_priority(struct mem_cgroup *mem,
-						int priority)
+static inline void mem_cgroup_note_reclaim_priority(struct mem_cgroup *mem __attribute__ ((unused)),
+						int priority __attribute__ ((unused)))
 {
 }
 
-static inline void mem_cgroup_record_reclaim_priority(struct mem_cgroup *mem,
-						int priority)
+static inline void mem_cgroup_record_reclaim_priority(struct mem_cgroup *mem __attribute__ ((unused)),
+						int priority __attribute__ ((unused)))
 {
 }
 
@@ -232,56 +232,56 @@ static inline bool mem_cgroup_disabled(void)
 	return true;
 }
 
-static inline bool mem_cgroup_oom_called(struct task_struct *task)
+static inline bool mem_cgroup_oom_called(struct task_struct *task __attribute__ ((unused)))
 {
 	return false;
 }
 
 static inline int
-mem_cgroup_inactive_anon_is_low(struct mem_cgroup *memcg)
+mem_cgroup_inactive_anon_is_low(struct mem_cgroup *memcg __attribute__ ((unused)))
 {
 	return 1;
 }
 
 static inline int
-mem_cgroup_inactive_file_is_low(struct mem_cgroup *memcg)
+mem_cgroup_inactive_file_is_low(struct mem_cgroup *memcg __attribute__ ((unused)))
 {
 	return 1;
 }
 
 static inline unsigned long
-mem_cgroup_zone_nr_pages(struct mem_cgroup *memcg, struct zone *zone,
-			 enum lru_list lru)
+mem_cgroup_zone_nr_pages(struct mem_cgroup *memcg __attribute__ ((unused)), struct zone *zone __attribute__ ((unused)),
+			 enum lru_list lru __attribute__ ((unused)))
 {
 	return 0;
 }
 
 
 static inline struct zone_reclaim_stat*
-mem_cgroup_get_reclaim_stat(struct mem_cgroup *memcg, struct zone *zone)
+mem_cgroup_get_reclaim_stat(struct mem_cgroup *memcg __attribute__ ((unused)), struct zone *zone __attribute__ ((unused)))
 {
 	return NULL;
 }
 
 static inline struct zone_reclaim_stat*
-mem_cgroup_get_reclaim_stat_from_page(struct page *page)
+mem_cgroup_get_reclaim_stat_from_page(struct page *page __attribute__ ((unused)))
 {
 	return NULL;
 }
 
 static inline void
-mem_cgroup_print_oom_info(struct mem_cgroup *memcg, struct task_struct *p)
+mem_cgroup_print_oom_info(struct mem_cgroup *memcg __attribute__ ((unused)), struct task_struct *p __attribute__ ((unused)))
 {
 }
 
-static inline void mem_cgroup_update_mapped_file_stat(struct page *page,
-							int val)
+static inline void mem_cgroup_update_mapped_file_stat(struct page *page __attribute__ ((unused)),
+							int val __attribute__ ((unused)))
 {
 }
 
 static inline
-unsigned long mem_cgroup_soft_limit_reclaim(struct zone *zone, int order,
-					    gfp_t gfp_mask, int nid, int zid)
+unsigned long mem_cgroup_soft_limit_reclaim(struct zone *zone __attribute__ ((unused)), int order __attribute__ ((unused)),
+					    gfp_t gfp_mask __attribute__ ((unused)), int nid __attribute__ ((unused)), int zid __attribute__ ((unused)))
 {
 	return 0;
 }

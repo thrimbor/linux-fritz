@@ -38,6 +38,7 @@ static struct mtd_chip_driver *get_mtd_chip_driver (const char *name)
 
 	list_for_each(pos, &chip_drvs_list) {
 		this = list_entry(pos, typeof(*this), list);
+        /*--- printk("[%s] %s == %s \n", __FUNCTION__, this->name, name); ---*/
 
 		if (!strcmp(this->name, name)) {
 			ret = this;
@@ -57,30 +58,34 @@ static struct mtd_chip_driver *get_mtd_chip_driver (const char *name)
 
 struct mtd_info *do_map_probe(const char *name, struct map_info *map)
 {
-	struct mtd_chip_driver *drv;
-	struct mtd_info *ret;
+    struct mtd_chip_driver *drv;
+    struct mtd_info *ret;
 
-	drv = get_mtd_chip_driver(name);
+    printk("[%s] driver_name=%s\n",__FUNCTION__,name);
+    drv = get_mtd_chip_driver(name);
 
-	if (!drv && !request_module("%s", name))
-		drv = get_mtd_chip_driver(name);
+    if (!drv && !request_module("%s", name)) {
+        drv = get_mtd_chip_driver(name);
+    }
 
-	if (!drv)
-		return NULL;
+    if (!drv) {
+        return NULL;
+    }
 
-	ret = drv->probe(map);
+    ret = drv->probe(map);
 
-	/* We decrease the use count here. It may have been a
-	   probe-only module, which is no longer required from this
-	   point, having given us a handle on (and increased the use
-	   count of) the actual driver code.
-	*/
-	module_put(drv->module);
+    /* We decrease the use count here. It may have been a
+    probe-only module, which is no longer required from this
+    point, having given us a handle on (and increased the use
+    count of) the actual driver code.
+    */
+    module_put(drv->module);
 
-	if (ret)
-		return ret;
+    if (ret) {
+        return ret;
+    }
 
-	return NULL;
+    return NULL;
 }
 /*
  * Destroy an MTD device which was created for a map device.

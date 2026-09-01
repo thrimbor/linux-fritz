@@ -8,6 +8,7 @@ obj-$(CONFIG_PHYLIB) += phy/
 
 obj-$(CONFIG_TI_DAVINCI_EMAC) += davinci_emac.o
 
+obj-$(CONFIG_AVM_CPMAC) += avm_cpmac/
 obj-$(CONFIG_E1000) += e1000/
 obj-$(CONFIG_E1000E) += e1000e/
 obj-$(CONFIG_IBM_NEW_EMAC) += ibm_newemac/
@@ -31,6 +32,8 @@ obj-$(CONFIG_ENIC) += enic/
 obj-$(CONFIG_JME) += jme.o
 obj-$(CONFIG_BE2NET) += benet/
 obj-$(CONFIG_VMXNET3) += vmxnet3/
+obj-$(CONFIG_IMQ) += imq/
+
 
 gianfar_driver-objs := gianfar.o \
 		gianfar_ethtool.o \
@@ -165,6 +168,7 @@ obj-$(CONFIG_SLHC) += slhc.o
 obj-$(CONFIG_XEN_NETDEV_FRONTEND) += xen-netfront.o
 
 obj-$(CONFIG_DUMMY) += dummy.o
+obj-$(CONFIG_IMQ) += imq.o
 obj-$(CONFIG_IFB) += ifb.o
 obj-$(CONFIG_MACVLAN) += macvlan.o
 obj-$(CONFIG_DE600) += de600.o
@@ -278,6 +282,7 @@ obj-$(CONFIG_ENP2611_MSF_NET) += ixp2000/
 obj-$(CONFIG_NETCONSOLE) += netconsole.o
 
 obj-$(CONFIG_FS_ENET) += fs_enet/
+obj-$(CONFIG_AVM_NET_LINK_AUDIO) += nlaudio/
 
 obj-$(CONFIG_NETXEN_NIC) += netxen/
 obj-$(CONFIG_NIU) += niu.o
@@ -285,3 +290,8 @@ obj-$(CONFIG_VIRTIO_NET) += virtio_net.o
 obj-$(CONFIG_SFC) += sfc/
 
 obj-$(CONFIG_WIMAX) += wimax/
+
+obj-$(CONFIG_AG7240) += ag7240/
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/net/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

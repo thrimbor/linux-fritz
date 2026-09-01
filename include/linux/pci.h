@@ -816,6 +816,9 @@ void pci_walk_bus(struct pci_bus *top, int (*cb)(struct pci_dev *, void *),
 int pci_cfg_space_size_ext(struct pci_dev *dev);
 int pci_cfg_space_size(struct pci_dev *dev);
 unsigned char pci_bus_max_busnr(struct pci_bus *bus);
+int pci_find_preexist_bus_nr(const struct pci_bus *from);
+int pcibios_host_nr(void);
+int pcibios_1st_host_bus_nr(void);
 
 int pci_set_vga_state(struct pci_dev *pdev, bool decode,
 		      unsigned int command_bits, bool change_bridge);

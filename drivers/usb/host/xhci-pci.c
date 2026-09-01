@@ -54,6 +54,11 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
 	int			retval;
 
+#ifdef XHCI_FWDOWNLOAD_72020x
+    XHCI_FWDOWNLOAD(hcd);
+    XHCI_FWUNLOAD(hcd);
+#endif
+
 	xhci->cap_regs = hcd->regs;
 	xhci->op_regs = hcd->regs +
 		HC_LENGTH(xhci_readl(xhci, &xhci->cap_regs->hc_capbase));
@@ -63,11 +68,12 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	xhci->hcs_params1 = xhci_readl(xhci, &xhci->cap_regs->hcs_params1);
 	xhci->hcs_params2 = xhci_readl(xhci, &xhci->cap_regs->hcs_params2);
 	xhci->hcs_params3 = xhci_readl(xhci, &xhci->cap_regs->hcs_params3);
-	xhci->hcc_params = xhci_readl(xhci, &xhci->cap_regs->hc_capbase);
+	xhci->hcc_params  = xhci_readl(xhci, &xhci->cap_regs->hc_capbase);
 	xhci->hci_version = HC_VERSION(xhci->hcc_params);
-	xhci->hcc_params = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
+	xhci->hcc_params  = xhci_readl(xhci, &xhci->cap_regs->hcc_params);
 	xhci_print_registers(xhci);
 
+	#if 0
 	/* Look for vendor-specific quirks */
 	if (pdev->vendor == PCI_VENDOR_ID_FRESCO_LOGIC &&
 			pdev->device == PCI_DEVICE_ID_FRESCO_LOGIC_PDK &&
@@ -76,6 +82,7 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 			xhci_dbg(xhci, "QUIRK: Fresco Logic xHC needs configure"
 					" endpoint cmd after reset endpoint\n");
 	}
+	#endif
 
 	/* Make sure the HC is halted. */
 	retval = xhci_halt(xhci);

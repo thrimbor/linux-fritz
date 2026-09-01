@@ -70,8 +70,16 @@
 
 #include "kmap_skb.h"
 
+#if (defined(CONFIG_FUSIV_ENABLE_MBUF_AP) && CONFIG_FUSIV_ENABLE_MBUF_AP) || (defined(CONFIG_FUSIV_ENABLE_AP_MBUF) && CONFIG_FUSIV_ENABLE_AP_MBUF)
+unsigned char* (*ap_get_cluster_ptr)(struct sk_buff *skbuff, int size) = NULL;
+void   (*putCluster_ptr)(void *ulPtr) = NULL;
+#endif
+
 static struct kmem_cache *skbuff_head_cache __read_mostly;
 static struct kmem_cache *skbuff_fclone_cache __read_mostly;
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+static struct kmem_cache *skbuff_cb_store_cache __read_mostly;
+#endif
 
 static void sock_pipe_buf_release(struct pipe_inode_info *pipe,
 				  struct pipe_buffer *buf)
@@ -91,6 +99,80 @@ static int sock_pipe_buf_steal(struct pipe_inode_info *pipe,
 	return 1;
 }
 
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+/* Control buffer save/restore for IMQ devices */
+struct skb_cb_table {
+	void			*cb_next;
+	atomic_t		refcnt;
+	char      		cb[48];
+};
+
+static DEFINE_SPINLOCK(skb_cb_store_lock);
+
+int skb_save_cb(struct sk_buff *skb)
+{
+	struct skb_cb_table *next;
+
+	next = kmem_cache_alloc(skbuff_cb_store_cache, GFP_ATOMIC);
+	if (!next)
+		return -ENOMEM;
+
+	BUILD_BUG_ON(sizeof(skb->cb) != sizeof(next->cb));
+
+	memcpy(next->cb, skb->cb, sizeof(skb->cb));
+	next->cb_next = skb->cb_next;
+
+	atomic_set(&next->refcnt, 1);
+
+	skb->cb_next = next;
+	return 0;
+}
+EXPORT_SYMBOL(skb_save_cb);
+
+int skb_restore_cb(struct sk_buff *skb)
+{
+	struct skb_cb_table *next;
+
+	if (!skb->cb_next)
+		return 0;
+
+	next = skb->cb_next;
+
+	BUILD_BUG_ON(sizeof(skb->cb) != sizeof(next->cb));
+
+	memcpy(skb->cb, next->cb, sizeof(skb->cb));
+	skb->cb_next = next->cb_next;
+
+	spin_lock(&skb_cb_store_lock);
+
+	if (atomic_dec_and_test(&next->refcnt)) {
+		kmem_cache_free(skbuff_cb_store_cache, next);
+	}
+
+	spin_unlock(&skb_cb_store_lock);
+
+	return 0;
+}
+EXPORT_SYMBOL(skb_restore_cb);
+
+static void skb_copy_stored_cb(struct sk_buff *new, const struct sk_buff *old)
+{
+	struct skb_cb_table *next;
+
+	if (!old->cb_next) {
+		new->cb_next = 0;
+		return;
+	}
+
+	spin_lock(&skb_cb_store_lock);
+
+	next = old->cb_next;
+	atomic_inc(&next->refcnt);
+	new->cb_next = next;
+
+	spin_unlock(&skb_cb_store_lock);
+}
+#endif
 
 /* Pipe buffer operations for a socket. */
 static struct pipe_buf_operations sock_pipe_buf_ops = {
@@ -148,11 +230,165 @@ void skb_under_panic(struct sk_buff *skb, int sz, void *here)
 }
 EXPORT_SYMBOL(skb_under_panic);
 
+static unsigned int global_uniq_id = 1;
+
 /* 	Allocate a new skbuff. We do this ourselves so we can fill in a few
  *	'private' fields and also do memory statistics to find all the
  *	[BEEP] leaks.
  *
  */
+
+#ifdef CONFIG_PRIV_SKB_MEM
+#define PRIV_SKB_MEM_2K (CONFIG_PRIV_SKB_MEM_2K * 0x100000)
+#define PRIV_SKB_MEM_4K (CONFIG_PRIV_SKB_MEM_4K * 0x100000)
+u8 priv_skb_mem[PRIV_SKB_MEM_2K + PRIV_SKB_MEM_4K + 
+                SMP_CACHE_BYTES];
+#define PRIV_BUFSIZE_2K 2048
+#define PRIV_BUFSIZE_4K 4096
+#define PRIV_SKB2K_MAX (PRIV_SKB_MEM_2K / PRIV_BUFSIZE_2K)
+#define PRIV_SKB4K_MAX (PRIV_SKB_MEM_4K / PRIV_BUFSIZE_4K)
+u32 ps_head2k = 0;
+u32 ps_tail2k = 0;
+u32 ps_head4k = 0;
+u32 ps_tail4k = 0;
+u8 *priv_skb_list_2k[PRIV_SKB2K_MAX];
+u8 *priv_skb_list_4k[PRIV_SKB4K_MAX];
+spinlock_t priv_skb2k_lock;
+spinlock_t priv_skb4k_lock;
+#ifdef PRIV_SKB_DEBUG 
+u32 ps_2k_alloc_cnt = 0;
+u32 ps_2k_free_cnt = 0;
+#endif
+
+void priv_skb_init(void)
+{
+    u8 * priv_skb_mem_2k = (u8 *)((((unsigned long)priv_skb_mem) + SMP_CACHE_BYTES - 1) & 
+                                ~(SMP_CACHE_BYTES - 1));
+    u8 * priv_skb_mem_4k = (u8 *)(((unsigned long)priv_skb_mem_2k) + PRIV_SKB_MEM_2K);
+
+    /* Init 2K skb list */
+    ps_head2k = 0;
+    ps_tail2k = 0;
+    
+    while (ps_tail2k < PRIV_SKB2K_MAX) {
+        priv_skb_list_2k[ps_tail2k] = (u8 *)(((unsigned long)priv_skb_mem_2k) + 
+                                        (ps_tail2k * PRIV_BUFSIZE_2K));
+        ps_tail2k++;
+    }
+    ps_tail2k = -1;
+#ifdef PRIV_SKB_DEBUG 
+    ps_2k_alloc_cnt = 0;
+    ps_2k_free_cnt = 0;
+#endif
+    spin_lock_init(&priv_skb2k_lock);
+
+    /* Init 4K skb list */
+    ps_head4k = 0;
+    ps_tail4k = 0;
+    
+    while (ps_tail4k < PRIV_SKB4K_MAX) {
+        priv_skb_list_4k[ps_tail4k] = (u8 *)(((unsigned long)priv_skb_mem_4k) + 
+                                        (ps_tail4k * PRIV_BUFSIZE_4K));
+        ps_tail4k++;
+    }
+    ps_tail4k = -1;
+    spin_lock_init(&priv_skb4k_lock);
+
+    printk(KERN_ERR "\n****************ALLOC***********************\n");
+    printk(KERN_ERR " Packet mem: %x (0x%x bytes)\n", (unsigned)priv_skb_mem_2k, sizeof(priv_skb_mem) - SMP_CACHE_BYTES);
+    printk(KERN_ERR "********************************************\n\n");
+}
+
+u8* priv_skb_get_2k(void) 
+{
+    u8 *skbmem;
+    unsigned long flags = 0;
+    int from_irq = in_irq();
+
+    if (!from_irq)
+        spin_lock_irqsave(priv_skb2k_lock, flags);
+
+    if(ps_head2k != ps_tail2k) {
+        skbmem = priv_skb_list_2k[ps_head2k];
+        priv_skb_list_2k[ps_head2k] = NULL;
+        ps_head2k = (ps_head2k + 1) % PRIV_SKB2K_MAX; 
+#ifdef PRIV_SKB_DEBUG 
+        ps_2k_alloc_cnt++;
+#endif
+    } else  {
+        skbmem = NULL;
+    }
+
+    if (!from_irq)
+        spin_unlock_irqrestore(priv_skb2k_lock, flags);
+
+    return skbmem;
+}
+
+u8* priv_skb_get_4k(void) 
+{
+    u8 *skbmem;
+    unsigned long flags = 0;
+    int from_irq = in_irq();
+
+    if (!from_irq)
+        spin_lock_irqsave(priv_skb4k_lock, flags);
+    if(ps_head4k != ps_tail4k) {
+        skbmem = priv_skb_list_4k[ps_head4k];
+        priv_skb_list_4k[ps_head4k] = NULL;
+        ps_head4k = (ps_head4k + 1) % PRIV_SKB4K_MAX; 
+    } else  {
+        skbmem = NULL;
+    }
+    if (!from_irq)
+        spin_unlock_irqrestore(priv_skb4k_lock, flags);
+    return skbmem;
+}
+
+u8* priv_skbmem_get(int size) 
+{
+    if(size <= PRIV_BUFSIZE_2K)
+        return priv_skb_get_2k();
+    else 
+        return priv_skb_get_4k();
+}
+
+void priv_skb_free_2k(u8 *skbmem) 
+{
+    unsigned long flags = 0;
+    int from_irq = in_irq();
+
+    if (!from_irq)
+        spin_lock_irqsave(priv_skb2k_lock, flags);
+    ps_tail2k = (ps_tail2k + 1) % PRIV_SKB2K_MAX;
+    priv_skb_list_2k[ps_tail2k] = skbmem;
+#ifdef PRIV_SKB_DEBUG 
+    ps_2k_free_cnt++;
+#endif
+    if (!from_irq)
+        spin_unlock_irqrestore(priv_skb2k_lock, flags);
+}
+
+void priv_skb_free_4k(u8 *skbmem) 
+{
+    unsigned long flags = 0;
+    int from_irq = in_irq();
+    if (!from_irq)
+        spin_lock_irqsave(priv_skb4k_lock, flags);
+    ps_tail4k = (ps_tail4k + 1) % PRIV_SKB4K_MAX;
+    priv_skb_list_4k[ps_tail4k] = skbmem;
+    if (!from_irq)
+        spin_unlock_irqrestore(priv_skb4k_lock, flags);
+}
+
+void priv_skbmem_free(u8 *skbmem, int size) 
+{
+    if(size <= PRIV_BUFSIZE_2K)
+        priv_skb_free_2k(skbmem);
+    else 
+        priv_skb_free_4k(skbmem);
+}
+#endif
 
 /**
  *	__alloc_skb	-	allocate a network buffer
@@ -184,9 +420,30 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	if (!skb)
 		goto out;
 
+#if defined(CONFIG_IFX_PPA)
+#define MIN_IFX_ATM_SKB_SPACE   1564
+#define MAX_SKB_HEADROOM         256
+	{
+		int minsize = ( 1 << CONFIG_MIPS_L1_CACHE_SHIFT ) + NET_SKB_PAD_ALLOC + MIN_IFX_ATM_SKB_SPACE + MAX_SKB_HEADROOM;
+		if (size < minsize) size = minsize;
+	}
+#endif
+
 	size = SKB_DATA_ALIGN(size);
+#ifdef CONFIG_PRIV_SKB_MEM
+    if (unlikely((size > PRIV_BUFSIZE_4K) || ((data = priv_skbmem_get(size + 
+            sizeof(struct skb_shared_info))) == NULL))) {
+	    data = kmalloc_node_track_caller(size + sizeof(struct skb_shared_info),
+			    gfp_mask, node);
+    }
+#elif (defined(CONFIG_FUSIV_ENABLE_MBUF_AP) && CONFIG_FUSIV_ENABLE_MBUF_AP) || (defined(CONFIG_FUSIV_ENABLE_AP_MBUF) && CONFIG_FUSIV_ENABLE_AP_MBUF)
+	if( ap_get_cluster_ptr != NULL )
+		data =  (u8*)(*ap_get_cluster_ptr)(skb,size + sizeof(struct skb_shared_info));
+	if(data == NULL)
+#else
 	data = kmalloc_node_track_caller(size + sizeof(struct skb_shared_info),
 			gfp_mask, node);
+#endif
 	if (!data)
 		goto nodata;
 
@@ -202,12 +459,16 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	skb->data = data;
 	skb_reset_tail_pointer(skb);
 	skb->end = skb->tail + size;
+    skb->uniq_id = global_uniq_id++ & 0xffffff;
 	kmemcheck_annotate_bitfield(skb, flags1);
 	kmemcheck_annotate_bitfield(skb, flags2);
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
 	skb->mac_header = ~0U;
 #endif
 
+#ifdef CONFIG_ATHRS_HW_NAT
+	skb->ath_hw_nat_fw_flags = 0;
+#endif
 	/* make sure we initialize shinfo sequentially */
 	shinfo = skb_shinfo(skb);
 	atomic_set(&shinfo->dataref, 1);
@@ -259,9 +520,9 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev,
 	int node = dev->dev.parent ? dev_to_node(dev->dev.parent) : -1;
 	struct sk_buff *skb;
 
-	skb = __alloc_skb(length + NET_SKB_PAD, gfp_mask, 0, node);
+	skb = __alloc_skb(length + NET_SKB_PAD_ALLOC, gfp_mask, 0, node);
 	if (likely(skb)) {
-		skb_reserve(skb, NET_SKB_PAD);
+		skb_reserve(skb, NET_SKB_PAD_ALLOC);
 		skb->dev = dev;
 	}
 	return skb;
@@ -310,6 +571,22 @@ struct sk_buff *dev_alloc_skb(unsigned int length)
 }
 EXPORT_SYMBOL(dev_alloc_skb);
 
+
+/* AVM/RSP 20100413 
+ * This version of dev_alloc_skb does not die if there are no 
+ * free pages in interrupt context
+ */
+struct sk_buff *dev_alloc_skb_nowarn(unsigned int length)
+{
+	/*
+	 * There is more code here than it seems:
+	 * __dev_alloc_skb is an inline
+	 */
+	return __dev_alloc_skb(length, GFP_ATOMIC | __GFP_NOWARN);
+}
+EXPORT_SYMBOL(dev_alloc_skb_nowarn);
+
+
 static void skb_drop_list(struct sk_buff **listp)
 {
 	struct sk_buff *list = *listp;
@@ -336,21 +613,76 @@ static void skb_clone_fraglist(struct sk_buff *skb)
 		skb_get(list);
 }
 
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+#if 0
+static void memdump(char *text, unsigned char *ptr, int len) {
+    int ii, iii; 
+    printk(KERN_ERR "[%s] len=%d\n", text, len);
+    for(ii = 0 ; ii < len ; ii += 16) {
+        printk(KERN_ERR "0x%08p: ", ptr + ii);
+        for(iii = 0 ; iii < 16 ; iii++) {
+            printk("0x%02x ", ptr[iii+ii]);
+        }
+        printk("\n");
+    }
+}
+#endif
+
 static void skb_release_data(struct sk_buff *skb)
 {
+#ifdef CONFIG_PRIV_SKB_MEM
+    u32 size;
+#endif
+
 	if (!skb->cloned ||
 	    !atomic_sub_return(skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1,
 			       &skb_shinfo(skb)->dataref)) {
+        /*--- printk(KERN_ERR "[%s] skb_shinfo(skb)=%p nr_frags=%d\n", __FUNCTION__, (void*)skb_shinfo(skb), ---*/ 
+                /*--- skb_shinfo(skb)->nr_frags ); ---*/
+
 		if (skb_shinfo(skb)->nr_frags) {
 			int i;
-			for (i = 0; i < skb_shinfo(skb)->nr_frags; i++)
+        /*--- memdump("skb", skb, sizeof(*skb)); ---*/
+        /*--- memdump("skb->data", skb->data, 1600); ---*/
+			for (i = 0; i < skb_shinfo(skb)->nr_frags; i++){
+#if 0
+                printk(KERN_ERR "[%s] put_page: i=%d, frags.page=%p frags.offset=%d, frags.size=%d\n", 
+                        __FUNCTION__, i,
+                        (void*)skb_shinfo(skb)->frags[i].page, 
+                               skb_shinfo(skb)->frags[i].page_offset, 
+                               skb_shinfo(skb)->frags[i].size); 
+#endif
 				put_page(skb_shinfo(skb)->frags[i].page);
+            }
 		}
 
 		if (skb_has_frags(skb))
 			skb_drop_fraglist(skb);
 
+#if (defined(CONFIG_FUSIV_ENABLE_MBUF_AP) && CONFIG_FUSIV_ENABLE_MBUF_AP) || (defined(CONFIG_FUSIV_ENABLE_AP_MBUF) && CONFIG_FUSIV_ENABLE_AP_MBUF)
+                if( (skb->apAllocAddr != NULL) && ((int)skb->apAllocAddr != 0x1)) {
+                        if(putCluster_ptr != NULL)
+                                (*putCluster_ptr)(skb->apAllocAddr);
+                        //else
+                        //      printk("\n skbuff1: fusivlib_lkm not initilizedproperly...\n");
+                        skb->apAllocAddr = NULL;
+                }
+                else if((int)skb->apAllocAddr == 0x1)
+                        skb->apAllocAddr = NULL;
+                else
+#endif
+#ifdef CONFIG_PRIV_SKB_MEM
+        if (likely((skb->head - priv_skb_mem) < sizeof(priv_skb_mem))) {
+            size = skb->end - skb->head + sizeof(struct skb_shared_info);
+            priv_skbmem_free(skb->head, size);
+        } else {
+            kfree(skb->head); 
+        }
+#else
 		kfree(skb->head);
+#endif
 	}
 }
 
@@ -398,6 +730,31 @@ static void skb_release_head_state(struct sk_buff *skb)
 		WARN_ON(in_irq());
 		skb->destructor(skb);
 	}
+
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	/* This should not happen. When it does, avoid memleak by restoring
+	the chain of cb-backups. */
+	while(skb->cb_next != NULL) {
+		if (net_ratelimit())
+			printk(KERN_WARNING "IMQ: kfree_skb: skb->cb_next: "
+				"%08x\n", (unsigned int)skb->cb_next);
+
+		skb_restore_cb(skb);
+	}
+	/* This should not happen either, nf_queue_entry is nullified in
+	 * imq_dev_xmit(). If we have non-NULL nf_queue_entry then we are
+	 * leaking entry pointers, maybe memory. We don't know if this is
+	 * pointer to already freed memory, or should this be freed.
+	 * If this happens we need to add refcounting, etc for nf_queue_entry.
+	 */
+	if (skb->nf_queue_entry && net_ratelimit())
+		printk(KERN_WARNING
+				"IMQ: kfree_skb: skb->nf_queue_entry != NULL");
+#endif
+#if defined(CONFIG_GENERIC_CONNTRACK)
+	generic_ct_put(skb->generic_ct);
+#endif
+
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	nf_conntrack_put(skb->nfct);
 	nf_conntrack_put_reasm(skb->nfct_reasm);
@@ -433,6 +790,13 @@ static void skb_release_all(struct sk_buff *skb)
 void __kfree_skb(struct sk_buff *skb)
 {
 	skb_release_all(skb);
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	memset(&skb->apFlowData, 0, sizeof(skb->apFlowData));
+#else
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+	memset(&skb->qosInfo, 0, sizeof(skb->qosInfo));
+#endif
+#endif
 	kfree_skbmem(skb);
 }
 EXPORT_SYMBOL(__kfree_skb);
@@ -527,6 +891,7 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 {
 	new->tstamp		= old->tstamp;
 	new->dev		= old->dev;
+	new->input_dev  = old->input_dev;
 	new->transport_header	= old->transport_header;
 	new->network_header	= old->network_header;
 	new->mac_header		= old->mac_header;
@@ -535,6 +900,13 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->sp			= secpath_get(old->sp);
 #endif
 	memcpy(new->cb, old->cb, sizeof(old->cb));
+#ifdef CONFIG_AVM_PA
+    memcpy(&new->avm_pa.pktinfo, &old->avm_pa.pktinfo,
+	       sizeof(old->avm_pa.pktinfo));
+#endif
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	skb_copy_stored_cb(new, old);
+#endif
 	new->csum		= old->csum;
 	new->local_df		= old->local_df;
 	new->pkt_type		= old->pkt_type;
@@ -559,6 +931,9 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 #endif
 #endif
 	new->vlan_tci		= old->vlan_tci;
+#ifdef CONFIG_ATHRS_HW_NAT
+        new->ath_hw_nat_fw_flags = old->ath_hw_nat_fw_flags;
+#endif
 
 	skb_copy_secmark(new, old);
 }
@@ -582,15 +957,29 @@ static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 	n->cloned = 1;
 	n->nohdr = 0;
 	n->destructor = NULL;
+ 	n->destructor_info = 0;
 	C(tail);
 	C(end);
 	C(head);
 	C(data);
+#if (defined(CONFIG_FUSIV_ENABLE_MBUF_AP) && CONFIG_FUSIV_ENABLE_MBUF_AP) || (defined(CONFIG_FUSIV_ENABLE_AP_MBUF) && CONFIG_FUSIV_ENABLE_AP_MBUF)
+	C(apAllocAddr);
+#endif
 	C(truesize);
 	atomic_set(&n->users, 1);
 
 	atomic_inc(&(skb_shinfo(skb)->dataref));
 	skb->cloned = 1;
+
+	C(uniq_id);
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	C(apFlowData);
+#else
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+	C(qosInfo);
+#endif
+#endif
 
 	return n;
 #undef C
@@ -661,6 +1050,17 @@ static void copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 #endif
 
 	__copy_skb_header(new, old);
+
+    new->uniq_id = old->uniq_id;
+
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	memcpy(&new->apFlowData, &old->apFlowData, sizeof(old->apFlowData));
+#else
+#if defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS) || defined(CONFIG_FUSIV_KERNEL_HOST_IPQOS_MODULE)
+	memcpy(&new->qosInfo, &old->qosInfo, sizeof(old->qosInfo));
+#endif
+#endif
 
 #ifndef NET_SKBUFF_DATA_USES_OFFSET
 	/* {transport,network,mac}_header are relative to skb->head */
@@ -813,7 +1213,14 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 
 	size = SKB_DATA_ALIGN(size);
 
+#ifdef CONFIG_PRIV_SKB_MEM
+    if (unlikely((size > PRIV_BUFSIZE_4K) || ((data = priv_skbmem_get(size + 
+            sizeof(struct skb_shared_info))) == NULL))) {
+	    data = kmalloc(size + sizeof(struct skb_shared_info), gfp_mask);
+    }
+#else
 	data = kmalloc(size + sizeof(struct skb_shared_info), gfp_mask);
+#endif
 	if (!data)
 		goto nodata;
 
@@ -854,6 +1261,9 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	skb->csum_start       += nhead;
 	skb->cloned   = 0;
 	skb->hdr_len  = 0;
+#if (defined(CONFIG_FUSIV_ENABLE_MBUF_AP) && CONFIG_FUSIV_ENABLE_MBUF_AP) || (defined(CONFIG_FUSIV_ENABLE_AP_MBUF) && CONFIG_FUSIV_ENABLE_AP_MBUF)
+	skb->apAllocAddr = NULL;
+#endif
 	skb->nohdr    = 0;
 	atomic_set(&skb_shinfo(skb)->dataref, 1);
 	return 0;
@@ -2785,7 +3195,47 @@ void __init skb_init(void)
 						0,
 						SLAB_HWCACHE_ALIGN|SLAB_PANIC,
 						NULL);
+#if defined(CONFIG_IMQ) || defined(CONFIG_IMQ_MODULE)
+	skbuff_cb_store_cache = kmem_cache_create("skbuff_cb_store_cache",
+						  sizeof(struct skb_cb_table),
+						  0,
+						  SLAB_HWCACHE_ALIGN|SLAB_PANIC,
+						  NULL);
+#endif
+#if defined(CONFIG_GENERIC_CONNTRACK)
+	generic_ct_init();
+#endif
+#ifdef CONFIG_PRIV_SKB_MEM
+    priv_skb_init();    
+#endif
 }
+
+/*
+ * Function to mark priority based on specific criteria
+ */
+int skb_mark_priority(struct sk_buff *skb)
+{
+        unsigned old_priority=skb->priority;
+#ifdef CONFIG_IFX_IPQOS
+        /*
+         * IPQoS in UGW: added copy of nfmark set in classifier to skb->priority to be used in hardware queues
+         */
+        /* nfmark range = 1-8 if QoS is enabled; priority range = 0-7; else preserve original priority */
+	if(skb->mark)
+	{
+		unsigned new_mark;
+        	new_mark = ((skb->mark >> 6) & NFMARK_SHIFT_MASK);
+        	if (new_mark)
+                	skb->priority = new_mark - 1;
+	}
+
+#else
+        /* TODO: Use DSCP for IP, preserve for others */
+
+#endif /* CONFIG_IFX_IPQOS */
+        return (old_priority);
+}
+EXPORT_SYMBOL(skb_mark_priority);
 
 /**
  *	skb_to_sgvec - Fill a scatter-gather list from a socket buffer
@@ -3083,3 +3533,46 @@ void __skb_warn_lro_forwarding(const struct sk_buff *skb)
 			   " while LRO is enabled\n", skb->dev->name);
 }
 EXPORT_SYMBOL(__skb_warn_lro_forwarding);
+
+#if (defined(CONFIG_FUSIV_ENABLE_MBUF_AP) && CONFIG_FUSIV_ENABLE_MBUF_AP) || (defined(CONFIG_FUSIV_ENABLE_AP_MBUF) && CONFIG_FUSIV_ENABLE_AP_MBUF)
+struct sk_buff *ap_get_skb(char *buf, unsigned int size)
+{
+  struct sk_buff *skb = NULL;
+  struct skb_shared_info *shinfo;
+  u8 *data;
+
+  /* Commenting the size to increment 16 bytes, to support receiving
+     of 1728 byte packet to a single skbuff */
+  //size += 16;
+  /* Get the HEAD */
+  skb = kmem_cache_alloc(skbuff_head_cache, GFP_ATOMIC  & ~__GFP_DMA);
+  if (!skb)
+  {
+    printk("phm_devget : alloc_skb() Failed. \n");
+    return NULL;
+  }
+  atomic_inc(&skbs_in_use);
+  /* Get the DATA. Size must match skb_add_mtu(). */
+  size = SKB_DATA_ALIGN(size);
+  data = buf;
+  memset(skb,0,offsetof(struct sk_buff, truesize));
+  skb->truesize = size + sizeof(struct sk_buff);
+  atomic_set(&skb->users, 1);
+  skb->head = data;
+  skb->end  = data + size;
+/* make sure we initialize shinfo sequentially */
+  shinfo = skb_shinfo(skb);
+  atomic_set(&shinfo->dataref, 1);
+  shinfo->nr_frags  = 0;
+  shinfo->gso_size = 0;
+  shinfo->gso_segs = 0;
+  shinfo->gso_type = 0;
+  shinfo->ip6_frag_id = 0;
+  shinfo->frag_list = NULL;
+  skb_reserve(skb, 16);
+  return skb;
+}
+EXPORT_SYMBOL(ap_get_cluster_ptr);
+EXPORT_SYMBOL(putCluster_ptr);
+EXPORT_SYMBOL(ap_get_skb);
+#endif

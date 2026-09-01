@@ -67,6 +67,7 @@ obj-$(CONFIG_RTC_DRV_R9701)	+= rtc-r9701.o
 obj-$(CONFIG_RTC_DRV_RS5C313)	+= rtc-rs5c313.o
 obj-$(CONFIG_RTC_DRV_RS5C348)	+= rtc-rs5c348.o
 obj-$(CONFIG_RTC_DRV_RS5C372)	+= rtc-rs5c372.o
+obj-$(CONFIG_RTC_DRV_RTC7301)	+= rtc-rtc7301.o
 obj-$(CONFIG_RTC_DRV_RX8025)	+= rtc-rx8025.o
 obj-$(CONFIG_RTC_DRV_RX8581)	+= rtc-rx8581.o
 obj-$(CONFIG_RTC_DRV_S35390A)	+= rtc-s35390a.o
@@ -85,3 +86,21 @@ obj-$(CONFIG_RTC_DRV_VR41XX)	+= rtc-vr41xx.o
 obj-$(CONFIG_RTC_DRV_WM831X)	+= rtc-wm831x.o
 obj-$(CONFIG_RTC_DRV_WM8350)	+= rtc-wm8350.o
 obj-$(CONFIG_RTC_DRV_X1205)	+= rtc-x1205.o
+obj-$(CONFIG_RTC_DRV_AVM_REF_CLOCK)	+= rtc-avm.o
+
+ifeq ($(CONFIG_RTC_DRV_AVM_REF_CLOCK),m)
+CFLAGS_rtc-avm.o += -DRTC_AVM_DEVICE_COUNT=1 # -DRTC_AVM_DEBUG=1
+
+extra-y			 += S09-rtc
+
+$(src)/S09-rtc: FORCE
+	rm -rf $(src)/S09-rtc
+	echo "#! /bin/sh" >$(src)/S09-rtc
+	echo "/sbin/modprobe rtc-avm" >>$(src)/S09-rtc
+	echo 'rtc_major=`grep rtc /proc/devices`' >>$(src)/S09-rtc
+	echo 'rtc_major=$${rtc_major%% rtc}' >>$(src)/S09-rtc
+	echo 'mknod /dev/rtc0 c $${rtc_major} 0' >>$(src)/S09-rtc
+#	echo 'mknod /dev/rtc1 c $${rtc_major} 1' >>$(src)/S09-rtc
+	mkdir -p $(INSTALL_MOD_PATH)/etc/init.d
+	cp $(src)/S09-rtc $(INSTALL_MOD_PATH)/etc/init.d/S09-rtc
+endif

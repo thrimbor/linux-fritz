@@ -42,6 +42,92 @@ static int __init maxtcs(char *str)
 
 __setup("maxtcs=", maxtcs);
 
+#ifdef CONFIG_IFX_VPE_EXT
+int stlb;
+
+static int __init istlbshared(char *str)
+{
+       get_option(&str, &stlb);
+
+       return 1;
+}
+
+__setup("vpe_tlb_shared=", istlbshared);
+
+int vpe0_wired;
+
+static int __init vpe0wired(char *str)
+{
+       get_option(&str, &vpe0_wired);
+
+       return 1;
+}
+
+__setup("vpe0_wired_tlb_entries=", vpe0wired);
+
+int vpe1_wired;
+
+static int __init vpe1wired(char *str)
+{
+       get_option(&str, &vpe1_wired);
+
+       return 1;
+}
+
+__setup("vpe1_wired_tlb_entries=", vpe1wired);
+
+#ifdef CONFIG_MIPS_MT_SMTC
+extern int nostlb;
+#endif
+void configure_tlb(void)
+{
+               int vpeflags, tcflags, tlbsiz;
+        unsigned int config1val;
+       vpeflags = dvpe();
+       tcflags = dmt();
+       write_c0_vpeconf0((read_c0_vpeconf0() | VPECONF0_MVP));
+       write_c0_mvpcontrol((read_c0_mvpcontrol() | MVPCONTROL_VPC));
+       mips_ihb();
+       //printk("stlb = %d, vpe0_wired = %d vpe1_wired=%d\n", stlb,vpe0_wired, vpe1_wired);
+       if (stlb) {
+                if (!(read_c0_mvpconf0() & MVPCONF0_TLBS)) {
+                       emt(tcflags);
+                        evpe(vpeflags);
+                        return;
+                }
+
+               write_c0_mvpcontrol(read_c0_mvpcontrol() | MVPCONTROL_STLB);
+               write_c0_wired(vpe0_wired + vpe1_wired);
+                if (((read_vpe_c0_config() & MIPS_CONF_MT) >> 7) == 1) {
+                        config1val = read_vpe_c0_config1();
+                        tlbsiz = (((config1val >> 25) & 0x3f) + 1);
+                        if (tlbsiz > 64)
+                                tlbsiz = 64;
+                        cpu_data[0].tlbsize = current_cpu_data.tlbsize = tlbsiz;
+                }
+
+       }
+       else {
+               write_c0_mvpcontrol(read_c0_mvpcontrol() & ~MVPCONTROL_STLB);
+               write_c0_wired(vpe0_wired);
+       }
+
+       ehb();
+       write_c0_mvpcontrol((read_c0_mvpcontrol() & ~MVPCONTROL_VPC));
+       ehb();
+        local_flush_tlb_all();
+
+       printk("Wired TLB entries for Linux read_c0_wired() = %d\n", read_c0_wired());
+#ifdef CONFIG_MIPS_MT_SMTC
+       nostlb = !stlb;
+#endif
+       emt(tcflags);
+       evpe(vpeflags);
+}
+
+#endif
+
+
 /*
  * Dump new MIPS MT state for the core. Does not leave TCs halted.
  * Takes an argument which taken to be a pre-call MVPControl value.
@@ -108,12 +194,17 @@ void mips_mt_regdump(unsigned long mvpctl)
 			tcstatval = read_tc_c0_tcstatus();
 			printk("  TC %d\n", tc);
 		}
-		printk("   TCStatus : %08lx\n", tcstatval);
-		printk("   TCBind : %08lx\n", read_tc_c0_tcbind());
-		printk("   TCRestart : %08lx %pS\n",
+		printk("   TCStatus:  %08lx\n", tcstatval);
+		printk("   TCBind:    %08lx\n", read_tc_c0_tcbind());
+		printk("   TCRestart: %08lx %pS\n",
 		       read_tc_c0_tcrestart(), (void *) read_tc_c0_tcrestart());
-		printk("   TCHalt : %08lx\n", haltval);
-		printk("   TCContext : %08lx\n", read_tc_c0_tccontext());
+		printk("   TCHalt:    %08lx\n", haltval);
+		printk("   TCContext: %08lx\n", read_tc_c0_tccontext());
+        if(!haltval) {
+            printk("   SP:        %08lx\n", read_tc_gpr_sp());
+            printk("   GP:        %08lx\n", read_tc_gpr_gp());
+            printk("   RA:        %08lx %pS\n", read_tc_gpr_ra(), (void *)read_tc_gpr_ra());
+        }
 		if (!haltval)
 			write_tc_c0_tchalt(0);
 	}
@@ -125,6 +216,58 @@ void mips_mt_regdump(unsigned long mvpctl)
 	local_irq_restore(flags);
 }
 
+/*--------------------------------------------------------------------------------*\
+ * ret: -1 invalid tc
+ *       1 tc is halted
+\*--------------------------------------------------------------------------------*/
+int mips_mt_prepare_frametrace(unsigned int tc, struct pt_regs *regs) {
+	unsigned long flags;
+	unsigned long vpflags;
+	unsigned long mvpconf0;
+	int ntc;
+	int ret = 0;
+	unsigned long haltval;
+#ifdef CONFIG_MIPS_MT_SMTC
+	void smtc_soft_dump(void);
+#endif /* CONFIG_MIPT_MT_SMTC */
+
+    memset(regs, 0, sizeof(*regs));
+	local_irq_save(flags);
+	vpflags = dvpe();
+	mvpconf0 = read_c0_mvpconf0();
+	ntc = ((mvpconf0 & MVPCONF0_PTC) >> MVPCONF0_PTC_SHIFT) + 1;
+    if(tc >= ntc) {
+        ret = -1;
+        goto end_mt_prepare_registers;
+    }
+    settc(tc);
+	if (read_tc_c0_tcbind() == read_c0_tcbind()) {
+        /*--- printk(KERN_ERR "[%s]: read_tc_c0_tcbind() == read_c0_tcbind()\n", __FUNCTION__); ---*/
+        /* Are we dumping ourself?  */
+		haltval = 0; /* Then we're not halted, and mustn't be */
+        /*--- goto end_mt_prepare_registers; ---*/
+    } else {
+        haltval = read_tc_c0_tchalt();
+        /*--- printk(KERN_ERR "[%s]: %ld = read_tc_c0_tchalt()\n", __FUNCTION__, read_tc_c0_tchalt()); ---*/
+        write_tc_c0_tchalt(1);
+        ret = haltval;
+    }
+    /*--- regs->regs[28] = read_tc_gpr_gp(); ---*/
+    regs->regs[29] = read_tc_gpr_sp();
+    regs->regs[31] = read_tc_gpr_ra();
+    regs->cp0_epc =  read_tc_c0_tcrestart();  /*--- pc ---*/
+    /*--- printk("%s: $28 %08lx $29 %08lx $31 %08lx PC=%08lx\n", __func__, regs->regs[28], regs->regs[29], regs->regs[31], regs->cp0_epc); ---*/
+	if (!haltval) {
+        write_tc_c0_tchalt(0);
+    }
+end_mt_prepare_registers:
+#ifdef CONFIG_MIPS_MT_SMTC
+	smtc_soft_dump();
+#endif /* CONFIG_MIPT_MT_SMTC */
+	evpe(vpflags);
+	local_irq_restore(flags);
+    return ret;
+}
 static int mt_opt_norps;
 static int mt_opt_rpsctl = -1;
 static int mt_opt_nblsu = -1;
@@ -287,6 +430,9 @@ void mips_mt_set_cpuoptions(void)
 		printk("Mapped %ld ITC cells starting at 0x%08x\n",
 			((itcblkgrn & 0x7fe00000) >> 20), itc_base);
 	}
+#ifdef CONFIG_IFX_VPE_EXT
+        configure_tlb();
+#endif
 }
 
 /*

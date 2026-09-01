@@ -40,8 +40,10 @@
  * more simply, switch to a global freelist not per-channel ones.
  * Note: at full speed, 64 descriptors == 4K bulk data.
  */
-#define NUM_TXCHAN_BD       64
-#define NUM_RXCHAN_BD       64
+
+/* 20110518 AVM/WK: more BDs like in 2.6.19 */
+#define NUM_TXCHAN_BD       128//64
+#define NUM_RXCHAN_BD       128//64
 
 static inline void cpu_drain_writebuffer(void)
 {
@@ -347,11 +349,16 @@ static void cppi_channel_release(struct dma_channel *channel)
 }
 
 /* Context: controller irqlocked */
+/* AVM/WK Warning: some functions rely on ep select called here.
+**                   even if not debug mode 
+*/
 static void
 cppi_dump_rx(int level, struct cppi_channel *c, const char *tag)
 {
 	void __iomem			*base = c->controller->mregs;
+#ifdef CONFIG_USB_MUSB_DEBUG
 	struct cppi_rx_stateram __iomem	*rx = c->state_ram;
+#endif
 
 	musb_ep_select(base, c->index + 1);
 
@@ -381,7 +388,9 @@ static void
 cppi_dump_tx(int level, struct cppi_channel *c, const char *tag)
 {
 	void __iomem			*base = c->controller->mregs;
+#ifdef CONFIG_USB_MUSB_DEBUG
 	struct cppi_tx_stateram __iomem	*tx = c->state_ram;
+#endif
 
 	musb_ep_select(base, c->index + 1);
 
@@ -436,9 +445,9 @@ static void cppi_dump_rxbd(const char *tag, struct cppi_descriptor *bd)
 }
 #endif
 
+#ifdef CONFIG_USB_MUSB_DEBUG
 static void cppi_dump_rxq(int level, const char *tag, struct cppi_channel *rx)
 {
-#ifdef CONFIG_USB_MUSB_DEBUG
 	struct cppi_descriptor	*bd;
 
 	if (!_dbg_level(level))
@@ -448,8 +457,8 @@ static void cppi_dump_rxq(int level, const char *tag, struct cppi_channel *rx)
 		cppi_dump_rxbd("last", rx->last_processed);
 	for (bd = rx->head; bd; bd = bd->next)
 		cppi_dump_rxbd("active", bd);
-#endif
 }
+#endif
 
 
 /* NOTE:  DaVinci autoreq is ignored except for host side "RNDIS" mode RX;
@@ -459,8 +468,8 @@ static inline int cppi_autoreq_update(struct cppi_channel *rx,
 		void __iomem *tibase, int onepacket, unsigned n_bds)
 {
 	u32	val;
-
-#ifdef	RNDIS_RX_IS_USABLE
+/* AVM/WK 20110426 use AUTOREQ */
+#if 1  //ifdef	RNDIS_RX_IS_USABLE
 	u32	tmp;
 	/* assert(is_host_active(musb)) */
 
@@ -472,7 +481,8 @@ static inline int cppi_autoreq_update(struct cppi_channel *rx,
 	 * for all but the last one, maybe in two segments.
 	 */
 	if (!onepacket) {
-#if 0
+/* AVM/WK 20110426 use AUTOREQ */
+#if 1 //0
 		/* use two segments, autoreq "all" then the last "never" */
 		val |= ((0x3) << (rx->index * 2));
 		n_bds--;
@@ -499,9 +509,10 @@ static inline int cppi_autoreq_update(struct cppi_channel *rx,
 	/* REQPKT is turned off after each segment */
 	if (n_bds && rx->channel.actual_len) {
 		void __iomem	*regs = rx->hw_ep->regs;
-
 		val = musb_readw(regs, MUSB_RXCSR);
-		if (!(val & MUSB_RXCSR_H_REQPKT)) {
+/* AVM/WK 20110426 use AUTOREQ */
+	//	if (!(val & MUSB_RXCSR_H_REQPKT)) {
+		if ((val & (MUSB_RXCSR_H_REQPKT | MUSB_RXCSR_FIFOFULL | MUSB_RXCSR_RXPKTRDY)) == 0) {
 			val |= MUSB_RXCSR_H_REQPKT | MUSB_RXCSR_H_WZC_BITS;
 			musb_writew(regs, MUSB_RXCSR, val);
 			/* flush writebufer */
@@ -566,7 +577,9 @@ static void
 cppi_next_tx_segment(struct musb *musb, struct cppi_channel *tx)
 {
 	unsigned		maxpacket = tx->maxpacket;
+#ifdef CONFIG_USB_MUSB_DEBUG
 	dma_addr_t		addr = tx->buf_dma + tx->offset;
+#endif	
 	size_t			length = tx->buf_len - tx->offset;
 	struct cppi_descriptor	*bd;
 	unsigned		n_bds;
@@ -775,10 +788,15 @@ cppi_next_rx_segment(struct musb *musb, struct cppi_channel *rx, int onepacket)
 	int			is_rndis = 0;
 	struct cppi_rx_stateram	__iomem *rx_ram = rx->state_ram;
 
+	/* 20110518 AVM/WK: Fix We can't rely on caller having selected EP */
+	musb_ep_select(rx->controller->mregs, rx->index + 1);
+
 	if (onepacket) {
 		/* almost every USB driver, host or peripheral side */
 		n_bds = 1;
-
+		
+		/* 20110511 AVM/WK HCD Optimization */
+#if !defined (CONFIG_USB_MUSB_HDRC_HCD)
 		/* maybe apply the heuristic above */
 		if (cppi_rx_rndis
 				&& is_peripheral_active(musb)
@@ -789,21 +807,32 @@ cppi_next_rx_segment(struct musb *musb, struct cppi_channel *rx, int onepacket)
 			maxpacket = length;
 			is_rndis = 1;
 		}
+#endif
 	} else {
 		/* virtually nothing except mass storage class */
-		if (length > 0xffff) {
-			n_bds = 0xffff / maxpacket;
-			length = n_bds * maxpacket;
-		} else {
-			n_bds = length / maxpacket;
-			if (length % maxpacket)
-				n_bds++;
-		}
-		if (n_bds == 1)
+		/* 20110622 AVM/WK - Fix: switch to onepacket mode, if not multiple kB block read */
+		if ((length & (1024-1)) != 0) {
+			n_bds = 1;
 			onepacket = 1;
-		else
-			n_bds = min(n_bds, (unsigned) NUM_RXCHAN_BD);
+		} else {
+			if (length > 0xffff) {
+				n_bds = 0xffff / maxpacket;
+				length = n_bds * maxpacket;
+			} else {
+				n_bds = length / maxpacket;
+				if (length % maxpacket)
+					n_bds++;
+			}
+			if (n_bds == 1)
+				onepacket = 1;
+			else
+				n_bds = min(n_bds, (unsigned) NUM_RXCHAN_BD);
+		}
 	}
+	/* 20110511 AVM/WK ported from AVM Kernel 2.6.19
+	 *          record mode for later use
+	 */
+	rx->bRxOnePacketMode = onepacket;
 
 	/* In host mode, autorequest logic can generate some IN tokens; it's
 	 * tricky since we can't leave REQPKT set in RXCSR after the transfer
@@ -1007,35 +1036,42 @@ static int cppi_channel_program(struct dma_channel *ch,
 
 	return true;
 }
-
+/* 20110517 AVM/WK: RX Scanner simplified */
 static bool cppi_rx_scan(struct cppi *cppi, unsigned ch)
 {
 	struct cppi_channel		*rx = &cppi->rx[ch];
 	struct cppi_rx_stateram __iomem	*state = rx->state_ram;
 	struct cppi_descriptor		*bd;
-	struct cppi_descriptor		*last = rx->last_processed;
+	struct cppi_descriptor		*head;
 	bool				completed = false;
-	bool				acked = false;
-	int				i;
 	dma_addr_t			safe2ack;
-	void __iomem			*regs = rx->hw_ep->regs;
+	dma_addr_t			last_dma = 0;
+//	void __iomem		*regs = rx->hw_ep->regs;
 
 	cppi_dump_rx(6, rx, "/K");
 
-	bd = last ? last->next : rx->head;
-	if (!bd)
+	head = rx->head;
+	if (!head) {
+		safe2ack = musb_readl(&state->rx_complete, 0);
+		//ERR("!bd: should not happen! ACK anyway %p\n",(void*)safe2ack);
+		musb_writel(&state->rx_complete, 0, safe2ack);
+		safe2ack = musb_readl(&state->rx_complete, 0);
 		return false;
+	}
 
 	/* run through all completed BDs */
-	for (i = 0, safe2ack = musb_readl(&state->rx_complete, 0);
-			(safe2ack || completed) && bd && i < NUM_RXCHAN_BD;
-			i++, bd = bd->next) {
+	while (head) {
 		u16	len;
+		bd = head;
 
 		/* catch latest BD writes from CPPI */
 		rmb();
-		if (!completed && (bd->hw_options & CPPI_OWN_SET))
-			break;
+		if (!completed) {
+			if (bd->hw_options & CPPI_OWN_SET)
+				break;
+			/* 20110517 AVM/WK Save last completed BD DMA addr */
+			last_dma = bd->dma;
+		}
 
 		DBG(5, "C/RXBD %08x: nxt %08x buf %08x "
 			"off.len %08x opt.len %08x (%d)\n",
@@ -1044,7 +1080,8 @@ static bool cppi_rx_scan(struct cppi *cppi, unsigned ch)
 			rx->channel.actual_len);
 
 		/* actual packet received length */
-		if ((bd->hw_options & CPPI_SOP_SET) && !completed)
+		/* 20110411 AVM/WK ZERO packet detection */
+		if (((bd->hw_options & (CPPI_SOP_SET|CPPI_ZERO_SET)) == CPPI_SOP_SET) && !completed)
 			len = bd->hw_off_len & CPPI_RECV_PKTLEN_MASK;
 		else
 			len = 0;
@@ -1064,80 +1101,32 @@ static bool cppi_rx_scan(struct cppi *cppi, unsigned ch)
 					rx->channel.actual_len);
 		}
 
-		/* If we got here, we expect to ack at least one BD; meanwhile
-		 * CPPI may completing other BDs while we scan this list...
-		 *
-		 * RACE: we can notice OWN cleared before CPPI raises the
-		 * matching irq by writing that BD as the completion pointer.
-		 * In such cases, stop scanning and wait for the irq, avoiding
-		 * lost acks and states where BD ownership is unclear.
-		 */
-		if (bd->dma == safe2ack) {
-			musb_writel(&state->rx_complete, 0, safe2ack);
-			safe2ack = musb_readl(&state->rx_complete, 0);
-			acked = true;
-			if (bd->dma == safe2ack)
-				safe2ack = 0;
-		}
-
 		rx->channel.actual_len += len;
 
-		cppi_bd_free(rx, last);
-		last = bd;
-
 		/* stop scanning on end-of-segment */
-		if (bd->hw_next == 0)
+		if (bd->hw_next == 0) {
 			completed = true;
-	}
-	rx->last_processed = last;
-
-	/* dma abort, lost ack, or ... */
-	if (!acked && last) {
-		int	csr;
-
-		if (safe2ack == 0 || safe2ack == rx->last_processed->dma)
-			musb_writel(&state->rx_complete, 0, safe2ack);
-		if (safe2ack == 0) {
-			cppi_bd_free(rx, last);
-			rx->last_processed = NULL;
-
-			/* if we land here on the host side, H_REQPKT will
-			 * be clear and we need to restart the queue...
-			 */
-			WARN_ON(rx->head);
+			cppi_bd_free(rx, bd);
+			bd = head = NULL;
+			break;
 		}
-		musb_ep_select(cppi->mregs, rx->index + 1);
-		csr = musb_readw(regs, MUSB_RXCSR);
-		if (csr & MUSB_RXCSR_DMAENAB) {
-			DBG(4, "list%d %p/%p, last %08x%s, csr %04x\n",
-				rx->index,
-				rx->head, rx->tail,
-				rx->last_processed
-					? rx->last_processed->dma
-					: 0,
-				completed ? ", completed" : "",
-				csr);
-			cppi_dump_rxq(4, "/what?", rx);
-		}
+		head = bd->next;
+		cppi_bd_free(rx, bd);
 	}
+
+	safe2ack = musb_readl(&state->rx_complete, 0);
 	if (!completed) {
-		int	csr;
-
-		rx->head = bd;
-
-		/* REVISIT seems like "autoreq all but EOP" doesn't...
-		 * setting it here "should" be racey, but seems to work
-		 */
-		csr = musb_readw(rx->hw_ep->regs, MUSB_RXCSR);
-		if (is_host_active(cppi->musb)
-				&& bd
-				&& !(csr & MUSB_RXCSR_H_REQPKT)) {
-			csr |= MUSB_RXCSR_H_REQPKT;
-			musb_writew(regs, MUSB_RXCSR,
-					MUSB_RXCSR_H_WZC_BITS | csr);
-			csr = musb_readw(rx->hw_ep->regs, MUSB_RXCSR);
+		rx->head = head;
+		if (last_dma == safe2ack) {
+			/* ACK DMA */
+			musb_writel(&state->rx_complete, 0, safe2ack);
+			safe2ack = musb_readl(&state->rx_complete, 0);
 		}
 	} else {
+		/* ACK DMA */
+		musb_writel(&state->rx_complete, 0, safe2ack);
+		safe2ack = musb_readl(&state->rx_complete, 0);
+		
 		rx->head = NULL;
 		rx->tail = NULL;
 	}
@@ -1154,6 +1143,11 @@ irqreturn_t cppi_interrupt(int irq, void *dev_id)
 	struct musb_hw_ep	*hw_ep = NULL;
 	u32			rx, tx;
 	int			i, index;
+	unsigned long flags;
+
+/* == AVM/WK 20101105 FIX: use spinlock for sync with ur8 musb irq == */
+
+	spin_lock_irqsave(&musb->lock, flags);
 
 	cppi = container_of(musb->dma_controller, struct cppi, controller);
 
@@ -1162,8 +1156,12 @@ irqreturn_t cppi_interrupt(int irq, void *dev_id)
 	tx = musb_readl(tibase, DAVINCI_TXCPPI_MASKED_REG);
 	rx = musb_readl(tibase, DAVINCI_RXCPPI_MASKED_REG);
 
-	if (!tx && !rx)
+	if (!tx && !rx) {
+		ERR ("Spurious CPPI-IRQ\n");
+		musb_writel(tibase, DAVINCI_CPPI_EOI_REG, 0);
+		spin_unlock_irqrestore(&musb->lock, flags);
 		return IRQ_NONE;
+	}
 
 	DBG(4, "CPPI IRQ Tx%x Rx%x\n", tx, rx);
 
@@ -1268,7 +1266,10 @@ irqreturn_t cppi_interrupt(int irq, void *dev_id)
 			if (rx_ch->channel.actual_len != rx_ch->buf_len
 					&& rx_ch->channel.actual_len
 						== rx_ch->offset) {
-				cppi_next_rx_segment(musb, rx_ch, 1);
+				/* 20110511 AVM/WK ported from AVM Kernel 2.6.19
+							use saved mode */
+				//cppi_next_rx_segment(musb, rx_ch, 1);
+				cppi_next_rx_segment(musb, rx_ch, rx_ch->bRxOnePacketMode);
 				continue;
 			}
 
@@ -1284,6 +1285,7 @@ irqreturn_t cppi_interrupt(int irq, void *dev_id)
 
 	/* write to CPPI EOI register to re-enable interrupts */
 	musb_writel(tibase, DAVINCI_CPPI_EOI_REG, 0);
+	spin_unlock_irqrestore(&musb->lock, flags);
 
 	return IRQ_HANDLED;
 }
@@ -1327,8 +1329,13 @@ dma_controller_create(struct musb *musb, void __iomem *mregs)
 	}
 
 	if (irq > 0) {
-		if (request_irq(irq, cppi_interrupt, 0, "cppi-dma", musb)) {
-			dev_err(dev, "request_irq %d failed!\n", irq);
+/*= AVM/WK 20100929: Activate DMA IRQ ==*/
+#if 1
+		if (request_irq(irq, cppi_interrupt, 0, "musb cppi-dma", musb)) {
+#else
+		if (1) {
+#endif
+			dev_err(dev, "cppi:request_irq %d failed!\n", irq);
 			dma_controller_destroy(&controller->controller);
 			return NULL;
 		}
@@ -1388,8 +1395,10 @@ static int cppi_channel_abort(struct dma_channel *channel)
 		return -EINVAL;
 	}
 
+#ifdef CONFIG_USB_MUSB_DEBUG
 	if (!cppi_ch->transmit && cppi_ch->head)
 		cppi_dump_rxq(3, "/abort", cppi_ch);
+#endif
 
 	mbase = controller->mregs;
 	tibase = controller->tibase;
@@ -1439,8 +1448,14 @@ static int cppi_channel_abort(struct dma_channel *channel)
 		value = musb_readw(regs, MUSB_TXCSR);
 		value &= ~MUSB_TXCSR_DMAENAB;
 		value |= MUSB_TXCSR_FLUSHFIFO;
+		/* == 20110615 AVM/WK Fix: flush did not work ==*/
+		value &= ~MUSB_TXCSR_FIFONOTEMPTY;
+		value &= ~MUSB_TXCSR_TXPKTRDY;
 		musb_writew(regs, MUSB_TXCSR, value);
 		musb_writew(regs, MUSB_TXCSR, value);
+		do {
+			value = musb_readw(regs, MUSB_TXCSR);
+		} while (value & MUSB_TXCSR_FLUSHFIFO);
 
 		/* While we scrub the TX state RAM, ensure that we clean
 		 * up any interrupt that's currently asserted:
@@ -1522,6 +1537,11 @@ static int cppi_channel_abort(struct dma_channel *channel)
 		 * REVISIT does using rndis mode change that?
 		 */
 		cppi_reset_rx(cppi_ch->state_ram);
+
+		/* 20110517 AVM/WK: Reset Count: Start clean after abort */
+		musb_writel(tibase,
+					DAVINCI_RXCPPI_BUFCNT0_REG + (cppi_ch->index * 4),
+					0);
 
 		/* next DMA request _should_ load cppi head ptr */
 

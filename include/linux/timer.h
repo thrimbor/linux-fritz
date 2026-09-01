@@ -113,7 +113,7 @@ extern void init_timer_on_stack_key(struct timer_list *timer,
 				    struct lock_class_key *key);
 extern void destroy_timer_on_stack(struct timer_list *timer);
 #else
-static inline void destroy_timer_on_stack(struct timer_list *timer) { }
+static inline void destroy_timer_on_stack(struct timer_list *timer __attribute__ ((unused))) { }
 static inline void init_timer_on_stack_key(struct timer_list *timer,
 					   const char *name,
 					   struct lock_class_key *key)
@@ -214,11 +214,11 @@ static inline void init_timer_stats(void)
 {
 }
 
-static inline void timer_stats_timer_set_start_info(struct timer_list *timer)
+static inline void timer_stats_timer_set_start_info(struct timer_list *timer __attribute__ ((unused)))
 {
 }
 
-static inline void timer_stats_timer_clear_start_info(struct timer_list *timer)
+static inline void timer_stats_timer_clear_start_info(struct timer_list *timer __attribute__ ((unused)))
 {
 }
 #endif

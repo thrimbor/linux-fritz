@@ -400,8 +400,8 @@ extern Elf64_Dyn _DYNAMIC [];
 /* Optional callbacks to write extra ELF notes. */
 #ifndef ARCH_HAVE_EXTRA_ELF_NOTES
 static inline int elf_coredump_extra_notes_size(void) { return 0; }
-static inline int elf_coredump_extra_notes_write(struct file *file,
-			loff_t *foffset) { return 0; }
+static inline int elf_coredump_extra_notes_write(struct file *file __attribute__ ((unused)),
+			loff_t *foffset __attribute__ ((unused))) { return 0; }
 #else
 extern int elf_coredump_extra_notes_size(void);
 extern int elf_coredump_extra_notes_write(struct file *file, loff_t *foffset);

@@ -15,9 +15,12 @@
 /* FIXME fully isolate CPPI from DaVinci ... the "CPPI generic" registers
  * would seem to be shared with the TUSB6020 (over VLYNQ).
  */
-
+#ifdef CONFIG_ARCH_DAVINCI
 #include "davinci.h"
-
+#endif
+#ifdef CONFIG_MIPS_UR8
+#include "ur8.h"
+#endif
 
 /* CPPI RX/TX state RAM */
 
@@ -89,6 +92,8 @@ struct cppi_channel {
 
 	/* DMA modes:  RNDIS or "transparent" */
 	u8			is_rndis;
+	/* 20110511 AVM/WK ported from AVM Kernel 2.6.19 */
+	u8			bRxOnePacketMode;
 
 	/* book keeping for current transfer request */
 	dma_addr_t		buf_dma;

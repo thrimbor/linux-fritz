@@ -84,6 +84,12 @@ nf_nat_fn(unsigned int hooknum,
 	/* maniptype == SRC for postrouting. */
 	enum nf_nat_manip_type maniptype = HOOK2MANIP(hooknum);
 
+#ifdef CONFIG_ATHRS_HW_NAT
+        if (skb->ath_hw_nat_fw_flags == 2 || skb->ath_hw_nat_fw_flags == 3) {
+                return NF_ACCEPT;
+        }
+#endif
+
 	/* We never see fragments: conntrack defrags on pre-routing
 	   and local-out, and nf_nat_out protects post-routing. */
 	NF_CT_ASSERT(!(ip_hdr(skb)->frag_off & htons(IP_MF | IP_OFFSET)));
@@ -103,8 +109,16 @@ nf_nat_fn(unsigned int hooknum,
 	nat = nfct_nat(ct);
 	if (!nat) {
 		/* NAT module was loaded late. */
-		if (nf_ct_is_confirmed(ct))
-			return NF_ACCEPT;
+		if (nf_ct_is_confirmed(ct)) {
+#ifdef CONFIG_ATHRS_HW_NAT
+			if(!test_bit(IPS_ATHR_HW_NAT_ADDED_BIT, &ct->status)) {
+#endif
+				printk("CT not confirmed ct=%p\n\n",ct);
+				return NF_ACCEPT;
+#ifdef CONFIG_ATHRS_HW_NAT
+			}
+#endif
+		}
 		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, GFP_ATOMIC);
 		if (nat == NULL) {
 			pr_debug("failed to add NAT extension\n");

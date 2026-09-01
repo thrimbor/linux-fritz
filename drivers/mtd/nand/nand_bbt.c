@@ -374,6 +374,7 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 	int startblock;
 	loff_t from;
 	size_t readlen;
+    __u32 start_badblocks = mtd->ecc_stats.badblocks;
 
 	printk(KERN_INFO "Scanning device for bad blocks\n");
 
@@ -428,14 +429,80 @@ static int create_bbt(struct mtd_info *mtd, uint8_t *buf,
 
 		if (ret) {
 			this->bbt[i >> 3] |= 0x03 << (i & 0x6);
-			printk(KERN_WARNING "Bad eraseblock %d at 0x%012llx\n",
-			       i >> 1, (unsigned long long)from);
+			printk(KERN_WARNING "Bad eraseblock %d at 0x%012llx (byte on oob[0-1]=0x%x)\n",
+			       i >> 1, (unsigned long long)from, buf[0]);
 			mtd->ecc_stats.badblocks++;
 		}
 
 		i += 2;
 		from += (1 << this->bbt_erase_shift);
 	}
+
+    if(mtd->ecc_stats.badblocks - start_badblocks) {
+        int bad_printed = 0;
+        int bad_start = -1;
+
+        printk(KERN_WARNING "badblock statistics:\n"
+                            "--------------------\n"
+                            "  start block = %d\n"
+                            "  num blocks  = %d\n"
+                            "  bad blocks  = %u\n",
+               startblock,
+               numblocks>>1,
+               mtd->ecc_stats.badblocks - start_badblocks
+               );
+
+        for (i = startblock; i < numblocks;) {
+            if(this->bbt[i >> 3] & 0x03 << (i & 0x6)) {
+                if(bad_start == -1)
+                    bad_start = i >> 1;
+            } else {
+                if(bad_start != -1) {
+                    if(!bad_printed) {
+                        bad_printed = 1;
+
+                        printk(KERN_WARNING "\n"
+                                            "  >> The following table summarize all badblocks to visualize the distribution"
+                                            "\n"
+                                            "  block [ start | count | size/kB ] (start block, number of blocks)\n"
+                                            "  ---------------------------------                    \n");
+                    }
+
+                    printk(KERN_WARNING "  block [ %5d | %5d | %7d ]\n",
+                           bad_start,
+                           (i>>1)-bad_start,
+                           (mtd->erasesize/1024) * ((i>>1)-bad_start)
+                          );
+
+                    bad_start = -1;
+                }
+            }
+
+            i += 2;
+        }
+        if(bad_start != -1) {
+            if(!bad_printed) {
+                printk(KERN_WARNING "\n"
+                                    "  >> The following table summarize all badblocks to visualize the distribution"
+                                    "\n"
+                                    "  block [ start | count | size/kB ] (start block, number of blocks)\n"
+                                    "  ---------------------------------                    \n");
+            }
+
+            printk(KERN_WARNING "  block [ %5d | %5d | %7d ]\n",
+                   bad_start, (i>>1)-bad_start,
+                   (mtd->erasesize/1024) * ((i>>1)-bad_start)
+                  );
+
+            bad_start = -1;
+        }
+
+        printk(KERN_WARNING "        [ ======================= ]\n"
+                            "        [      >> %5d | %7d ]\n",
+                mtd->ecc_stats.badblocks - start_badblocks,
+               (mtd->erasesize/1024) * (mtd->ecc_stats.badblocks - start_badblocks)
+              );
+    }
 	return 0;
 }
 

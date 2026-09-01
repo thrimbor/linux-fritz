@@ -22,14 +22,25 @@
 #include <linux/init.h>
 #include <linux/nmi.h>
 #include <linux/dmi.h>
+#include <linux/time.h>
+#include <asm/cputime.h>
 
-int panic_on_oops;
+#if defined(CONFIG_AVM_WATCHDOG)
+#include <linux/ar7wdt.h>
+#endif
+
+#ifdef CONFIG_TFFS_PANIC_LOG
+#include <linux/tffs.h>
+unsigned int tffs_panic_log_suppress = 0;
+EXPORT_SYMBOL(tffs_panic_log_suppress);
+#endif /*--- #ifdef CONFIG_TFFS_PANIC_LOG ---*/
+int panic_on_oops = 1;
 static unsigned long tainted_mask;
 static int pause_on_oops;
 static int pause_on_oops_flag;
 static DEFINE_SPINLOCK(pause_on_oops_lock);
 
-int panic_timeout;
+int panic_timeout = 5;
 
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
@@ -58,6 +69,12 @@ NORET_TYPE void panic(const char * fmt, ...)
 	va_list args;
 	long i;
 
+#if defined(CONFIG_AVM_WATCHDOG)
+    AVM_WATCHDOG_emergency_retrigger();
+#if defined(CONFIG_VR9) || defined(CONFIG_AR10)
+    *(volatile unsigned int *)(0xbf101000 + 0xF4) = (1<<4);    /*--- disable WATCHDOG-preWarning ---*/
+#endif /*--- #if defined(CONFIG_VR9) ---*/ 
+#endif
 	/*
 	 * It's possible to come here directly from a panic-assertion and
 	 * not have preempt disabled. Some functions called from here want
@@ -66,6 +83,9 @@ NORET_TYPE void panic(const char * fmt, ...)
 	preempt_disable();
 
 	bust_spinlocks(1);
+    console_verbose();
+    restore_printk();
+    dump_stack();
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
@@ -88,6 +108,38 @@ NORET_TYPE void panic(const char * fmt, ...)
 	 */
 	smp_send_stop();
 
+#ifdef CONFIG_TFFS_PANIC_LOG
+    if(tffs_panic_log_suppress == 0) {
+        unsigned long printk_get_buffer(char **p_log_buf, unsigned long *p_log_end, unsigned long *p_anzahl);
+        char *buf;
+        unsigned long end;
+        unsigned long anzahl;
+        unsigned long len = printk_get_buffer(&buf, &end, &anzahl);
+        struct timespec uptime;
+        static char time_stamp_buf[sizeof("UPTIME: \n") + 10 + sizeof("PANIC LOG VERSION 2.0\n")];
+        unsigned long time_stamp_buf_len;
+
+        tffs_panic_log_suppress = 1;
+        tffs_panic_log_open();
+        do_posix_clock_monotonic_gettime(&uptime);
+        monotonic_to_bootbased(&uptime);
+        time_stamp_buf_len = snprintf(time_stamp_buf, sizeof(time_stamp_buf), "UPTIME: %lu\nPANIC LOG VERSION 2.0\n", (unsigned long) uptime.tv_sec);
+        tffs_panic_log_write(time_stamp_buf, time_stamp_buf_len + 1);
+#if defined(CONFIG_AVM_WATCHDOG)
+        AVM_WATCHDOG_emergency_retrigger();
+#endif
+        if(anzahl < len) {  /*--- alles im Buffer ---*/
+            tffs_panic_log_write(buf, anzahl);
+        } else {
+            tffs_panic_log_write(buf + end, len - end);
+#if defined(CONFIG_AVM_WATCHDOG)
+            AVM_WATCHDOG_emergency_retrigger();
+#endif
+            tffs_panic_log_write(buf, end);
+        }
+        tffs_panic_log_close();
+    }
+#endif /*--- #ifdef CONFIG_TFFS_PANIC_LOG ---*/
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 
 	bust_spinlocks(0);

@@ -683,10 +683,17 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	struct usb_composite_dev	*cdev = get_gadget_data(gadget);
 	struct usb_request		*req = cdev->req;
 	int				value = -EOPNOTSUPP;
-	u16				w_index = le16_to_cpu(ctrl->wIndex);
-	u8				intf = w_index & 0xFF;
-	u16				w_value = le16_to_cpu(ctrl->wValue);
-	u16				w_length = le16_to_cpu(ctrl->wLength);
+	#if defined(__IFX_USB_GADGET__) && defined(__NOSWAPINCTRL__)
+		u16				w_index  = (ctrl->wIndex);
+		u8				intf     = w_index & 0xFF;
+		u16				w_value  = (ctrl->wValue);
+		u16				w_length = (ctrl->wLength);
+	#else
+		u16				w_index  = le16_to_cpu(ctrl->wIndex);
+		u8				intf     = w_index & 0xFF;
+		u16				w_value  = le16_to_cpu(ctrl->wValue);
+		u16				w_length = le16_to_cpu(ctrl->wLength);
+	#endif
 	struct usb_function		*f = NULL;
 
 	/* partial re-init of the response message; the function or the
@@ -901,7 +908,11 @@ composite_unbind(struct usb_gadget *gadget)
 		composite->unbind(cdev);
 
 	if (cdev->req) {
-		kfree(cdev->req->buf);
+		#if defined(__IFX_USB_GADGET__)
+			gadget_free_buffer(cdev->req->buf);
+		#else
+			kfree(cdev->req->buf);
+		#endif
 		usb_ep_free_request(gadget->ep0, cdev->req);
 	}
 	kfree(cdev);
@@ -949,7 +960,11 @@ static int __init composite_bind(struct usb_gadget *gadget)
 	cdev->req = usb_ep_alloc_request(gadget->ep0, GFP_KERNEL);
 	if (!cdev->req)
 		goto fail;
-	cdev->req->buf = kmalloc(USB_BUFSIZ, GFP_KERNEL);
+	#if defined(__IFX_USB_GADGET__)
+		cdev->req->buf = gadget_alloc_buffer(USB_BUFSIZ);
+	#else
+		cdev->req->buf = kmalloc(USB_BUFSIZ, GFP_KERNEL);
+	#endif
 	if (!cdev->req->buf)
 		goto fail;
 	cdev->req->complete = composite_setup_complete;

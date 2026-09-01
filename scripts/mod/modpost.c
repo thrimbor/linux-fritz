@@ -1559,9 +1559,10 @@ static void get_markers(struct elf_info *info, struct module *mod)
 			const char *name = strings + sym->st_value;
 			const char *fmt = strchr(name, '\0') + 1;
 			char *line = NULL;
-			asprintf(&line, "%s\t%s\t%s\n", name, mod->name, fmt);
-			NOFAIL(line);
-			mod->markers[n++] = line;
+			if(asprintf(&line, "%s\t%s\t%s\n", name, mod->name, fmt) < 0) {
+                fatal("modpost: Memory allocation failure: line.\n");
+            }
+            mod->markers[n++] = line;
 		}
 }
 
@@ -1979,8 +1980,9 @@ static void write_dump(const char *fname)
 static void add_marker(struct module *mod, const char *name, const char *fmt)
 {
 	char *line = NULL;
-	asprintf(&line, "%s\t%s\t%s\n", name, mod->name, fmt);
-	NOFAIL(line);
+	if(asprintf(&line, "%s\t%s\t%s\n", name, mod->name, fmt)) {
+        fatal("modpost: Memory allocation failure: line.\n");
+    }
 
 	mod->markers = NOFAIL(realloc(mod->markers, ((mod->nmarkers + 1) *
 						     sizeof mod->markers[0])));

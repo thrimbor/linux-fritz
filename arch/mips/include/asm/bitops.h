@@ -22,12 +22,18 @@
 #include <asm/cpu-features.h>
 #include <asm/sgidefs.h>
 #include <asm/war.h>
+#include <asm/irqflags.h>
 
 #if _MIPS_SZLONG == 32
 #define SZLONG_LOG 5
 #define SZLONG_MASK 31UL
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+#define __LL		"lw	"
+#define __SC		"sw	"
+#else
 #define __LL		"ll	"
 #define __SC		"sc	"
+#endif
 #define __INS		"ins    "
 #define __EXT		"ext    "
 #elif _MIPS_SZLONG == 64

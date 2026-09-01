@@ -33,12 +33,11 @@ struct __large_pstruct { unsigned long buf[100]; };
 
 #define __get_dbe(x, ptr, size)						\
 ({									\
-	long __gu_err;							\
-	__typeof__(*(ptr)) __gu_val;					\
-	unsigned long __gu_addr;					\
-	__asm__("":"=r" (__gu_val));					\
-	__gu_addr = (unsigned long) (ptr);				\
-	__asm__("":"=r" (__gu_err));					\
+	volatile register long __gu_err asm("v0");							\
+	volatile register __typeof__(*(ptr)) __gu_val asm("v1");					\
+	volatile register unsigned long __gu_addr  asm("a1");					\
+\
+	__gu_addr = (volatile unsigned long) (ptr);				\
 	switch (size) {							\
 	case 1: __get_dbe_asm("lb"); break;				\
 	case 2: __get_dbe_asm("lh"); break;				\
@@ -54,6 +53,7 @@ struct __large_pstruct { unsigned long buf[100]; };
 {									\
 	__asm__ __volatile__(						\
 	"1:\t" insn "\t%1,%2\n\t"					\
+	" sync\n\t"					\
 	"move\t%0,$0\n"							\
 	"2:\n\t"							\
 	".section\t.fixup,\"ax\"\n"					\
@@ -72,12 +72,11 @@ extern void __get_dbe_unknown(void);
 
 #define __put_dbe(x, ptr, size)						\
 ({									\
-	long __pu_err;							\
-	__typeof__(*(ptr)) __pu_val;					\
-	long __pu_addr;							\
+	volatile register long __pu_err asm("v0");							\
+	volatile register unsigned long __pu_addr  asm("a1");					\
+	volatile register __typeof__(*(ptr)) __pu_val asm("a0");					\
 	__pu_val = (x);							\
 	__pu_addr = (long) (ptr);					\
-	__asm__("":"=r" (__pu_err));					\
 	switch (size) {							\
 	case 1: __put_dbe_asm("sb"); break;				\
 	case 2: __put_dbe_asm("sh"); break;				\
@@ -92,6 +91,7 @@ extern void __get_dbe_unknown(void);
 {									\
 	__asm__ __volatile__(						\
 	"1:\t" insn "\t%1,%2\n\t"					\
+	" sync\n\t"					\
 	"move\t%0,$0\n"							\
 	"2:\n\t"							\
 	".section\t.fixup,\"ax\"\n"					\

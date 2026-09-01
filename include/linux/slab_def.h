@@ -119,7 +119,7 @@ kmem_cache_alloc_notrace(struct kmem_cache *cachep, gfp_t flags)
 {
 	return kmem_cache_alloc(cachep, flags);
 }
-static inline size_t slab_buffer_size(struct kmem_cache *cachep)
+static inline size_t slab_buffer_size(struct kmem_cache *cachep __attribute__ ((unused)))
 {
 	return 0;
 }

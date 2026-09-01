@@ -1643,6 +1643,17 @@ static int __init inet_init(void)
 
 	ipfrag_init();
 
+#ifdef CONFIG_AVM_PA
+    {
+        struct avm_pa_pid_cfg cfg;
+        snprintf(cfg.name, sizeof(cfg.name), "ipv4");
+        cfg.framing = avm_pa_framing_ptype;
+        cfg.default_mtu = 0xffff;
+        cfg.ptype = &ip_packet_type;
+        if(avm_pa_dev_pid_register(AVM_PA_PTYPE_DEVINFO(&ip_packet_type), &cfg) < 0)
+            printk(KERN_ERR "%s: failed to register PA PID\n", cfg.name);
+    }
+#endif
 	dev_add_pack(&ip_packet_type);
 
 	rc = 0;

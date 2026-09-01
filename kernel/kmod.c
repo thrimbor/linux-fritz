@@ -401,6 +401,28 @@ struct subprocess_info *call_usermodehelper_setup(char *path, char **argv,
 						  char **envp, gfp_t gfp_mask)
 {
 	struct subprocess_info *sub_info;
+
+
+    /*--------------------------------------------------------------------------------------*\
+     * AVM Speed Patch !!!!
+    \*--------------------------------------------------------------------------------------*/
+#if 1
+    if(!strcmp(path, "/sbin/hotplug")) {
+        if(argv[1] && !strcmp(argv[1], "tty")) 
+            return NULL;
+        if(argv[1] && !strcmp(argv[1], "bdi")) 
+            return NULL;
+        if(argv[1] && !strcmp(argv[1], "mtd")) 
+            return NULL;
+        if(argv[1] && !strcmp(argv[1], "capi_oslib")) 
+            return NULL;
+        if(argv[1] && !strcmp(argv[1], "mem")) 
+            return NULL;
+        if(argv[1] && !strcmp(argv[1], "module")) 
+            return NULL;
+    }
+#endif
+
 	sub_info = kzalloc(sizeof(struct subprocess_info), gfp_mask);
 	if (!sub_info)
 		goto out;

@@ -40,7 +40,16 @@ obj-$(CONFIG_MTD_NAND_SH_FLCTL)		+= sh_flctl.o
 obj-$(CONFIG_MTD_NAND_MXC)		+= mxc_nand.o
 obj-$(CONFIG_MTD_NAND_SOCRATES)		+= socrates_nand.o
 obj-$(CONFIG_MTD_NAND_TXX9NDFMC)	+= txx9ndfmc.o
+obj-$(CONFIG_MTD_NAND_ATH)		+= ath_nand.o
 obj-$(CONFIG_MTD_NAND_W90P910)		+= w90p910_nand.o
 obj-$(CONFIG_MTD_NAND_NOMADIK)		+= nomadik_nand.o
+obj-$(CONFIG_MTD_NAND_DIRECT_AVM)   += direct_avm.o
+obj-$(CONFIG_MTD_NAND_COMPLETE_AVM) += avm_nand/
+
+CFLAGS_direct_avm.o                 += -Wextra -Werror
 
 nand-objs := nand_base.o nand_bbt.o
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/mtd/nand/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

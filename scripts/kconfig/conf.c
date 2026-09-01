@@ -101,9 +101,12 @@ static int conf_askvalue(struct symbol *sym, const char *def)
 		}
 		check_stdin();
 	case ask_all:
-		fflush(stdout);
-		fgets(line, 128, stdin);
-		return 1;
+        fflush(stdout);
+        // hbl: remove fgets(...) warn_unused_result
+        if(!fgets(line, 128, stdin)) {
+            line[0] = '\0';
+        }
+        return 1;
 	default:
 		break;
 	}
@@ -303,21 +306,25 @@ static int conf_choice(struct menu *menu)
 			}
 			check_stdin();
 		case ask_all:
-			fflush(stdout);
-			fgets(line, 128, stdin);
-			strip(line);
-			if (line[0] == '?') {
-				print_help(menu);
-				continue;
-			}
-			if (!line[0])
-				cnt = def;
-			else if (isdigit(line[0]))
-				cnt = atoi(line);
-			else
-				continue;
-			break;
-		default:
+            fflush(stdout);
+            // hbl: remove fgets(...) warn_unused_result
+            if(!fgets(line, 128, stdin)) {
+                line[0] = '\0';
+            }
+
+            strip(line);
+            if (line[0] == '?') {
+                print_help(menu);
+                continue;
+            }
+            if (!line[0])
+                cnt = def;
+            else if (isdigit(line[0]))
+                cnt = atoi(line);
+            else
+                continue;
+            break;
+        default:
 			break;
 		}
 

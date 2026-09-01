@@ -140,13 +140,26 @@ _all: modules
 endif
 
 srctree		:= $(if $(KBUILD_SRC),$(KBUILD_SRC),$(CURDIR))
+TOPDIR		:= $(srctree)
+
+#hbl: im 28er Makfile einkommentiert: HPATH           = $(TOPDIR)/include
+ifeq ($(KERNEL_LAYOUT),iks)
+FUSIV_TOPDIR    := fusiv_src
+FUSIV_APCODEPATH       = $(TOPDIR)/fusiv_src/kernel/ap_code
+FUSIV_APINCPATH        = $(TOPDIR)/fusiv_src/kernel/ap_code/inc
+FUSIV_DRIVERS_INCPATH  = $(TOPDIR)/fusiv_src/kernel/drivers/inc
+FUSIV_ATM_INCPATH      = $(TOPDIR)/fusiv_src/kernel/drivers/adsl
+FUSIV_SWITCH_INCPATH   = $(TOPDIR)/fusiv_src/kernel/drivers/switch
+endif
+
+# FIXME - TOPDIR is obsolete, use srctree/objtree
 objtree		:= $(CURDIR)
 src		:= $(srctree)
 obj		:= $(objtree)
 
 VPATH		:= $(srctree)$(if $(KBUILD_EXTMOD),:$(KBUILD_EXTMOD))
 
-export srctree objtree VPATH
+export srctree objtree VPATH TOPDIR
 
 
 # SUBARCH tells the usermode build what the underlying arch is.  That is set
@@ -155,11 +168,7 @@ export srctree objtree VPATH
 # then ARCH is assigned, getting whatever value it gets normally, and 
 # SUBARCH is subsequently ignored.
 
-SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
-				  -e s/arm.*/arm/ -e s/sa110/arm/ \
-				  -e s/s390x/s390/ -e s/parisc64/parisc/ \
-				  -e s/ppc.*/powerpc/ -e s/mips.*/mips/ \
-				  -e s/sh[234].*/sh/ )
+SUBARCH := mips
 
 # Cross compiling and selecting different set of gcc/bin-utils
 # ---------------------------------------------------------------------------
@@ -182,6 +191,8 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 export KBUILD_BUILDHOST := $(SUBARCH)
 ARCH		?= $(SUBARCH)
 CROSS_COMPILE	?=
+
+$(warning use: CROSS_COMPILE=$(CROSS_COMPILE))
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -331,6 +342,14 @@ CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
+# Get GCC Version (using call to Preprocessor)
+KERNEL_GCC_VERSION  :=   $(shell echo $$((`echo -e "(__GNUC__ * 10000) + (__GNUC_MINOR__ * 100) + __GNUC_PATCHLEVEL__" | $(CROSS_COMPILE)gcc -E -P -`)))
+# Test for GCC >= 4.6.0
+KBUILD_CFLAGS_GCC40600_ALLOWED := $(shell [ "$(KERNEL_GCC_VERSION)" -ge "40600" ] && echo 1)
+ifeq ($(KBUILD_CFLAGS_GCC40600_ALLOWED),1)
+# Additional Flags for GCC >= 4.6.0
+KBUILD_CFLAGS_GCC40600 += -Wno-error=unused-but-set-variable
+endif
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
@@ -339,13 +358,20 @@ LINUXINCLUDE    := -Iinclude \
                    -I$(srctree)/arch/$(hdr-arch)/include               \
                    -include include/linux/autoconf.h
 
+ifeq ($(KERNEL_LAYOUT),iks)
+#hbl: im 28er Makefile:
+#KBUILD_CPPFLAGS := -D__KERNEL__ $(LINUXINCLUDE) -DNEW_CONFIG -I$(HPATH) -I$(FUSIV_APCODEPATH) -I$(FUSIV_APINCPATH) -I$(FUSIV_DRIVERS_INCPATH) -I$(FUSIV_ATM_INCPATH) -I$(FUSIV_SWITCH_INCPATH)
+KBUILD_CPPFLAGS := -D__KERNEL__ -I$(FUSIV_APCODEPATH) -I$(FUSIV_APINCPATH) -I$(FUSIV_DRIVERS_INCPATH) -I$(FUSIV_ATM_INCPATH) -I$(FUSIV_SWITCH_INCPATH)
+else
 KBUILD_CPPFLAGS := -D__KERNEL__
+endif
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks
+		   -fno-delete-null-pointer-checks $(KBUILD_CFLAGS_GCC40600)
+
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
@@ -473,6 +499,9 @@ drivers-y	:= drivers/ sound/ firmware/
 net-y		:= net/
 libs-y		:= lib/
 core-y		:= usr/
+ifeq ($(KERNEL_LAYOUT),iks)
+fusiv_src-y	:= fusiv_src/
+endif
 endif # KBUILD_EXTMOD
 
 ifeq ($(dot-config),1)
@@ -524,6 +553,7 @@ ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
 KBUILD_CFLAGS	+= -O2
+#hbl: im 28er Makefile: KBUILD_CFLAGS	+= -O1
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
@@ -558,6 +588,23 @@ endif
 # We trigger additional mismatches with less inlining
 ifdef CONFIG_DEBUG_SECTION_MISMATCH
 KBUILD_CFLAGS += $(call cc-option, -fno-inline-functions-called-once)
+endif
+
+# Advanced mips 24kc optimization
+ifdef CONFIG_MIPS_24K_KERNEL_OPTIMIZATION
+KBUILD_CFLAGS	+= $(call cc-option,-funit-at-a-time)
+KBUILD_CFLAGS	+= $(call cc-option,-pipe)
+KBUILD_CFLAGS	+= $(call cc-option,-mips32r2)
+KBUILD_CFLAGS	+= $(call cc-option,-mtune=mips32r2)
+KBUILD_CFLAGS	+= $(call cc-option,-Os)
+endif
+
+# Advanced mips 74kc optimization
+ifdef CONFIG_MIPS_74K_KERNEL_OPTIMIZATION
+KBUILD_CFLAGS	+= $(call cc-option,-funit-at-a-time)
+KBUILD_CFLAGS	+= $(call cc-option,-pipe)
+KBUILD_CFLAGS	+= $(call cc-option,-mtune=74kc)
+# KBUILD_CFLAGS	+= $(call cc-option,-Os)
 endif
 
 # arch Makefile may override CC so keep this after arch Makefile is included
@@ -624,7 +671,6 @@ export	INSTALL_PATH ?= /boot
 # relocations required by build roots.  This is not defined in the
 # makefile but the argument can be passed to make if needed.
 #
-
 MODLIB	= $(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE)
 export MODLIB
 
@@ -645,23 +691,29 @@ mod_strip_cmd = true
 endif # INSTALL_MOD_STRIP
 export mod_strip_cmd
 
+ifneq ($(CONFIG_DANUBE),)
+KBUILD_CFLAGS	+=-mlong-calls 
+endif
 
 ifeq ($(KBUILD_EXTMOD),)
 core-y		+= kernel/ mm/ fs/ ipc/ security/ crypto/ block/
 
 vmlinux-dirs	:= $(patsubst %/,%,$(filter %/, $(init-y) $(init-m) \
 		     $(core-y) $(core-m) $(drivers-y) $(drivers-m) \
-		     $(net-y) $(net-m) $(libs-y) $(libs-m)))
+		     $(net-y) $(fusiv_src-y) $(net-m) $(libs-y) $(libs-m)))
 
 vmlinux-alldirs	:= $(sort $(vmlinux-dirs) $(patsubst %/,%,$(filter %/, \
 		     $(init-n) $(init-) \
 		     $(core-n) $(core-) $(drivers-n) $(drivers-) \
-		     $(net-n)  $(net-)  $(libs-n)    $(libs-))))
+		     $(net-n)  $(net-)  $(fusiv_src-y) $(libs-n)    $(libs-))))
 
 init-y		:= $(patsubst %/, %/built-in.o, $(init-y))
 core-y		:= $(patsubst %/, %/built-in.o, $(core-y))
 drivers-y	:= $(patsubst %/, %/built-in.o, $(drivers-y))
 net-y		:= $(patsubst %/, %/built-in.o, $(net-y))
+ifeq ($(KERNEL_LAYOUT),iks)
+fusiv_src-y	:= $(patsubst %/, %/built-in.o, $(fusiv_src-y))
+endif
 libs-y1		:= $(patsubst %/, %/lib.a, $(libs-y))
 libs-y2		:= $(patsubst %/, %/built-in.o, $(libs-y))
 libs-y		:= $(libs-y1) $(libs-y2)
@@ -694,7 +746,7 @@ libs-y		:= $(libs-y1) $(libs-y2)
 # System.map is generated to document addresses of all kernel symbols
 
 vmlinux-init := $(head-y) $(init-y)
-vmlinux-main := $(core-y) $(libs-y) $(drivers-y) $(net-y)
+vmlinux-main := $(core-y) $(libs-y) $(drivers-y) $(net-y) $(fusiv_src-y)
 vmlinux-all  := $(vmlinux-init) $(vmlinux-main)
 vmlinux-lds  := arch/$(SRCARCH)/kernel/vmlinux.lds
 export KBUILD_VMLINUX_OBJS := $(vmlinux-all)
@@ -1222,6 +1274,14 @@ clean: archclean $(clean-dirs)
 		-o -name '*.symtypes' -o -name 'modules.order' \
 		-o -name 'Module.markers' -o -name '.tmp_*.o.*' \
 		-o -name '*.gcno' \) -type f -print | xargs rm -f
+ifeq ($(KERNEL_LAYOUT),iks)
+	@find . $(FUSIV_TOPDIR) \
+		\( -name '*.[oas]' -o -name '*.ko' -o -name '.*.cmd' \
+		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' \
+		-o -name '*.symtypes' -o -name 'modules.order' \
+		-o -name 'Module.markers' -o -name '.tmp_*.o.*' \) \
+		-type f -print | xargs rm -f
+endif
 
 # mrproper - Delete all generated files, including .config
 #

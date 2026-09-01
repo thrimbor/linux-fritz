@@ -561,8 +561,12 @@ static int fib_check_nh(struct fib_config *cfg, struct fib_info *fi,
 			/* It is not necessary, but requires a bit of thinking */
 			if (fl.fl4_scope < RT_SCOPE_LINK)
 				fl.fl4_scope = RT_SCOPE_LINK;
-			if ((err = fib_lookup(net, &fl, &res)) != 0)
-				return err;
+
+			if ((err = fib_lookup(net, &fl, &res)) != 0) {
+	           struct fib_table *table = fib_get_table(net, cfg->fc_table);
+	           if (table->tb_lookup(table, &fl, &res))
+				  return err;
+			}
 		}
 		err = -EINVAL;
 		if (res.type != RTN_UNICAST && res.type != RTN_LOCAL)
@@ -736,6 +740,13 @@ struct fib_info *fib_create_info(struct fib_config *cfg)
 	fi->fib_priority = cfg->fc_priority;
 	fi->fib_prefsrc = cfg->fc_prefsrc;
 
+#ifdef CONFIG_MAPPING
+
+	fi->fib_mapping = cfg->fib_config_rtm_mapping;	/* Transfer mapping information from rtmsg to fib */
+	fi->fib_src_prefix = cfg->fib_config_rtm_src_prefix;
+	fi->fib_dst_prefix = cfg->fib_config_rtm_dst_prefix;
+#endif
+
 	fi->fib_nhs = nhs;
 	change_nexthops(fi) {
 		nh->nh_parent = fi;
@@ -849,6 +860,11 @@ link_it:
 		head = &fib_info_devhash[hash];
 		hlist_add_head(&nh->nh_hash, head);
 	} endfor_nexthops(fi)
+#ifdef CONFIG_MAPPING
+       fi->fib_mapping = cfg->fib_config_rtm_mapping;
+       fi->fib_src_prefix = cfg->fib_config_rtm_src_prefix;
+       fi->fib_dst_prefix = cfg->fib_config_rtm_dst_prefix;
+#endif
 	spin_unlock_bh(&fib_info_lock);
 	return fi;
 
@@ -889,6 +905,11 @@ int fib_semantic_match(struct list_head *head, const struct flowi *flp,
 
 			if (fi->fib_flags & RTNH_F_DEAD)
 				continue;
+#ifdef	CONFIG_MAPPING
+			res->mapping = fi->fib_mapping;	/* Transfer mapping information from fib to fib_result */
+			res->src_prefix = fi->fib_src_prefix;
+			res->dst_prefix = fi->fib_dst_prefix;
+#endif
 
 			switch (fa->fa_type) {
 			case RTN_UNICAST:

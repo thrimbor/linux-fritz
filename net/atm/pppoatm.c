@@ -46,6 +46,15 @@
 
 #include "common.h"
 
+
+#if defined(CONFIG_MACH_FUSIV)
+#define LLC_PPPOA_OVERHEAD 6
+#define VC_PPPOA_OVERHEAD 2
+extern int (*AtmUpdateNewVCInfo_ptr)(int encap, struct atm_vcc *atmvcc, int moduleId, char *ifname);
+extern int (*AtmDeleteVCInfo_ptr)(short vpi,int vci);
+extern int get_PPPOAOverhead(struct ppp_channel *ppp_chan);
+#endif
+
 enum pppoatm_encaps {
 	e_autodetect = PPPOATM_ENCAPS_AUTODETECT,
 	e_vc = PPPOATM_ENCAPS_VC,
@@ -118,6 +127,11 @@ static void pppoatm_unassign_vcc(struct atm_vcc *atmvcc)
 {
 	struct pppoatm_vcc *pvcc;
 	pvcc = atmvcc_to_pvcc(atmvcc);
+
+#if defined(CONFIG_MACH_FUSIV)
+	(*AtmDeleteVCInfo_ptr)(atmvcc->vpi,atmvcc->vci);
+#endif
+
 	atmvcc->push = pvcc->old_push;
 	atmvcc->pop = pvcc->old_pop;
 	tasklet_kill(&pvcc->wakeup_tasklet);
@@ -142,10 +156,12 @@ static void pppoatm_push(struct atm_vcc *atmvcc, struct sk_buff *skb)
 	atm_return(atmvcc, skb->truesize);
 	switch (pvcc->encaps) {
 	case e_llc:
+#if !defined(CONFIG_MACH_FUSIV)
 		if (skb->len < LLC_LEN ||
 		    memcmp(skb->data, pppllc, LLC_LEN))
 			goto error;
 		skb_pull(skb, LLC_LEN);
+#endif
 		break;
 	case e_autodetect:
 		if (pvcc->chan.ppp == NULL) {	/* Not bound yet! */
@@ -199,6 +215,7 @@ static int pppoatm_send(struct ppp_channel *chan, struct sk_buff *skb)
 		(void) skb_pull(skb, 1);
 	switch (pvcc->encaps) {		/* LLC encapsulation needed */
 	case e_llc:
+#if !defined(CONFIG_MACH_FUSIV)
 		if (skb_headroom(skb) < LLC_LEN) {
 			struct sk_buff *n;
 			n = skb_realloc_headroom(skb, LLC_LEN);
@@ -213,6 +230,7 @@ static int pppoatm_send(struct ppp_channel *chan, struct sk_buff *skb)
 		} else if (!atm_may_send(pvcc->atmvcc, skb->truesize))
 			goto nospace;
 		memcpy(skb_push(skb, LLC_LEN), pppllc, LLC_LEN);
+#endif /*--- #if !defined(CONFIG_MACH_FUSIV) ---*/
 		break;
 	case e_vc:
 		if (!atm_may_send(pvcc->atmvcc, skb->truesize))
@@ -224,7 +242,9 @@ static int pppoatm_send(struct ppp_channel *chan, struct sk_buff *skb)
 		return 1;
 	}
 
+#if !defined(CONFIG_MACH_FUSIV)
 	atomic_add(skb->truesize, &sk_atm(ATM_SKB(skb)->vcc)->sk_wmem_alloc);
+#endif
 	ATM_SKB(skb)->atm_options = ATM_SKB(skb)->vcc->atm_options;
 	pr_debug("atm_skb(%p)->vcc(%p)->dev(%p)\n", skb, ATM_SKB(skb)->vcc,
 	    ATM_SKB(skb)->vcc->dev);
@@ -261,6 +281,9 @@ static /*const*/ struct ppp_channel_ops pppoatm_ops = {
 	.ioctl = pppoatm_devppp_ioctl,
 };
 
+#if defined(CONFIG_IFX_PPA_A6) || defined(CONFIG_IFX_PPA_A5) || defined(CONFIG_IFX_PPA_A4) || defined(CONFIG_IFX_PPA_DATAPATH_MODULE)
+  extern void (*ppa_hook_mpoa_setup)(struct atm_vcc *, int, int);
+#endif
 static int pppoatm_assign_vcc(struct atm_vcc *atmvcc, void __user *arg)
 {
 	struct atm_backend_ppp be;
@@ -296,7 +319,16 @@ static int pppoatm_assign_vcc(struct atm_vcc *atmvcc, void __user *arg)
 	atmvcc->user_back = pvcc;
 	atmvcc->push = pppoatm_push;
 	atmvcc->pop = pppoatm_pop;
-	__module_get(THIS_MODULE);
+#if defined(CONFIG_IFX_PPA_A6) || defined(CONFIG_IFX_PPA_A5) || defined(CONFIG_IFX_PPA_A4) || defined(CONFIG_IFX_PPA_DATAPATH_MODULE)
+	if ( ppa_hook_mpoa_setup ){
+        printk(KERN_ERR "[%s] %d ppa_hook_mpoa_setup=%pF\n", __func__, __LINE__, ppa_hook_mpoa_setup);
+		ppa_hook_mpoa_setup(atmvcc, 2, pvcc->encaps == e_llc ? 1 : 0);  //  PPPoA
+    }
+#endif
+#if defined(CONFIG_MACH_FUSIV)
+        (*AtmUpdateNewVCInfo_ptr)(be.encaps, atmvcc, ADI_PPPOA_MODULE, "ppp0");
+#endif
+
 	return 0;
 }
 
@@ -323,6 +355,22 @@ static int pppoatm_ioctl(struct socket *sock, unsigned int cmd,
 			return -EPERM;
 		return pppoatm_assign_vcc(atmvcc, argp);
 		}
+#if defined(CONFIG_MACH_FUSIV)
+          case ATM_DEL_INTERFACE:
+                {
+                atm_backend_t b;
+                if (get_user(b, (atm_backend_t *) arg))
+                        return -EFAULT;
+                if (b != ATM_BACKEND_PPP)
+                        return -ENOIOCTLCMD;
+                if (!capable(CAP_NET_ADMIN))
+                        return -EPERM;
+                pppoatm_unassign_vcc(atmvcc);
+
+                }
+
+                return 0;
+#endif
 	case PPPIOCGCHAN:
 		return put_user(ppp_channel_index(&atmvcc_to_pvcc(atmvcc)->
 		    chan), (int __user *) argp) ? -EFAULT : 0;
@@ -332,6 +380,21 @@ static int pppoatm_ioctl(struct socket *sock, unsigned int cmd,
 	}
 	return -ENOIOCTLCMD;
 }
+
+#if defined(CONFIG_MACH_FUSIV)
+int get_PPPOAOverhead(struct ppp_channel *pppchan)
+{
+  struct pppoatm_vcc *pvcc = chan_to_pvcc(pppchan);
+  if (pvcc->encaps == e_llc)
+   {
+     return LLC_PPPOA_OVERHEAD; 
+   }
+  else
+   {
+     return VC_PPPOA_OVERHEAD;
+   }
+}
+#endif
 
 static struct atm_ioctl pppoatm_ioctl_ops = {
 	.owner	= THIS_MODULE,
@@ -349,8 +412,79 @@ static void __exit pppoatm_exit(void)
 	deregister_atm_ioctl(&pppoatm_ioctl_ops);
 }
 
+#if defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE)
+
+enum{
+	PPA_PPPOA_GET_VCC = 1,
+	PPA_PPPOA_CHECK_IFACE,
+};
+
+int32_t ppa_get_pppoa_info(struct net_device *dev, void *pvcc, uint32_t pppoa_id, void *value)
+{
+	struct atm_vcc **patmvcc = (struct atm_vcc **)value;
+    struct pppoatm_vcc *p_atm_vcc = (struct pppoatm_vcc *)pvcc;
+
+	if(!p_atm_vcc){
+		return -1;
+	}
+
+	if(p_atm_vcc->chan.private != pvcc){
+		return -1;
+	}
+	
+	switch(pppoa_id){
+		case PPA_PPPOA_GET_VCC:
+			* patmvcc = p_atm_vcc->atmvcc;
+			break;
+
+		case PPA_PPPOA_CHECK_IFACE:
+			break;
+
+		default:
+			break;
+	}
+
+	return 0;
+}
+
+int32_t ppa_pppoa_get_vcc(struct net_device *dev, struct atm_vcc **patmvcc)
+{
+    uint32_t id = (PPA_PPPOA_GET_VCC << PPA_PPP_MASK_LEN) | PPA_PPPOA_ID;
+
+	return ppa_ppp_get_info(dev, id, (void *) patmvcc);
+
+}
+
+int32_t ppa_if_is_pppoa(struct net_device *dev, char *ifname)
+{
+    uint32_t id = (PPA_PPPOA_CHECK_IFACE << PPA_PPP_MASK_LEN) | PPA_PPPOA_ID;
+
+    if ( !dev )
+    {
+        dev = dev_get_by_name(&init_net,ifname);
+        if ( dev )
+            dev_put(dev);
+        else{
+            return 0;   //  can not get
+        }
+    }
+
+    if(ppa_ppp_get_info(dev, id, &id) >= 0){
+		return 1;
+    }
+
+	return 0;
+}
+
+EXPORT_SYMBOL(ppa_get_pppoa_info);
+EXPORT_SYMBOL(ppa_pppoa_get_vcc);
+EXPORT_SYMBOL(ppa_if_is_pppoa);
+#endif
 module_init(pppoatm_init);
 module_exit(pppoatm_exit);
+#if defined(CONFIG_MACH_FUSIV)
+EXPORT_SYMBOL(get_PPPOAOverhead);
+#endif
 
 MODULE_AUTHOR("Mitchell Blank Jr <mitch@sfgoth.com>");
 MODULE_DESCRIPTION("RFC2364 PPP over ATM/AAL5");

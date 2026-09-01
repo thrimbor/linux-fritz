@@ -1182,6 +1182,7 @@ void unmap_kernel_range(unsigned long addr, unsigned long size)
 	vunmap_page_range(addr, end);
 	flush_tlb_kernel_range(addr, end);
 }
+EXPORT_SYMBOL_GPL(unmap_kernel_range);
 
 int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page ***pages)
 {
@@ -1320,6 +1321,7 @@ struct vm_struct *get_vm_area(unsigned long size, unsigned long flags)
 	return __get_vm_area_node(size, 1, flags, VMALLOC_START, VMALLOC_END,
 				-1, GFP_KERNEL, __builtin_return_address(0));
 }
+EXPORT_SYMBOL_GPL(get_vm_area);
 
 struct vm_struct *get_vm_area_caller(unsigned long size, unsigned long flags,
 				void *caller)
@@ -2031,6 +2033,34 @@ int remap_vmalloc_range(struct vm_area_struct *vma, void *addr,
 	return 0;
 }
 EXPORT_SYMBOL(remap_vmalloc_range);
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+int get_vmalloc_pages(char *addr, unsigned int* segm_table) {
+	struct vm_struct *vm = NULL;
+	int i;
+    unsigned int ad = 0;
+
+	read_lock(&vmlist_lock);
+	vm = find_vm_area(addr);
+	if (!vm) {
+        /*--- printk(KERN_ERR "{%s} no vm found\n", __func__); ---*/
+        read_unlock(&vmlist_lock);
+		return -EINVAL;
+    }
+
+	/*--- printk("[%s] addr=%#x is mapped on %d pages \n", __FUNCTION__, (unsigned int)addr, vm->nr_pages); ---*/
+	for ( i = 0; i < vm->nr_pages; i++ ){
+		struct page *p = vm->pages[i];
+        ad = (unsigned int)page_address(p);
+        *segm_table++ = ad;
+	}
+	read_unlock(&vmlist_lock);
+
+    return 0;
+}
+
+EXPORT_SYMBOL(get_vmalloc_pages);
 
 /*
  * Implement a stub for vmalloc_sync_all() if the architecture chose not to

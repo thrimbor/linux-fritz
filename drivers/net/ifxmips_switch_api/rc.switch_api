@@ -1,0 +1,16 @@
+#! /bin/sh
+
+create_nodes()
+{
+	major_switch=`cat /proc/devices | grep "switch_api" | tr -d "switch_api"`
+
+	if [ "${major_switch}" != "" ]; then
+        mkdir /dev/switch
+		mknod /dev/switch/0 c ${major_switch} 0
+	else
+		echo "Warning: Unable to find device switch_api in /proc/devices !"
+	fi
+}
+
+
+create_nodes

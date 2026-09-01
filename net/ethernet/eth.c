@@ -305,8 +305,14 @@ EXPORT_SYMBOL(eth_mac_addr);
  */
 int eth_change_mtu(struct net_device *dev, int new_mtu)
 {
-	if (new_mtu < 68 || new_mtu > ETH_DATA_LEN)
+#ifdef CONFIG_MACH_FUSIV
+    if (new_mtu < 68 || new_mtu > MAX_ETH_DATA_LEN)
+#else
+    if (new_mtu < 68 || new_mtu > ETH_DATA_LEN)
+#endif
+	{
 		return -EINVAL;
+	}
 	dev->mtu = new_mtu;
 	return 0;
 }
@@ -399,4 +405,4 @@ char *print_mac(char *buf, const unsigned char *addr)
 	_format_mac_addr(buf, MAC_BUF_SIZE, addr, ETH_ALEN);
 	return buf;
 }
-EXPORT_SYMBOL(print_mac);
+//deprecated: EXPORT_SYMBOL(print_mac);

@@ -1375,6 +1375,9 @@ int usb_hcd_submit_urb (struct urb *urb, gfp_t mem_flags)
 	atomic_inc(&urb->use_count);
 	atomic_inc(&urb->dev->urbnum);
 	usbmon_urb_submit(&hcd->self, urb);
+#ifdef AVM_USB_TRACE
+	avm_usb_trace_submit(hcd, urb);
+#endif	
 
 	/* NOTE requirements on root-hub callers (usbfs and the hub
 	 * driver, for now):  URBs' urb->transfer_buffer must be
@@ -1386,6 +1389,9 @@ int usb_hcd_submit_urb (struct urb *urb, gfp_t mem_flags)
 	status = map_urb_for_dma(hcd, urb, mem_flags);
 	if (unlikely(status)) {
 		usbmon_urb_submit_error(&hcd->self, urb, status);
+#ifdef AVM_USB_TRACE
+		avm_usb_trace_error(hcd, urb, status);
+#endif	
 		goto error;
 	}
 
@@ -1396,6 +1402,9 @@ int usb_hcd_submit_urb (struct urb *urb, gfp_t mem_flags)
 
 	if (unlikely(status)) {
 		usbmon_urb_submit_error(&hcd->self, urb, status);
+#ifdef AVM_USB_TRACE
+		avm_usb_trace_error(hcd, urb, status);
+#endif	
 		unmap_urb_for_dma(hcd, urb);
  error:
 		urb->hcpriv = NULL;
@@ -1500,6 +1509,10 @@ void usb_hcd_giveback_urb(struct usb_hcd *hcd, struct urb *urb, int status)
 
 	unmap_urb_for_dma(hcd, urb);
 	usbmon_urb_complete(&hcd->self, urb, status);
+#ifdef AVM_USB_TRACE
+	avm_usb_trace_complete(hcd, urb, status);
+#endif	
+	
 	usb_unanchor_urb(urb);
 
 	/* pass ownership to the completion handler */
@@ -2137,6 +2150,11 @@ int usb_add_hcd(struct usb_hcd *hcd,
 	}
 	if (hcd->uses_new_polling && hcd->poll_rh)
 		usb_hcd_poll_rh_status(hcd);
+
+#ifdef AVM_USB_TRACE
+	avm_usb_register_trace_device (hcd);
+#endif	
+	
 	return retval;
 
 error_create_attr_group:
@@ -2197,6 +2215,11 @@ void usb_remove_hcd(struct usb_hcd *hcd)
 
 	if (hcd->irq >= 0)
 		free_irq(hcd->irq, hcd);
+
+#ifdef AVM_USB_TRACE
+	avm_usb_deregister_trace_device (hcd);
+#endif
+
 	usb_deregister_bus(&hcd->self);
 	hcd_buffer_destroy(hcd);
 }

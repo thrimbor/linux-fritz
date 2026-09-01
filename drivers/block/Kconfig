@@ -15,6 +15,38 @@ menuconfig BLK_DEV
 
 if BLK_DEV
 
+config COMPCACHE
+    tristate "Support for compressed swap into ram"
+    depends on SWAP
+    select LZO_DECOMPRESS
+    select LZO_COMPRESS
+    default n
+
+config BLK_DEV_VIRTUAL_FAT
+	tristate "Virtual FAT Blockdevice driver"
+	select RTC_LIB
+    help
+        a virtual reverse Filesystem driver wich emulates a Blockdevice containing a VFAT Filesystem
+
+config BLK_DEV_VIRTUAL_FAT_COUNT
+	int "Number of Virtual FAT Blockdevice devices"
+    depends on BLK_DEV_VIRTUAL_FAT
+    default 4
+
+config BLK_DEV_VIRTUAL_FAT_BLOCKSIZE
+	int "Virtual FAT Blocksize"
+    depends on BLK_DEV_VIRTUAL_FAT
+    default 1024
+    help
+        default size is 1 KByte
+
+config BLK_DEV_VIRTUAL_FAT_SIZE
+	int "Virtual FAT device size"
+    depends on BLK_DEV_VIRTUAL_FAT
+    default 1048576
+    help
+        default size is 1 GByte
+
 config BLK_DEV_FD
 	tristate "Normal floppy disk support"
 	depends on ARCH_MAY_HAVE_PC_FDC

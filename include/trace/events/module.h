@@ -17,7 +17,7 @@ struct module;
 
 TRACE_EVENT(module_load,
 
-	TP_PROTO(struct module *mod),
+	TP_PROTO(struct module *mod __attribute__ ((unused))),
 
 	TP_ARGS(mod),
 
@@ -36,7 +36,7 @@ TRACE_EVENT(module_load,
 
 TRACE_EVENT(module_free,
 
-	TP_PROTO(struct module *mod),
+	TP_PROTO(struct module *mod __attribute__ ((unused))),
 
 	TP_ARGS(mod),
 
@@ -53,7 +53,7 @@ TRACE_EVENT(module_free,
 
 TRACE_EVENT(module_get,
 
-	TP_PROTO(struct module *mod, unsigned long ip, int refcnt),
+	TP_PROTO(struct module *mod __attribute__ ((unused)), unsigned long ip __attribute__ ((unused)), int refcnt __attribute__ ((unused))),
 
 	TP_ARGS(mod, ip, refcnt),
 
@@ -75,7 +75,7 @@ TRACE_EVENT(module_get,
 
 TRACE_EVENT(module_put,
 
-	TP_PROTO(struct module *mod, unsigned long ip, int refcnt),
+	TP_PROTO(struct module *mod __attribute__ ((unused)), unsigned long ip __attribute__ ((unused)), int refcnt __attribute__ ((unused))),
 
 	TP_ARGS(mod, ip, refcnt),
 
@@ -97,7 +97,7 @@ TRACE_EVENT(module_put,
 
 TRACE_EVENT(module_request,
 
-	TP_PROTO(char *name, bool wait, unsigned long ip),
+	TP_PROTO(char *name __attribute__ ((unused)), bool wait __attribute__ ((unused)), unsigned long ip __attribute__ ((unused))),
 
 	TP_ARGS(name, wait, ip),
 

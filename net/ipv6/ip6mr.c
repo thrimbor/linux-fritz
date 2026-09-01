@@ -754,7 +754,7 @@ static void ip6mr_cache_resolve(struct mfc6_cache *uc, struct mfc6_cache *c)
 
 	while((skb = __skb_dequeue(&uc->mfc_un.unres.unresolved))) {
 		if (ipv6_hdr(skb)->version == 0) {
-			int err;
+			/*--- int err; ---*/
 			struct nlmsghdr *nlh = (struct nlmsghdr *)skb_pull(skb, sizeof(struct ipv6hdr));
 
 			if (ip6mr_fill_mroute(skb, c, NLMSG_DATA(nlh)) > 0) {
@@ -765,7 +765,8 @@ static void ip6mr_cache_resolve(struct mfc6_cache *uc, struct mfc6_cache *c)
 				skb_trim(skb, nlh->nlmsg_len);
 				((struct nlmsgerr *)NLMSG_DATA(nlh))->error = -EMSGSIZE;
 			}
-			err = rtnl_unicast(skb, mfc6_net(uc), NETLINK_CB(skb).pid);
+			/*--- err = rtnl_unicast(skb, mfc6_net(uc), NETLINK_CB(skb).pid); ---*/
+			rtnl_unicast(skb, mfc6_net(uc), NETLINK_CB(skb).pid);
 		} else
 			ip6_mr_forward(skb, c);
 	}
@@ -1504,9 +1505,22 @@ static int ip6mr_forward2(struct sk_buff *skb, struct mfc6_cache *c, int vifi)
 	struct net_device *dev;
 	struct dst_entry *dst;
 	struct flowi fl;
+	struct net_device * input_dev = skb_dst(skb)->dev;
+	struct net_device * output_dev = vif->dev;
 
 	if (vif->dev == NULL)
 		goto out_free;
+
+	if (skb->len > output_dev->mtu ) {
+		printk ("ip6mr_queue_xmit stage2.\n");
+		skb->dev = input_dev;
+		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, output_dev->mtu, input_dev);
+		IP6_INC_STATS_BH(dev_net(skb_dst(skb)->dev), ip6_dst_idev(skb_dst(skb)), 
+		                 IPSTATS_MIB_INTOOBIGERRORS);
+		IP6_INC_STATS_BH(dev_net(skb_dst(skb)->dev), ip6_dst_idev(skb_dst(skb)), 
+		                 IPSTATS_MIB_FRAGFAILS);
+		goto out_free;
+	}
 
 #ifdef CONFIG_IPV6_PIMSM_V2
 	if (vif->flags & MIFF_REGISTER) {

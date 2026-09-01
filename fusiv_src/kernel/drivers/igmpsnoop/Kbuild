@@ -1,0 +1,6 @@
+
+EXTRA_CFLAGS += -I$(PWD)/include
+IGMP_SNOOP_OBJ := br_igmp_snoop.o br_igmp_snoop_ap.o
+
+obj-$(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) :=  igmpsnoop_lkm.o
+igmpsnoop_lkm-objs := $(IGMP_SNOOP_OBJ)

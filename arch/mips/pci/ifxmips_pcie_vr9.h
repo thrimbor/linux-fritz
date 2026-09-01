@@ -1,0 +1,183 @@
+/****************************************************************************
+                              Copyright (c) 2010
+                            Lantiq Deutschland GmbH
+                     Am Campeon 3; 85579 Neubiberg, Germany
+
+  For licensing information, see the file 'LICENSE' in the root folder of
+  this software module.
+
+ *****************************************************************************/
+/*!
+  \file ifxmips_pcie_vr9.h
+  \ingroup IFX_PCIE
+  \brief PCIe RC driver vr9 specific file
+*/
+
+#ifndef IFXMIPS_PCIE_VR9_H
+#define IFXMIPS_PCIE_VR9_H
+
+#include <linux/types.h>
+#include <linux/delay.h>
+
+/* Project header file */
+#include <ifx_types.h>
+#include <ifx_pmu.h>
+#include <ifx_gpio.h>
+
+/* PCIe Address Mapping Base */
+#define PCIE_CFG_PHY_BASE        0x1D000000UL
+#define PCIE_CFG_BASE           (KSEG1 + PCIE_CFG_PHY_BASE)
+#define PCIE_CFG_SIZE           (8 * 1024 * 1024)
+
+#define PCIE_MEM_PHY_BASE        0x1C000000UL
+#define PCIE_MEM_BASE           (KSEG1 + PCIE_MEM_PHY_BASE)
+#define PCIE_MEM_SIZE           (16 * 1024 * 1024)
+#define PCIE_MEM_PHY_END        (PCIE_MEM_PHY_BASE + PCIE_MEM_SIZE - 1)
+
+#define PCIE_IO_PHY_BASE         0x1D800000UL
+#define PCIE_IO_BASE            (KSEG1 + PCIE_IO_PHY_BASE)
+#define PCIE_IO_SIZE            (1 * 1024 * 1024)
+#define PCIE_IO_PHY_END         (PCIE_IO_PHY_BASE + PCIE_IO_SIZE - 1)
+
+#define PCIE_RC_CFG_BASE        (KSEG1 + 0x1D900000)
+#define PCIE_APP_LOGIC_REG      (KSEG1 + 0x1E100900)
+#define PCIE_MSI_PHY_BASE        0x1F600000UL
+
+#define PCIE_PDI_PHY_BASE        0x1F106800UL
+#define PCIE_PDI_BASE           (KSEG1 + PCIE_PDI_PHY_BASE)
+#define PCIE_PDI_SIZE            0x400
+
+#define PCIE_MSI_MAX_IRQ_NUM     4
+
+#define IFX_PCIE_CORE_NR    1
+
+#define IFX_PCIE_GPIO_RESET  38
+
+
+static inline int pcie_rc_fused(int pcie_port)
+{
+    return (IFX_REG_R32(IFX_FUSE_ID_CFG) & 0x00000400)? 1 : 0;
+}
+
+static inline void pcie_ahb_pmu_setup(void) 
+{
+    /* Enable AHB bus master/slave */
+    AHBM_PMU_SETUP(IFX_PMU_ENABLE);
+    AHBS_PMU_SETUP(IFX_PMU_ENABLE);
+}
+
+static inline void pcie_rcu_endian_setup(int pcie_port)
+{
+    u32 reg;
+
+    reg = IFX_REG_R32(IFX_RCU_AHB_ENDIAN);
+
+    /* Outbound configuration*/
+#ifdef CONFIG_IFX_PCIE_HW_SWAP
+    reg |= IFX_RCU_AHB_BE_PCIE_S;
+#else
+    reg &= ~IFX_RCU_AHB_BE_PCIE_S;
+#endif /* CONFIG_IFX_PCIE_HW_SWAP */    
+    /* Shared with USIF, don't touch */
+    reg &= ~IFX_RCU_AHB_BE_XBAR_M;
+
+    /* Inbound confiugration */
+#ifdef CONFIG_IFX_PCIE_INBOUND_NO_HW_SWAP
+    reg &= ~IFX_RCU_AHB_BE_PCIE_M;
+#else
+    reg |= IFX_RCU_AHB_BE_PCIE_M;
+#endif /* CONFIG_IFX_PCIE_INBOUND_NO_HW_SWAP */
+    /* Other bit shared with USB and DSL, don't touch */
+    IFX_REG_W32(reg, IFX_RCU_AHB_ENDIAN);
+    IFX_PCIE_PRINT(PCIE_MSG_REG, "%s IFX_RCU_AHB_ENDIAN: 0x%08x\n", __func__, IFX_REG_R32(IFX_RCU_AHB_ENDIAN));
+}
+
+static inline void pcie_phy_pmu_enable(int pcie_port)
+{
+    PCIE_PHY_PMU_SETUP(IFX_PMU_ENABLE);
+}
+
+static inline void pcie_phy_pmu_disable(int pcie_port)
+{
+    PCIE_PHY_PMU_SETUP(IFX_PMU_DISABLE);
+}
+
+static inline void pcie_pdi_big_endian(int pcie_port)
+{
+    u32 reg;
+
+    /* SRAM2PDI endianness control. */
+    reg = IFX_REG_R32(IFX_RCU_AHB_ENDIAN);
+    /* Config AHB->PCIe and PDI endianness */
+    reg |= IFX_RCU_AHB_BE_PCIE_PDI;
+    IFX_REG_W32(reg, IFX_RCU_AHB_ENDIAN);
+}
+
+static inline void pcie_pdi_pmu_enable(int pcie_port)
+{
+    /* Enable PDI to access PCIe PHY register */
+    PDI_PMU_SETUP(IFX_PMU_ENABLE);
+}
+
+static inline void pcie_core_rst_assert(int pcie_port)
+{
+    u32 reg;
+
+    reg = IFX_REG_R32(IFX_RCU_RST_REQ);
+
+    /* Reset PCIe PHY & Core, bit 22, bit 26 may be affected if write it directly  */
+    reg |= 0x00400000;
+    IFX_REG_W32(reg, IFX_RCU_RST_REQ);
+}
+
+static inline void pcie_core_rst_deassert(int pcie_port)
+{
+    u32 reg;
+
+    /* Make sure one micro-second delay */
+    udelay(1);
+
+    /* Reset PCIe PHY & Core, bit 22 */
+    reg = IFX_REG_R32(IFX_RCU_RST_REQ);
+    reg &= ~0x00400000;
+    IFX_REG_W32(reg, IFX_RCU_RST_REQ);
+}
+
+static inline void pcie_phy_rst_assert(int pcie_port)
+{
+    u32 reg;
+
+    reg = IFX_REG_R32(IFX_RCU_RST_REQ);
+    reg |= 0x00001000; /* Bit 12 */
+    IFX_REG_W32(reg, IFX_RCU_RST_REQ);
+}
+
+static inline void pcie_phy_rst_deassert(int pcie_port)
+{
+    u32 reg;
+
+    /* Make sure one micro-second delay */
+    udelay(1);
+
+    reg = IFX_REG_R32(IFX_RCU_RST_REQ);
+    reg &= ~0x00001000; /* Bit 12 */
+    IFX_REG_W32(reg, IFX_RCU_RST_REQ);
+}
+
+static inline void pcie_core_pmu_setup(int pcie_port)
+{
+    /* PCIe Core controller enabled */
+    PCIE_CTRL_PMU_SETUP(IFX_PMU_ENABLE);
+
+    /* Enable PCIe L0 Clock */
+    PCIE_L0_CLK_PMU_SETUP(IFX_PMU_ENABLE);
+}
+
+static inline void pcie_msi_init(int pcie_port)
+{
+    MSI_PMU_SETUP(IFX_PMU_ENABLE);
+    pcie_msi_pic_init(pcie_port);
+}
+
+#endif /* IFXMIPS_PCIE_VR9_H */
+

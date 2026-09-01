@@ -22,10 +22,10 @@ typedef struct { pgd_t pgd; } pud_t;
  * setup: the pud is never bad, and a pud always exists (as it's folded
  * into the pgd entry)
  */
-static inline int pgd_none(pgd_t pgd)		{ return 0; }
-static inline int pgd_bad(pgd_t pgd)		{ return 0; }
-static inline int pgd_present(pgd_t pgd)	{ return 1; }
-static inline void pgd_clear(pgd_t *pgd)	{ }
+static inline int pgd_none(pgd_t pgd __attribute__ ((unused)))		{ return 0; }
+static inline int pgd_bad(pgd_t pgd __attribute__ ((unused)))		{ return 0; }
+static inline int pgd_present(pgd_t pgd __attribute__ ((unused)))	{ return 1; }
+static inline void pgd_clear(pgd_t *pgd __attribute__ ((unused)))	{ }
 #define pud_ERROR(pud)				(pgd_ERROR((pud).pgd))
 
 #define pgd_populate(mm, pgd, pud)		do { } while (0)
@@ -35,7 +35,7 @@ static inline void pgd_clear(pgd_t *pgd)	{ }
  */
 #define set_pgd(pgdptr, pgdval)			set_pud((pud_t *)(pgdptr), (pud_t) { pgdval })
 
-static inline pud_t * pud_offset(pgd_t * pgd, unsigned long address)
+static inline pud_t * pud_offset(pgd_t * pgd, unsigned long address __attribute__ ((unused)))
 {
 	return (pud_t *)pgd;
 }

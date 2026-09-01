@@ -17,6 +17,7 @@ obj-$(CONFIG_SPI_BITBANG)		+= spi_bitbang.o
 obj-$(CONFIG_SPI_AU1550)		+= au1550_spi.o
 obj-$(CONFIG_SPI_BUTTERFLY)		+= spi_butterfly.o
 obj-$(CONFIG_SPI_GPIO)			+= spi_gpio.o
+obj-$(CONFIG_SPI_GPIO_OLD)		+= spi_gpio_old.o
 obj-$(CONFIG_SPI_IMX)			+= spi_imx.o
 obj-$(CONFIG_SPI_LM70_LLP)		+= spi_lm70llp.o
 obj-$(CONFIG_SPI_PXA2XX)		+= pxa2xx_spi.o
@@ -45,3 +46,7 @@ obj-$(CONFIG_SPI_TLE62X0)	+= tle62x0.o
 
 # SPI slave drivers (protocol for that link)
 # 	... add above this line ...
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/spi/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

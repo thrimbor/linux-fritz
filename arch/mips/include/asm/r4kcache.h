@@ -166,6 +166,20 @@ static inline void flush_icache_line(unsigned long addr)
 	__iflush_epilogue
 }
 
+static inline void lock_icache_line(unsigned long addr)
+{
+	__iflush_prologue
+	cache_op(Index_Store_Data_I, addr);
+	__iflush_epilogue
+}
+
+static inline void lock_dcache_line(unsigned long addr)
+{
+	__iflush_prologue
+	cache_op(Index_Store_Data_D, addr);
+	__iflush_epilogue
+}
+
 static inline void flush_dcache_line(unsigned long addr)
 {
 	__dflush_prologue

@@ -48,7 +48,7 @@ struct kthread {
  * and this will return true.  You should then return, and your return
  * value will be passed through to kthread_stop().
  */
-int kthread_should_stop(void)
+inline int kthread_should_stop(void)
 {
 	return to_kthread(current)->should_stop;
 }

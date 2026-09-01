@@ -450,16 +450,16 @@ static inline uint32_t cfi_send_gen_cmd(u_char cmd, uint32_t cmd_addr, uint32_t 
 	val = cfi_build_cmd(cmd, map, cfi);
 
 	if (prev_val)
-		*prev_val = map_read(map, addr);
+		*prev_val = map_cmd_read(map, addr);
 
-	map_write(map, val, addr);
+	map_cmd_write(map, val, addr);
 
 	return addr - base;
 }
 
 static inline uint8_t cfi_read_query(struct map_info *map, uint32_t addr)
 {
-	map_word val = map_read(map, addr);
+	map_word val = map_cmd_read(map, addr);
 
 	if (map_bankwidth_is_1(map)) {
 		return val.x[0];
@@ -475,7 +475,7 @@ static inline uint8_t cfi_read_query(struct map_info *map, uint32_t addr)
 
 static inline uint16_t cfi_read_query16(struct map_info *map, uint32_t addr)
 {
-	map_word val = map_read(map, addr);
+	map_word val = map_cmd_read(map, addr);
 
 	if (map_bankwidth_is_1(map)) {
 		return val.x[0] & 0xff;
@@ -489,8 +489,14 @@ static inline uint16_t cfi_read_query16(struct map_info *map, uint32_t addr)
 	}
 }
 
+
+extern unsigned int tffs_panic_mode;
 static inline void cfi_udelay(int us)
 {
+    if(tffs_panic_mode) {
+		udelay(us);
+        return;
+    }
 	if (us >= 1000) {
 		msleep((us+999)/1000);
 	} else {

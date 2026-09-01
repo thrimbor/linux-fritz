@@ -260,7 +260,7 @@ extern int cancel_delayed_work_sync(struct delayed_work *work);
 
 /* Obsolete. use cancel_delayed_work_sync() */
 static inline
-void cancel_rearming_delayed_workqueue(struct workqueue_struct *wq,
+void cancel_rearming_delayed_workqueue(struct workqueue_struct *wq __attribute__ ((unused)),
 					struct delayed_work *work)
 {
 	cancel_delayed_work_sync(work);
@@ -274,7 +274,7 @@ void cancel_rearming_delayed_work(struct delayed_work *work)
 }
 
 #ifndef CONFIG_SMP
-static inline long work_on_cpu(unsigned int cpu, long (*fn)(void *), void *arg)
+static inline long work_on_cpu(unsigned int cpu __attribute__ ((unused)), long (*fn)(void *), void *arg)
 {
 	return fn(arg);
 }

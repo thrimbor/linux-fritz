@@ -475,11 +475,107 @@ config MTD_NAND_SOCRATES
 	help
 	  Enables support for NAND Flash chips wired onto Socrates board.
 
+config MTD_NAND_ATH
+	tristate "Support for NAND on Atheros board"
+	default n
+	depends on MTD_NAND && (MACH_AR934x || MACH_QCA955x)
+	help
+	  Enables support for NAND Flash chip on Atheros board.
+
 config MTD_NAND_W90P910
 	tristate "Support for NAND on w90p910 evaluation board."
 	depends on ARCH_W90X900 && MTD_PARTITIONS
 	help
 	  This enables the driver for the NAND Flash on evaluation board based
 	  on w90p910.
+
+# AVM Nand Zeuch
+config MTD_NAND_DIRECT_AVM
+	tristate "Support for the AVM Direct-NAND low level Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MIPS_FUSIV
+	help
+        Support for the Direct-NAND Interface by AVM
+
+config MTD_NAND_COMPLETE_AVM
+	tristate "Support for the complete AVM NAND driver"
+	depends on MTD_NAND && MTD_PARTITIONS && !MTD_NAND_DIRECT_AVM
+
+choice 
+	prompt "Type of AVM NAND Interface"
+    depends on MIPS_FUSIV && (MTD_NAND_DIRECT_AVM || MTD_NAND_COMPLETE_AVM)
+	default MTD_NAND_DIRECT_AVM_ADDR
+
+config MTD_NAND_DIRECT_AVM_ADDR
+    bool "Direct NAND controlled via addressmap"            
+
+config MTD_NAND_DIRECT_AVM_GPIO
+    bool "Direct NAND controlled via gpio"            
+
+endchoice
+
+config MTD_NAND_DIRECT_AVM_DATA
+	hex "Base of the data reagion used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && ( MTD_NAND_DIRECT_AVM || MTD_NAND_COMPLETE_AVM )
+    default 0x1E000000
+	help
+        Address used by the AVM Direct-NAND Interface for data access
+
+config MTD_NAND_DIRECT_AVM_CONTROL
+	hex "Base of the control reagion used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MTD_NAND_DIRECT_AVM_ADDR
+    default 0xBC000000
+	help
+        Address used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_READY0
+	int "GPIO number for the ready signal for nand chip 0 used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && ( MTD_NAND_DIRECT_AVM_ADDR || MTD_NAND_DIRECT_AVM_GPIO )
+    default 21
+	help
+        GPIO number for the ready signal for nand chip 0 used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_READY1
+	int "GPIO number for the ready signal for nand chip 1 used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS &&  MTD_NAND_DIRECT_AVM_GPIO
+    default 7
+	help
+        GPIO number for the ready signal for nand chip 1 used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_NCE0
+	int "GPIO number for the /CE signal for chip 0 used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MTD_NAND_DIRECT_AVM_GPIO
+    default 16
+	help
+        GPIO number for the /CE signal for chip 0 used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_NCE1
+	int "GPIO number for the /CE signal for chip 1 used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MTD_NAND_DIRECT_AVM_GPIO
+    default 17
+	help
+        GPIO number for the /CE signal for chip 1 used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_ALE
+	int "GPIO number for the ALE signal used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MTD_NAND_DIRECT_AVM_GPIO
+    default 19
+	help
+        GPIO number for the ALE signal used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_CLE
+	int "GPIO number for the CLE signal used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MTD_NAND_DIRECT_AVM_GPIO
+    default 18
+	help
+        GPIO number for the CLE signal used by the AVM Direct-NAND Interface for flash control
+
+config MTD_NAND_DIRECT_AVM_NWP
+	int "GPIO number for the /WP signal used by the AVM Direct-NAND Interface"
+	depends on MTD_NAND && MTD_PARTITIONS && MTD_NAND_DIRECT_AVM_GPIO
+    default 19
+	help
+        GPIO number for the /WP signal used by the AVM Direct-NAND Interface for flash control
+
+source "drivers/mtd/nand/Kconfig.ifx"
 
 endif # MTD_NAND

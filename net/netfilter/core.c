@@ -24,6 +24,13 @@
 
 #include "nf_internals.h"
 
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+  #include <net/ifx_ppa_api.h>
+#endif
+
+#ifdef CONFIG_ATHRS_HW_NAT
+#include <net/netfilter/nf_conntrack.h>
+#endif /* CONFIG_ATHRS_HW_NAT */
 static DEFINE_MUTEX(afinfo_mutex);
 
 const struct nf_afinfo *nf_afinfo[NFPROTO_NUMPROTO] __read_mostly;
@@ -175,6 +182,18 @@ next_hook:
 	if (verdict == NF_ACCEPT || verdict == NF_STOP) {
 		ret = 1;
 	} else if (verdict == NF_DROP) {
+
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+        if ( ppa_hook_session_del_fn != NULL )
+        {
+            struct nf_conn *ct = NULL;
+            enum ip_conntrack_info ctinfo;
+        
+            ct = nf_ct_get(skb, &ctinfo);
+            ppa_hook_session_del_fn(ct, PPA_F_SESSION_ORG_DIR | PPA_F_SESSION_REPLY_DIR);
+        }
+#endif
+
 		kfree_skb(skb);
 		ret = -EPERM;
 	} else if ((verdict & NF_VERDICT_MASK) == NF_QUEUE) {
@@ -236,8 +255,19 @@ EXPORT_SYMBOL(nf_ct_destroy);
 void nf_conntrack_destroy(struct nf_conntrack *nfct)
 {
 	void (*destroy)(struct nf_conntrack *);
-
+#ifdef CONFIG_ATHRS_HW_NAT
+	struct nf_conn *ct = (struct nf_conn *)nfct;
+        void (*athr_process_hwnat)(struct sk_buff *, struct nf_conn *,
+                                   enum ip_conntrack_info, u_int8_t);
+#endif
 	rcu_read_lock();
+#ifdef CONFIG_ATHRS_HW_NAT
+        if (athr_nat_sw_ops) {
+                athr_process_hwnat = rcu_dereference(athr_nat_sw_ops->nf_process_nat);
+                if (athr_process_hwnat)
+                        athr_process_hwnat(NULL, ct, 0, 0);
+        }
+#endif
 	destroy = rcu_dereference(nf_ct_destroy);
 	BUG_ON(destroy == NULL);
 	destroy(nfct);

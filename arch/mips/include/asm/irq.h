@@ -41,7 +41,7 @@ static inline void smtc_im_ack_irq(unsigned int irq)
 
 #else
 
-static inline void smtc_im_ack_irq(unsigned int irq)
+static inline void smtc_im_ack_irq(unsigned int irq __attribute__ ((unused)))
 {
 }
 

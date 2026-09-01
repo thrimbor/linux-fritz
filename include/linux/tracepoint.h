@@ -101,15 +101,15 @@ extern void tracepoint_update_probe_range(struct tracepoint *begin,
 
 #else /* !CONFIG_TRACEPOINTS */
 #define DECLARE_TRACE(name, proto, args)				\
-	static inline void _do_trace_##name(struct tracepoint *tp, proto) \
+	static inline void _do_trace_##name(struct tracepoint *tp __attribute__ ((unused)), proto) \
 	{ }								\
 	static inline void trace_##name(proto)				\
 	{ }								\
-	static inline int register_trace_##name(void (*probe)(proto))	\
+	static inline int register_trace_##name(void (*probe)(proto) __attribute__ ((unused)))	\
 	{								\
 		return -ENOSYS;						\
 	}								\
-	static inline int unregister_trace_##name(void (*probe)(proto))	\
+	static inline int unregister_trace_##name(void (*probe)(proto) __attribute__ ((unused)))	\
 	{								\
 		return -ENOSYS;						\
 	}
@@ -119,8 +119,8 @@ extern void tracepoint_update_probe_range(struct tracepoint *begin,
 #define EXPORT_TRACEPOINT_SYMBOL_GPL(name)
 #define EXPORT_TRACEPOINT_SYMBOL(name)
 
-static inline void tracepoint_update_probe_range(struct tracepoint *begin,
-	struct tracepoint *end)
+static inline void tracepoint_update_probe_range(struct tracepoint *begin __attribute__ ((unused)),
+	struct tracepoint *end __attribute__ ((unused)))
 { }
 #endif /* CONFIG_TRACEPOINTS */
 #endif /* DECLARE_TRACE */

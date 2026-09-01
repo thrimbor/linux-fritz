@@ -144,6 +144,11 @@
 #include <linux/mroute.h>
 #include <linux/netlink.h>
 
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+int sysctl_netfilter_prerouting_enable = 1;
+int sysctl_netfilter_input_enable = 1;
+#endif
+
 /*
  *	Process Router Attention IP option
  */
@@ -265,6 +270,10 @@ int ip_local_deliver(struct sk_buff *skb)
 			return 0;
 	}
 
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+       if (!sysctl_netfilter_input_enable)
+               return ip_local_deliver_finish(skb);
+#endif
 	return NF_HOOK(PF_INET, NF_INET_LOCAL_IN, skb, skb->dev, NULL,
 		       ip_local_deliver_finish);
 }
@@ -443,6 +452,13 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 	/* Must drop socket now because of tproxy. */
 	skb_orphan(skb);
 
+#ifdef CONFIG_AVM_PA
+    AVM_PKT_INFO(skb)->ptype_pid_handle = AVM_PA_PTYPE_DEVINFO(pt)->pid_handle;
+#endif
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+       if (!sysctl_netfilter_prerouting_enable)
+               return ip_rcv_finish(skb);
+#endif
 	return NF_HOOK(PF_INET, NF_INET_PRE_ROUTING, skb, dev, NULL,
 		       ip_rcv_finish);
 

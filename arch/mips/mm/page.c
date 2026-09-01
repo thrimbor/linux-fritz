@@ -84,9 +84,9 @@ static struct uasm_reloc __cpuinitdata relocs[5];
 static u32 clear_page_array[0x120 / 4];
 
 #ifdef CONFIG_SIBYTE_DMA_PAGEOPS
-void clear_page_cpu(void *page) __attribute__((alias("clear_page_array")));
+void (*clear_page_cpu)(void *page) = (void (*)(void *))&clear_page_array[0];
 #else
-void clear_page(void *page) __attribute__((alias("clear_page_array")));
+void (*clear_page)(void *page) = (void (*)(void *))&clear_page_array[0];
 #endif
 
 EXPORT_SYMBOL(clear_page);
@@ -102,10 +102,9 @@ EXPORT_SYMBOL(clear_page);
 static u32 copy_page_array[0x540 / 4];
 
 #ifdef CONFIG_SIBYTE_DMA_PAGEOPS
-void
-copy_page_cpu(void *to, void *from) __attribute__((alias("copy_page_array")));
+void (*copy_page_cpu)(void *to, void *from) = (void (*)(void *, void *))&copy_page_array[0];
 #else
-void copy_page(void *to, void *from) __attribute__((alias("copy_page_array")));
+void (*copy_page)(void *to, void *from) = (void (*)(void *, void *))&copy_page_array[0];
 #endif
 
 EXPORT_SYMBOL(copy_page);

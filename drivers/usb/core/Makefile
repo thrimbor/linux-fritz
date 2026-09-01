@@ -14,6 +14,10 @@ ifeq ($(CONFIG_USB_DEVICEFS),y)
 	usbcore-objs	+= inode.o
 endif
 
+ifeq ($(CONFIG_AVM_NET_TRACE),y)
+	usbcore-objs	+= avmusbtrace.o
+endif
+
 obj-$(CONFIG_USB)	+= usbcore.o
 
 ifeq ($(CONFIG_USB_DEBUG),y)

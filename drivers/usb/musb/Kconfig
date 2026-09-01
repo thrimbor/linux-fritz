@@ -9,7 +9,7 @@ comment "Enable Host or Gadget support to see Inventra options"
 # (M)HDRC = (Multipoint) Highspeed Dual-Role Controller
 config USB_MUSB_HDRC
 	depends on (USB || USB_GADGET)
-	depends on (ARM || BLACKFIN)
+	depends on (ARM || BLACKFIN || MIPS_UR8 )
 	select NOP_USB_XCEIV if ARCH_DAVINCI
 	select TWL4030_USB if MACH_OMAP_3430SDP
 	select NOP_USB_XCEIV if MACH_OMAP3EVM
@@ -37,6 +37,7 @@ config USB_MUSB_SOC
 	boolean
 	depends on USB_MUSB_HDRC
 	default y if ARCH_DAVINCI
+	default y if MIPS_UR8
 	default y if ARCH_OMAP2430
 	default y if ARCH_OMAP34XX
 	default y if (BF54x && !BF544)
@@ -137,6 +138,17 @@ config USB_MUSB_HDRC_HCD
 	select USB_OTG if USB_GADGET_MUSB_HDRC
 	default y
 
+config USB_MUSB_AVM_BOARD
+	bool 'AVM board'
+	depends on USB_MUSB_HDRC && ARCH_DAVINCI
+	help
+	  Select this option on AVM FRITZ! boards.
+config USB_MUSB_AVM_BOARD_UR8_VBUS_NOT_CONNECTED
+	bool 'AVM board: VBUS pin is not connected to USB power'
+	depends on USB_MUSB_HDRC && MIPS_UR8
+	default n
+	help
+	  Select this option on AVM boards with on-board hub.
 
 config MUSB_PIO_ONLY
 	bool 'Disable DMA (always use PIO)'
@@ -161,7 +173,7 @@ config USB_INVENTRA_DMA
 config USB_TI_CPPI_DMA
 	bool
 	depends on USB_MUSB_HDRC && !MUSB_PIO_ONLY
-	default ARCH_DAVINCI
+	default ARCH_DAVINCI || MIPS_UR8
 	help
 	  Enable DMA transfers when TI CPPI DMA is available.
 

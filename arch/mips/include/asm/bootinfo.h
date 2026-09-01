@@ -69,6 +69,39 @@
 #define MACH_DEXXON_GDIUM2F10  5
 #define MACH_LOONGSON_END      6
 
+/*
+ * Atheros ar7240
+ */
+#define MACH_GROUP_AR7240       24
+#define MACH_ATHEROS_AR7240     1
+
+#define MACH_GROUP_ATHEROS	24
+#define MACH_ATHEROS_AR724x	1
+#define MACH_ATHEROS_AR933x	2
+#define MACH_ATHEROS_AR934x	3
+
+/*
+ * Atheros ar7100 ( hydra )
+ */
+#define MACH_GROUP_AR7100       23
+#define MACH_ATHEROS_AR7100     1
+
+/*
+ * Valid machtype for Lantiq chip family
+ */
+#define MACH_DANUBE		0
+#define MACH_AMAZON_SE	1
+#define MACH_AR9		2
+#define MACH_VR9		3
+#define MACH_AR10		4
+#define MACH_HN1		5
+
+#define MACH_GROUP_DANUBE      26      /* Infineon DANUBE */
+#define MACH_GROUP_AMAZON_SE   27      /* Infineon Amazon_SE  */
+#define MACH_GROUP_AMAZON_S    28      /* Infineon Amazon_S    */
+#define MACH_GROUP_AR9         29      /* Infineon AR9    */
+#define MACH_GROUP_VR9         30      /* Infineon VDSL CPE VR9 */
+
 #define CL_SIZE			COMMAND_LINE_SIZE
 
 extern char *system_type;
@@ -80,6 +113,7 @@ extern unsigned long mips_machtype;
 #define BOOT_MEM_RAM		1
 #define BOOT_MEM_ROM_DATA	2
 #define BOOT_MEM_RESERVED	3
+#define BOOT_MEM_BOOTLOADER	4
 
 /*
  * A memory map that's built upon what was determined

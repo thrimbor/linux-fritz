@@ -1554,7 +1554,7 @@ static int acct_stack_growth(struct vm_area_struct *vma, unsigned long size, uns
 {
 	struct mm_struct *mm = vma->vm_mm;
 	struct rlimit *rlim = current->signal->rlim;
-	unsigned long new_start;
+	unsigned long new_start __maybe_unused__;
 
 	/* address space limit tests */
 	if (!may_expand_vm(mm, grow))
@@ -2501,7 +2501,7 @@ void mm_drop_all_locks(struct mm_struct *mm)
  */
 void __init mmap_init(void)
 {
-	int ret;
+	int ret __maybe_unused__;
 
 	ret = percpu_counter_init(&vm_committed_as, 0);
 	VM_BUG_ON(ret);

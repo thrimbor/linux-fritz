@@ -40,28 +40,27 @@ extern int register_mem_sect_under_node(struct memory_block *mem_blk,
 						int nid);
 extern int unregister_mem_sect_under_nodes(struct memory_block *mem_blk);
 #else
-static inline int register_one_node(int nid)
+static inline int register_one_node(int nid __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline int unregister_one_node(int nid)
+static inline int unregister_one_node(int nid __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline int register_cpu_under_node(unsigned int cpu, unsigned int nid)
+static inline int register_cpu_under_node(unsigned int cpu __attribute__ ((unused)), unsigned int nid __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline int unregister_cpu_under_node(unsigned int cpu, unsigned int nid)
+static inline int unregister_cpu_under_node(unsigned int cpu __attribute__ ((unused)), unsigned int nid __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline int register_mem_sect_under_node(struct memory_block *mem_blk,
-							int nid)
+static inline int register_mem_sect_under_node(struct memory_block *mem_blk __attribute__ ((unused)), int nid __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline int unregister_mem_sect_under_nodes(struct memory_block *mem_blk)
+static inline int unregister_mem_sect_under_nodes(struct memory_block *mem_blk __attribute__ ((unused)))
 {
 	return 0;
 }

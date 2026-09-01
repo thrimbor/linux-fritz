@@ -13,6 +13,7 @@
 #include <linux/vmalloc.h>
 #include <asm/cacheflush.h>
 #include <asm/io.h>
+#include <linux/rmap.h>
 #include <asm/tlbflush.h>
 
 static inline void remap_area_pte(pte_t * pte, unsigned long address,
@@ -40,6 +41,40 @@ static inline void remap_area_pte(pte_t * pte, unsigned long address,
 		pte++;
 	} while (address && (address < end));
 }
+/*--------------------------------------------------------------------------------*\
+ * writep(un)protect virt_addr-area 
+ * ret: 0 ok
+\*--------------------------------------------------------------------------------*/
+int __io_remap_setwriteprotect(unsigned char *virt_addr, unsigned int len, unsigned int wrprotect) {
+    unsigned char *end_virt_addr = virt_addr + len;
+    /*--- printk("%s(%p,%d,%d)\n", __func__, virt_addr, len, wrprotect); ---*/
+    
+	flush_cache_all();
+
+    while(virt_addr < end_virt_addr) {
+        spinlock_t *ptl;
+        pte_t *pte;
+        struct page *_page;
+        _page = vmalloc_to_page(virt_addr);
+
+        pte = page_check_address(_page, &init_mm, (unsigned long)virt_addr, &ptl, 1);
+        if(pte == NULL) {
+            printk(KERN_DEBUG"%s: info: no pte for addr %p\n", __func__, virt_addr);
+            return 1;
+        }
+        if(wrprotect) {
+            ptep_set_wrprotect(&init_mm, (unsigned int)virt_addr, pte);
+        } else {
+            pte_t old_pte = *pte;
+            set_pte_at(&init_mm, virt_addr, pte, pte_mkwrite(old_pte));
+        }
+        pte_unmap_unlock(pte, ptl);
+        virt_addr += PAGE_SIZE;
+    }
+	flush_tlb_all();
+    return 0;
+}
+EXPORT_SYMBOL(__io_remap_setwriteprotect);
 
 static inline int remap_area_pmd(pmd_t * pmd, unsigned long address,
 	phys_t size, phys_t phys_addr, unsigned long flags)

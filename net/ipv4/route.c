@@ -107,6 +107,9 @@
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>
 #endif
+#ifdef CONFIG_MAPPING
+#include "proto_trans.h"
+#endif
 #include <net/secure_seq.h>
 
 #define RT_FL_TOS(oldflp) \
@@ -1516,7 +1519,9 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 {
 	struct rtable *rt = skb_rtable(skb);
 	struct in_device *in_dev;
+#ifdef CONFIG_IP_ROUTE_VERBOSE
 	int log_martians;
+#endif /*--- #ifdef CONFIG_IP_ROUTE_VERBOSE ---*/
 
 	rcu_read_lock();
 	in_dev = __in_dev_get_rcu(rt->u.dst.dev);
@@ -1524,7 +1529,9 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 		rcu_read_unlock();
 		return;
 	}
+#ifdef CONFIG_IP_ROUTE_VERBOSE
 	log_martians = IN_DEV_LOG_MARTIANS(in_dev);
+#endif /*--- #ifdef CONFIG_IP_ROUTE_VERBOSE ---*/
 	rcu_read_unlock();
 
 	/* No redirected packets during ip_rt_redirect_silence;
@@ -1967,6 +1974,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	}
 
 
+#ifndef	CONFIG_MAPPING
 	err = fib_validate_source(saddr, daddr, tos, FIB_RES_OIF(*res),
 				  in_dev->dev, &spec_dst, &itag, skb->mark);
 	if (err < 0) {
@@ -1979,7 +1987,9 @@ static int __mkroute_input(struct sk_buff *skb,
 
 	if (err)
 		flags |= RTCF_DIRECTSRC;
-
+#else
+	err = 0;
+#endif
 	if (out_dev == in_dev && err &&
 	    (IN_DEV_SHARED_MEDIA(out_dev) ||
 	     inet_addr_onlink(out_dev, saddr, FIB_RES_GW(*res))))
@@ -2011,6 +2021,11 @@ static int __mkroute_input(struct sk_buff *skb,
 	rth->fl.fl4_dst	= daddr;
 	rth->rt_dst	= daddr;
 	rth->fl.fl4_tos	= tos;
+#ifdef CONFIG_MAPPING
+	rth->mapping = res->mapping;	/* Make the mapping cache */
+	rth->src_prefix = res->src_prefix;
+	rth->dst_prefix = res->dst_prefix;
+#endif
 	rth->fl.mark    = skb->mark;
 	rth->fl.fl4_src	= saddr;
 	rth->rt_src	= saddr;
@@ -2134,6 +2149,13 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	free_res = 1;
 
 	RT_CACHE_STAT_INC(in_slow_tot);
+#ifdef	CONFIG_MAPPING
+	if (res.mapping) {
+		if (!ip_mapping(skb, res.src_prefix, res.dst_prefix))
+			printk("Mapping Failed!\n");
+		goto e_inval;	/* Stop the current stack running */
+	}
+#endif
 
 	if (res.type == RTN_BROADCAST)
 		goto brd_input;
@@ -2151,8 +2173,10 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto local_input;
 	}
 
+#ifndef        CONFIG_MAPPING
 	if (!IN_DEV_FORWARD(in_dev))
 		goto e_hostunreach;
+#endif
 	if (res.type != RTN_UNICAST)
 		goto martian_destination;
 
@@ -2284,6 +2308,16 @@ int ip_route_input(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		    rth->fl.mark == skb->mark &&
 		    net_eq(dev_net(rth->u.dst.dev), net) &&
 		    !rt_is_expired(rth)) {
+#ifdef CONFIG_MAPPING
+			if (rth->mapping) {
+				dst_hold(&rth->u.dst);
+				RT_CACHE_STAT_INC(in_hit);
+				if (!ip_mapping(skb, rth->src_prefix, rth->dst_prefix)) {
+					printk("Mapping Failed!\n");
+				}
+				return -EINVAL;	/* Stop the stack running */
+			}
+#endif
 			dst_use(&rth->u.dst, jiffies);
 			RT_CACHE_STAT_INC(in_hit);
 			rcu_read_unlock();
@@ -2405,6 +2439,11 @@ static int __mkroute_output(struct rtable **result,
 	rth->rt_iif	= oldflp->oif ? : dev_out->ifindex;
 	/* get references to the devices that are to be hold by the routing
 	   cache entry */
+#ifdef CONFIG_MAPPING
+	rth->mapping	= res->mapping;
+	rth->src_prefix = res->src_prefix;
+	rth->dst_prefix = res->dst_prefix;
+#endif	
 	rth->u.dst.dev	= dev_out;
 	dev_hold(dev_out);
 	rth->idev	= in_dev_get(dev_out);

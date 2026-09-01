@@ -31,3 +31,25 @@ config BRIDGE
 	  will be called bridge.
 
 	  If unsure, say N.
+
+config BRIDGE_SNOOPING
+	bool "IGMP/MLD snooping"
+	depends on BRIDGE
+	depends on INET
+	default n
+	---help---
+	  If you say Y here, then the Ethernet bridge will be able selectively
+	  forward multicast traffic based on IGMP/MLD traffic received from
+	  each port.
+
+	  Say N to exclude this support and reduce the binary size.
+
+	  If unsure, say N.
+
+config LTQ_BR_OPT
+       bool "LTQ Bridge Optimizations"
+       depends on  BRIDGE && LTQ_ADDON
+       help
+         If selected, LTQ enhancements to the bridging code would be enabled.
+         This significantly enhances the bridging performance over that of vanilla kernel.
+         It is recommended to be alwyas on.

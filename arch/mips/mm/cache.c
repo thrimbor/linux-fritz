@@ -20,6 +20,7 @@
 #include <asm/processor.h>
 #include <asm/cpu.h>
 #include <asm/cpu-features.h>
+#include <asm/avm_cache.h>
 
 /* Cache operations. */
 void (*flush_cache_all)(void);
@@ -52,6 +53,8 @@ void (*_dma_cache_wback)(unsigned long start, unsigned long size);
 void (*_dma_cache_inv)(unsigned long start, unsigned long size);
 
 EXPORT_SYMBOL(_dma_cache_wback_inv);
+EXPORT_SYMBOL(_dma_cache_wback);
+EXPORT_SYMBOL(_dma_cache_inv);
 
 #endif /* CONFIG_DMA_NONCOHERENT */
 
@@ -157,10 +160,19 @@ static inline void setup_protection_map(void)
 
 void __devinit cpu_cache_init(void)
 {
+    avm_cache_set_coherency();
+
 	if (cpu_has_3k_cache) {
 		extern void __weak r3k_cache_init(void);
 
-		r3k_cache_init();
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+		extern void ld_mmu_lx4189(void);
+
+		if((current_cpu_data.processor_id & 0xFFFF) == PRID_IMP_FUSIV_MIPS1) {
+			ld_mmu_lx4189();
+		} else
+#endif
+			r3k_cache_init();
 	}
 	if (cpu_has_6k_cache) {
 		extern void __weak r6k_cache_init(void);

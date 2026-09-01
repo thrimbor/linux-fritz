@@ -435,6 +435,12 @@ static int help(struct sk_buff *skb,
 		goto out_update_nl;
 	}
 
+#if defined(CONFIG_IP_NF_MATCH_LTQATTACK) || defined(CONFIG_IP_NF_MATCH_LTQATTACK_MODULE)
+	if (search[dir][i].ftptype == NF_CT_FTP_PORT) {
+		pr_debug("Found FTP port command with port %d\n", cmd.u.tcp.port);
+		ct_ftp_info->active_ftp_port =  cmd.u.tcp.port;
+	}
+#endif
 	pr_debug("conntrack_ftp: match `%.*s' (%u bytes at %u)\n",
 		 matchlen, fb_ptr + matchoff,
 		 matchlen, ntohl(th->seq) + matchoff);
@@ -482,6 +488,13 @@ static int help(struct sk_buff *skb,
 	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, cmd.l3num,
 			  &ct->tuplehash[!dir].tuple.src.u3, daddr,
 			  IPPROTO_TCP, NULL, &cmd.u.tcp.port);
+
+#ifdef CONFIG_FTP_ALG_FIX
+//exp->mask.src.l3num = 0xFFFF;
+exp->mask.src.u.tcp.port  = 0;
+//exp->mask.dst.protonum = 0xFF;
+//exp->mask.dst.u.tcp.port = __constant_htons(0xFFFF);
+#endif
 
 	/* Now, NAT might want to mangle the packet, and register the
 	 * (possibly changed) expectation itself. */
@@ -542,7 +555,11 @@ static int __init nf_conntrack_ftp_init(void)
 	int i, j = -1, ret = 0;
 	char *tmpname;
 
+#ifdef CONFIG_LTQ_OPTIMIZATION
+	ftp_buffer = kmalloc(32768, GFP_KERNEL);
+#else
 	ftp_buffer = kmalloc(65536, GFP_KERNEL);
+#endif
 	if (!ftp_buffer)
 		return -ENOMEM;
 

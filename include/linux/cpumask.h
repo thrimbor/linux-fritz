@@ -90,10 +90,10 @@ extern const struct cpumask *const cpu_active_mask;
 #define cpu_present(cpu)	cpumask_test_cpu((cpu), cpu_present_mask)
 #define cpu_active(cpu)		cpumask_test_cpu((cpu), cpu_active_mask)
 #else
-#define num_online_cpus()	1
-#define num_possible_cpus()	1
-#define num_present_cpus()	1
-#define num_active_cpus()	1
+#define num_online_cpus()	1U
+#define num_possible_cpus()	1U
+#define num_present_cpus()	1U
+#define num_active_cpus()	1U
 #define cpu_online(cpu)		((cpu) == 0)
 #define cpu_possible(cpu)	((cpu) == 0)
 #define cpu_present(cpu)	((cpu) == 0)
@@ -111,32 +111,32 @@ static inline unsigned int cpumask_check(unsigned int cpu)
 
 #if NR_CPUS == 1
 /* Uniprocessor.  Assume all masks are "1". */
-static inline unsigned int cpumask_first(const struct cpumask *srcp)
+static inline unsigned int cpumask_first(const struct cpumask *srcp __attribute__ ((unused)))
 {
 	return 0;
 }
 
 /* Valid inputs for n are -1 and 0. */
-static inline unsigned int cpumask_next(int n, const struct cpumask *srcp)
+static inline unsigned int cpumask_next(int n, const struct cpumask *srcp __attribute__ ((unused)))
 {
 	return n+1;
 }
 
-static inline unsigned int cpumask_next_zero(int n, const struct cpumask *srcp)
+static inline unsigned int cpumask_next_zero(int n, const struct cpumask *srcp __attribute__ ((unused)))
 {
 	return n+1;
 }
 
 static inline unsigned int cpumask_next_and(int n,
-					    const struct cpumask *srcp,
-					    const struct cpumask *andp)
+					    const struct cpumask *srcp __attribute__ ((unused)),
+					    const struct cpumask *andp __attribute__ ((unused)))
 {
 	return n+1;
 }
 
 /* cpu must be a valid cpu, ie 0, so there's no other choice. */
-static inline unsigned int cpumask_any_but(const struct cpumask *mask,
-					   unsigned int cpu)
+static inline unsigned int cpumask_any_but(const struct cpumask *mask __attribute__ ((unused)),
+                                           unsigned int cpu __attribute__ ((unused)))
 {
 	return 1;
 }
@@ -603,39 +603,41 @@ void free_bootmem_cpumask_var(cpumask_var_t mask);
 #else
 typedef struct cpumask cpumask_var_t[1];
 
-static inline bool alloc_cpumask_var(cpumask_var_t *mask, gfp_t flags)
+static inline bool alloc_cpumask_var(cpumask_var_t *mask __attribute__ ((unused)),
+                                     gfp_t flags __attribute__ ((unused)))
 {
 	return true;
 }
 
-static inline bool alloc_cpumask_var_node(cpumask_var_t *mask, gfp_t flags,
-					  int node)
+static inline bool alloc_cpumask_var_node(cpumask_var_t *mask __attribute__ ((unused)), 
+                                          gfp_t flags __attribute__ ((unused)),
+                                          int node __attribute__ ((unused)))
 {
 	return true;
 }
 
-static inline bool zalloc_cpumask_var(cpumask_var_t *mask, gfp_t flags)
+static inline bool zalloc_cpumask_var(cpumask_var_t *mask, gfp_t flags __attribute__ ((unused)))
 {
 	cpumask_clear(*mask);
 	return true;
 }
 
-static inline bool zalloc_cpumask_var_node(cpumask_var_t *mask, gfp_t flags,
-					  int node)
+static inline bool zalloc_cpumask_var_node(cpumask_var_t *mask, gfp_t flags __attribute__ ((unused)),
+                                           int node __attribute__ ((unused)))
 {
 	cpumask_clear(*mask);
 	return true;
 }
 
-static inline void alloc_bootmem_cpumask_var(cpumask_var_t *mask)
+static inline void alloc_bootmem_cpumask_var(cpumask_var_t *mask __attribute__ ((unused)))
 {
 }
 
-static inline void free_cpumask_var(cpumask_var_t mask)
+static inline void free_cpumask_var(cpumask_var_t mask __attribute__ ((unused)))
 {
 }
 
-static inline void free_bootmem_cpumask_var(cpumask_var_t mask)
+static inline void free_bootmem_cpumask_var(cpumask_var_t mask __attribute__ ((unused)))
 {
 }
 #endif /* CONFIG_CPUMASK_OFFSTACK */
@@ -675,7 +677,7 @@ void init_cpu_online(const struct cpumask *src);
 	((struct cpumask *)(1 ? (bitmap)				\
 			    : (void *)sizeof(__check_is_bitmap(bitmap))))
 
-static inline int __check_is_bitmap(const unsigned long *bitmap)
+static inline int __check_is_bitmap(const unsigned long *bitmap __attribute__ ((unused)))
 {
 	return 1;
 }

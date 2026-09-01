@@ -54,8 +54,6 @@
  *                irq line disabled until the threaded handler has been run.
  * IRQF_NO_SUSPEND - Do not disable this IRQ during suspend
  * IRQF_FORCE_RESUME - Force enable it on resume even if IRQF_NO_SUSPEND is set
- * IRQF_EARLY_RESUME - Resume IRQ early during syscore instead of at device
- *                resume time.
  */
 #define IRQF_DISABLED		0x00000020
 #define IRQF_SAMPLE_RANDOM	0x00000040
@@ -68,7 +66,6 @@
 #define IRQF_ONESHOT		0x00002000
 #define IRQF_NO_SUSPEND		0x00004000
 #define IRQF_FORCE_RESUME	0x00008000
-#define IRQF_EARLY_RESUME	0x00020000
 
 #define IRQF_TIMER		(__IRQF_TIMER | IRQF_NO_SUSPEND)
 
@@ -223,17 +220,17 @@ extern int irq_select_affinity(unsigned int irq);
 
 #else /* CONFIG_SMP */
 
-static inline int irq_set_affinity(unsigned int irq, const struct cpumask *m)
+static inline int irq_set_affinity(unsigned int irq __attribute__ ((unused)), const struct cpumask *m __attribute__ ((unused)))
 {
 	return -EINVAL;
 }
 
-static inline int irq_can_set_affinity(unsigned int irq)
+static inline int irq_can_set_affinity(unsigned int irq __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int irq_select_affinity(unsigned int irq)  { return 0; }
+static inline int irq_select_affinity(unsigned int irq __attribute__ ((unused)))  { return 0; }
 
 #endif /* CONFIG_SMP && CONFIG_GENERIC_HARDIRQS */
 
@@ -257,7 +254,7 @@ static inline void disable_irq_nosync_lockdep(unsigned int irq)
 #endif
 }
 
-static inline void disable_irq_nosync_lockdep_irqsave(unsigned int irq, unsigned long *flags)
+static inline void disable_irq_nosync_lockdep_irqsave(unsigned int irq, unsigned long *flags __attribute__ ((unused)))
 {
 	disable_irq_nosync(irq);
 #ifdef CONFIG_LOCKDEP
@@ -281,7 +278,7 @@ static inline void enable_irq_lockdep(unsigned int irq)
 	enable_irq(irq);
 }
 
-static inline void enable_irq_lockdep_irqrestore(unsigned int irq, unsigned long *flags)
+static inline void enable_irq_lockdep_irqrestore(unsigned int irq, unsigned long *flags __attribute__ ((unused)))
 {
 #ifdef CONFIG_LOCKDEP
 	local_irq_restore(*flags);
@@ -630,5 +627,13 @@ extern int early_irq_init(void);
 extern int arch_probe_nr_irqs(void);
 extern int arch_early_irq_init(void);
 extern int arch_init_chip_data(struct irq_desc *desc, int node);
+
+#if defined(CONFIG_LANTIQ)
+/*--- for SMP-usage ---*/
+extern int request_irq_on(int cpu, unsigned int irq, irq_handler_t handler, unsigned long irqflags, const char *devname, void *dev_id);
+extern int free_irq_on(int cpu, unsigned int irq, void *dev_id);
+extern void enable_irq_on(int cpu, unsigned int irq);
+extern void disable_irq_on(int cpu, unsigned int irq);
+#endif /*--- #if defined(CONFIG_LANTIQ) ---*/
 
 #endif

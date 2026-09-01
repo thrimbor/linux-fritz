@@ -626,6 +626,19 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "mx25l12805d", 0xc22018, 0, 64 * 1024, 256, },
 	{ "mx25l12855e", 0xc22618, 0, 64 * 1024, 256, },
 
+	/* EON -- en25pxx */
+	{ "en25p32", 0x1c2016, 0, 64 * 1024,  64, },
+	{ "en25p64", 0x1c2017, 0, 64 * 1024, 128, },
+
+	/* Numonyx -- xxxs33b */
+	{ "160s33b",  0x898911, 0, 64 * 1024,  64, },
+	{ "320s33b",  0x898912, 0, 64 * 1024, 128, },
+	{ "640s33b",  0x898913, 0, 64 * 1024, 256, },
+
+	/* PMC -- pm25x "blocks" are 32K, sectors are 4K */
+	{ "pm25lv512",         0, 32 * 1024, 2, SECT_4K },
+	{ "pm25lv010",         0, 32 * 1024, 4, SECT_4K },
+
 	/* Spansion -- single (large) sector size only, at least
 	 * for the chips listed here (without boot sectors).
 	 */
@@ -674,6 +687,7 @@ static struct flash_info __devinitdata m25p_data [] = {
 	{ "w25x80", 0xef3014, 0, 64 * 1024, 16, SECT_4K, },
 	{ "w25x16", 0xef3015, 0, 64 * 1024, 32, SECT_4K, },
 	{ "w25x32", 0xef3016, 0, 64 * 1024, 64, SECT_4K, },
+	{ "w25q32", 0xef4016, 0, 64 * 1024, 64, SECT_4K, },
 	{ "w25x64", 0xef3017, 0, 64 * 1024, 128, SECT_4K, },
 };
 
@@ -776,11 +790,12 @@ static int __devinit m25p_probe(struct spi_device *spi)
 	dev_set_drvdata(&spi->dev, flash);
 
 	/*
-	 * Atmel serial flash tend to power up
+	 * Atmel and Intel/Numonyx serial flash tend to power up
 	 * with the software protection bits set
 	 */
 
-	if (info->jedec_id >> 16 == 0x1f) {
+	if (info->jedec_id >> 16 == 0x1f ||
+	    info->jedec_id >> 16 == 0x89) {
 		write_enable(flash);
 		write_sr(flash, 0);
 	}

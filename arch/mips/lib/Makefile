@@ -3,9 +3,11 @@
 #
 
 lib-y	+= csum_partial.o delay.o memcpy.o memcpy-inatomic.o memset.o \
-	   strlen_user.o strncpy_user.o strnlen_user.o uncached.o
+	   strlen_user.o strncpy_user.o strnlen_user.o uncached.o memcmp.o
 
 obj-y			+= iomap.o
+obj-y			+= avm_membench.o
+obj-y			+= avm_busmaster_handler.o
 obj-$(CONFIG_PCI)	+= iomap-pci.o
 
 obj-$(CONFIG_CPU_LOONGSON2)	+= dump_tlb.o

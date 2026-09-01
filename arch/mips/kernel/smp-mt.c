@@ -35,6 +35,7 @@
 #include <asm/mipsregs.h>
 #include <asm/mipsmtregs.h>
 #include <asm/mips_mt.h>
+#include <asm/yield_context.h>
 
 static void __init smvp_copy_vpe_config(void)
 {
@@ -112,33 +113,57 @@ static void __init smvp_tc_init(unsigned int tc, unsigned int mvpconf0)
 	write_tc_c0_tchalt(TCHALT_H);
 }
 
+extern unsigned int cpu_idle_state(int vpe);
+
 static void vsmp_send_ipi_single(int cpu, unsigned int action)
 {
 	int i;
-	unsigned long flags;
-	int vpflags;
+	/*--- unsigned long flags; ---*/
+	/*--- int vpflags; ---*/
 
-	local_irq_save(flags);
+	/*--- local_irq_save(flags); ---*/
+	/*--- vpflags = dvpe(); ---*/	/* cant access the other CPU's registers whilst MVPE enabled */
+    extern spinlock_t ipi_irq_lock;
+	unsigned long mtflags, flags;			
 
-	vpflags = dvpe();	/* cant access the other CPU's registers whilst MVPE enabled */
 
 	switch (action) {
 	case SMP_CALL_FUNCTION:
 		i = C_SW1;
 		break;
 
-	case SMP_RESCHEDULE_YOURSELF:
+	case SMP_RESCHEDULE_YOURSELF: {
+#if 0
+        static unsigned int last_jiffies[NR_CPUS], not_idle[NR_CPUS], cnt[NR_CPUS];
+        cnt[cpu]++;
+        if(jiffies - last_jiffies[cpu] > 10 *HZ) {
+            __printk("[%x]not_idle: %u %u\n",cpu, not_idle[cpu], cnt[cpu]);
+            not_idle[cpu] = cnt[cpu] = 0;
+            last_jiffies[cpu] = jiffies;
+        }
+mbahr: Deaktiviert: evtl. fuer Hw-Watchdog "verantwortlich" !
+        if(!cpu_idle_state(cpu_data[cpu].vpe_id)) {
+            /*--- optimizing: generate no interrupt, if the other cpu not in idle ---*/
+            /*--- not_idle[cpu]++; ---*/
+            return;
+        }
+#endif
+        /*--- no break ---*/
+    }
 	default:
 		i = C_SW0;
 		break;
 	}
 
+	mtflags = dmt();                
+    spin_lock_irqsave(&ipi_irq_lock, flags);
 	/* 1:1 mapping of vpe and tc... */
 	settc(cpu);
 	write_vpe_c0_cause(read_vpe_c0_cause() | i);
-	evpe(vpflags);
-
-	local_irq_restore(flags);
+	/*--- evpe(vpflags); ---*/
+	/*--- local_irq_restore(flags); ---*/
+    spin_unlock_irqrestore(&ipi_irq_lock, flags); 
+	emt(mtflags);			   	   
 }
 
 static void vsmp_send_ipi_mask(const struct cpumask *mask, unsigned int action)
@@ -151,15 +176,30 @@ static void vsmp_send_ipi_mask(const struct cpumask *mask, unsigned int action)
 
 static void __cpuinit vsmp_init_secondary(void)
 {
+	struct cpuinfo_mips *c = &current_cpu_data;
 	extern int gic_present;
 
+	c->vpe_id = (read_c0_tcbind() >> TCBIND_CURVPE_SHIFT) & TCBIND_CURVPE;
+	c->core   = (read_c0_ebase() >> 1) & 0xff;
+    /*--- printk("%s: %x: %x %x %x\n", __func__, smp_processor_id(), c->vpe_id, c->core, read_c0_ebase()); ---*/
 	/* This is Malta specific: IPI,performance and timer inetrrupts */
 	if (gic_present)
 		change_c0_status(ST0_IM, STATUSF_IP3 | STATUSF_IP4 |
 					 STATUSF_IP6 | STATUSF_IP7);
-	else
+	else {
+#if defined(CONFIG_LANTIQ) || defined(CONFIG_HN1)
+		/*
+         * hbl: im 28er Kernel (an leicht anderer Stelle)
+         *  change_c0_status(ST0_IM, STATUSF_IP0 | 
+         *            STATUSF_IP1 | STATUSF_IP2 | STATUSF_IP3 | STATUSF_IP4 | STATUSF_IP5 |
+		 *			 STATUSF_IP6 | STATUSF_IP7);
+         */
+		set_c0_status(ST0_IM); //enable all the interrupt lines.
+#else
 		change_c0_status(ST0_IM, STATUSF_IP0 | STATUSF_IP1 |
 					 STATUSF_IP6 | STATUSF_IP7);
+#endif
+	}
 }
 
 static void __cpuinit vsmp_smp_finish(void)
@@ -178,6 +218,12 @@ static void __cpuinit vsmp_smp_finish(void)
 
 static void vsmp_cpus_done(void)
 {
+#if defined(CONFIG_LANTIQ)
+    yield_context_init_on(1, LANTIQ_YIELD_TC, LANTIQ_YIELD_MASK);
+#if defined(CONFIG_VR9) && defined(CONFIG_AVM_SIMPLE_PROFILING_YIELD)
+    yield_context_init_on(0, LANTIQ_YIELD_TC2, LANTIQ_YIELD_MASK2);
+#endif/*--- #if defined(CONFIG_VR9) ---*/
+#endif/*--- #if defined(CONFIG_YIELD_TC) ---*/
 }
 
 /*
@@ -192,10 +238,11 @@ static void __cpuinit vsmp_boot_secondary(int cpu, struct task_struct *idle)
 {
 	struct thread_info *gp = task_thread_info(idle);
 	dvpe();
-	set_c0_mvpcontrol(MVPCONTROL_VPC);
+	set_c0_mvpcontrol(MVPCONTROL_VPC);  /*--- make configuration registers writeable ---*/
 
 	settc(cpu);
 
+    memcpy(&cpu_data[cpu], &cpu_data[0], sizeof(struct cpuinfo_mips));
 	/* restart */
 	write_tc_c0_tcrestart((unsigned long)&smp_bootstrap);
 
@@ -217,8 +264,24 @@ static void __cpuinit vsmp_boot_secondary(int cpu, struct task_struct *idle)
 	                   (unsigned long)(gp + sizeof(struct thread_info)));
 
 	/* finally out of configuration and into chaos */
-	clear_c0_mvpcontrol(MVPCONTROL_VPC);
-
+	clear_c0_mvpcontrol(MVPCONTROL_VPC); /*--- make configuration registers readonly ---*/
+#if 1
+	printk(KERN_INFO "<<<<<<<<<< Start SMP now >>>>>>>>>>\n"
+	                 "[%d]MVPEControl %08x MVPEConf0 %08x VPEControl %08x VPEConf0: %08lx\n"
+                     "TCStatus %08lx TCBind %08lx TCHalt %08lx\n"
+                     "TCRestart %08lx TCGPR %08lx(%p) TCSP %08lx(%08lx)\n", cpu,
+                                                                    read_c0_mvpcontrol(),
+                                                                    read_c0_mvpconf0(),
+                                                                    read_c0_vpecontrol(),
+                                                                    read_vpe_c0_vpeconf0(), 
+                                                                    read_tc_c0_tcstatus(),
+                                                                    read_tc_c0_tcbind(),
+                                                                    read_tc_c0_tchalt(),
+                                                                    read_tc_c0_tcrestart(),
+                                                                    read_tc_gpr_gp(), gp,
+                                                                    read_tc_gpr_sp(), __KSTK_TOS(idle)
+            );
+#endif
 	evpe(EVPE_ENABLE);
 }
 
@@ -279,9 +342,9 @@ struct plat_smp_ops vsmp_smp_ops = {
 	.send_ipi_single	= vsmp_send_ipi_single,
 	.send_ipi_mask		= vsmp_send_ipi_mask,
 	.init_secondary		= vsmp_init_secondary,
-	.smp_finish		= vsmp_smp_finish,
-	.cpus_done		= vsmp_cpus_done,
+	.smp_finish		    = vsmp_smp_finish,
+	.cpus_done		    = vsmp_cpus_done,
 	.boot_secondary		= vsmp_boot_secondary,
-	.smp_setup		= vsmp_smp_setup,
+	.smp_setup		    = vsmp_smp_setup,
 	.prepare_cpus		= vsmp_prepare_cpus,
 };

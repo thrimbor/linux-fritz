@@ -152,13 +152,17 @@ extern int _cond_resched(void);
 # define might_sleep() \
 	do { __might_sleep(__FILE__, __LINE__, 0); might_resched(); } while (0)
 #else
-  static inline void __might_sleep(char *file, int line, int preempt_offset) { }
+  static inline void __might_sleep(char *file __attribute__ ((unused)), int line __attribute__ ((unused)), int preempt_offset __attribute__ ((unused))) { }
 # define might_sleep() do { might_resched(); } while (0)
 #endif
 
 #define might_sleep_if(cond) do { if (cond) might_sleep(); } while (0)
 
 #define abs(x) ({				\
+		long __x = (x);			\
+		(__x < 0) ? -__x : __x;		\
+	})
+#define labs(x) ({				\
 		long __x = (x);			\
 		(__x < 0) ? -__x : __x;		\
 	})
@@ -273,6 +277,16 @@ extern int printk_delay_msec;
 	}					\
 })
 
+/* wird ggf. auf andere Funktion umgebogen */
+#define printk  _printk
+#define vprintk _vprintk
+extern asmlinkage int (*_printk)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2)));
+extern asmlinkage int (*_vprintk)(const char * fmt, va_list args);
+
+void set_printk(int (*__print)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2))));
+void set_vprintk(int (*__vprint)(const char * fmt, va_list args));
+void restore_printk(void);
+
 void log_buf_kexec_setup(void);
 #else
 static inline int vprintk(const char *s, va_list args)
@@ -280,11 +294,12 @@ static inline int vprintk(const char *s, va_list args)
 static inline int vprintk(const char *s, va_list args) { return 0; }
 static inline int printk(const char *s, ...)
 	__attribute__ ((format (printf, 1, 2)));
-static inline int __cold printk(const char *s, ...) { return 0; }
+static inline int __cold printk(const char *s __attribute__ ((unused)), ...) { return 0; }
 static inline int printk_ratelimit(void) { return 0; }
 static inline bool printk_timed_ratelimit(unsigned long *caller_jiffies, \
 					  unsigned int interval_msec)	\
 		{ return false; }
+static inline void restore_printk(void) { };
 
 /* No effect, but we still get type checking even in the !PRINTK case: */
 #define printk_once(x...) printk(x)
@@ -293,6 +308,9 @@ static inline void log_buf_kexec_setup(void)
 {
 }
 #endif
+/* zeigt immer auf printk oder prom_printf (wenn kein printk vorhanden) */
+extern asmlinkage int (*__printk)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2)));
+extern asmlinkage int (*__vprintk)(const char * fmt, va_list args);
 
 extern int printk_needs_cpu(int cpu);
 extern void printk_tick(void);
@@ -502,7 +520,7 @@ extern void
 ftrace_special(unsigned long arg1, unsigned long arg2, unsigned long arg3);
 
 static inline void __attribute__ ((format (printf, 1, 2)))
-____trace_printk_check_format(const char *fmt, ...)
+____trace_printk_check_format(const char *fmt __attribute__((unused)), ...)
 {
 }
 #define __trace_printk_check_format(fmt, args...)			\
@@ -575,7 +593,7 @@ __ftrace_vprintk(unsigned long ip, const char *fmt, va_list ap);
 extern void ftrace_dump(void);
 #else
 static inline void
-ftrace_special(unsigned long arg1, unsigned long arg2, unsigned long arg3) { }
+ftrace_special(unsigned long arg1 __attribute__ ((unused)), unsigned long arg2 __attribute__ ((unused)), unsigned long arg3 __attribute__ ((unused))) { }
 static inline int
 trace_printk(const char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
@@ -583,12 +601,12 @@ static inline void tracing_start(void) { }
 static inline void tracing_stop(void) { }
 static inline void ftrace_off_permanent(void) { }
 static inline int
-trace_printk(const char *fmt, ...)
+trace_printk(const char *fmt __attribute__ ((unused)), ...)
 {
 	return 0;
 }
 static inline int
-ftrace_vprintk(const char *fmt, va_list ap)
+ftrace_vprintk(const char *fmt __attribute__ ((unused)), va_list ap __attribute__ ((unused)))
 {
 	return 0;
 }

@@ -16,7 +16,9 @@
  * documentation. Do not change them.
  */
 
+#ifndef BUILD_FROM_LTQ_APPS
 #include <linux/compiler.h>
+#endif
 #include <linux/atmapi.h>
 #include <linux/atmsap.h>
 #include <linux/atmioc.h>
@@ -128,32 +130,60 @@
 #define ATM_CBR		2
 #define ATM_VBR		3
 #define ATM_ABR		4
-#define ATM_ANYCLASS	5		/* compatible with everything */
+// bk Adding support for the VBR for TI DSL chips
+#ifdef CONFIG_MIPS_UR8
+
+    #define ATM_VBR_NRT    ATM_VBR
+    #define ATM_VBR_RT     5
+    #define ATM_ANYCLASS   6        /* compatible with everything */
+
+#else
+    #define ATM_ANYCLASS	5		/* compatible with everything */
+	#if defined(CONFIG_LANTIQ)
+		#define ATM_VBR_NRT     ATM_VBR
+		#define ATM_VBR_RT      6
+		#define ATM_UBR_PLUS    7
+		#define ATM_GFR         8
+	#endif
+
+	#ifdef CONFIG_MACH_FUSIV
+		#define ATM_UBR_PLUS	6
+		#define ATM_NRTVBR	7               /* FUSIV specefic */
+	#endif
+#endif
+// end bk
 
 #define ATM_MAX_PCR	-1		/* maximum available PCR */
 
 struct atm_trafprm {
 	unsigned char	traffic_class;	/* traffic class (ATM_UBR, ...) */
-	int		max_pcr;	/* maximum PCR in cells per second */
-	int		pcr;		/* desired PCR in cells per second */
-	int		min_pcr;	/* minimum PCR in cells per second */
-	int		max_cdv;	/* maximum CDV in microseconds */
-	int		max_sdu;	/* maximum SDU in bytes */
-        /* extra params for ABR */
-        unsigned int 	icr;         	/* Initial Cell Rate (24-bit) */
-        unsigned int	tbe;		/* Transient Buffer Exposure (24-bit) */ 
-        unsigned int 	frtt : 24;	/* Fixed Round Trip Time (24-bit) */
-        unsigned int 	rif  : 4;       /* Rate Increment Factor (4-bit) */
-        unsigned int 	rdf  : 4;       /* Rate Decrease Factor (4-bit) */
-        unsigned int nrm_pres  :1;      /* nrm present bit */
-        unsigned int trm_pres  :1;     	/* rm present bit */
-        unsigned int adtf_pres :1;     	/* adtf present bit */
-        unsigned int cdf_pres  :1;    	/* cdf present bit*/
-        unsigned int nrm       :3;     	/* Max # of Cells for each forward RM cell (3-bit) */
-        unsigned int trm       :3;    	/* Time between forward RM cells (3-bit) */    
-	unsigned int adtf      :10;     /* ACR Decrease Time Factor (10-bit) */
-	unsigned int cdf       :3;      /* Cutoff Decrease Factor (3-bit) */
-        unsigned int spare     :9;      /* spare bits */ 
+	unsigned int		max_pcr;	/* maximum PCR in cells per second */
+	unsigned int		pcr;		/* desired PCR in cells per second */
+	unsigned int		min_pcr;	/* minimum PCR in cells per second */
+	unsigned int		max_cdv;	/* maximum CDV in microseconds */
+	unsigned int		max_sdu;	/* maximum SDU in bytes */
+
+    /* extra params for ABR */
+    unsigned int icr;           /* Initial Cell Rate (24-bit) */
+    unsigned int tbe;           /* Transient Buffer Exposure (24-bit) */ 
+    unsigned int frtt      :24; /* Fixed Round Trip Time (24-bit) */
+    unsigned int rif       : 4; /* Rate Increment Factor (4-bit) */
+    unsigned int rdf       : 4; /* Rate Decrease Factor (4-bit) */
+    unsigned int nrm_pres  : 1; /* nrm present bit */
+    unsigned int trm_pres  : 1; /* rm present bit */
+    unsigned int adtf_pres : 1; /* adtf present bit */
+    unsigned int cdf_pres  : 1; /* cdf present bit*/
+    unsigned int nrm       : 3; /* Max # of Cells for each forward RM cell (3-bit) */
+    unsigned int trm       : 3; /* Time between forward RM cells (3-bit) */    
+    unsigned int adtf      :10; /* ACR Decrease Time Factor (10-bit) */
+    unsigned int cdf       : 3; /* Cutoff Decrease Factor (3-bit) */
+    unsigned int spare     : 9; /* spare bits */ 
+
+    /* extra params for VBR(NRT-VBR) and RT-VBR */
+    // bk Adding support for the VBR for TI DSL chips which support this QoS
+    unsigned int scr;           /* sustained rate in cells per second */
+    int          mbs;           /* maximum burst size (MBS) in cells */
+    int          cdv;           /* Cell delay varition */
 };
 
 struct atm_qos {

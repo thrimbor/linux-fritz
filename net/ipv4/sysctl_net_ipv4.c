@@ -26,6 +26,14 @@ static int tcp_retr1_max = 255;
 static int ip_local_port_range_min[] = { 1, 1 };
 static int ip_local_port_range_max[] = { 65535, 65535 };
 
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+extern int sysctl_netfilter_prerouting_enable;
+extern int sysctl_netfilter_postrouting_enable;
+extern int sysctl_netfilter_input_enable;
+extern int sysctl_netfilter_output_enable;
+extern int sysctl_netfilter_forward_enable;
+#endif
+
 /* Update system visible IP port range */
 static void set_local_port_range(int range[2])
 {
@@ -742,6 +750,48 @@ static struct ctl_table ipv4_table[] = {
 		.strategy	= sysctl_intvec,
 		.extra1		= &zero
 	},
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+       {
+               .ctl_name   = NET_NETFILTER_PREROUTING_ENABLE,
+               .procname   = "netfilter_prerouting_enable",
+               .data       = &sysctl_netfilter_prerouting_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   =proc_dointvec,
+       },
+       {
+               .ctl_name   = NET_NETFILTER_POSTROUTING_ENABLE,
+               .procname   = "netfilter_postrouting_enable",
+               .data       = &sysctl_netfilter_postrouting_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   =proc_dointvec,
+       },
+       {
+               .ctl_name   = NET_NETFILTER_INPUT_ENABLE,
+               .procname   = "netfilter_input_enable",
+               .data       = &sysctl_netfilter_input_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   =proc_dointvec,
+       },
+       {
+               .ctl_name   = NET_NETFILTER_OUTPUT_ENABLE,
+               .procname   = "netfilter_output_enable",
+               .data       = &sysctl_netfilter_output_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   =proc_dointvec,
+       },
+       {
+               .ctl_name   = NET_NETFILTER_FORWARD_ENABLE,
+               .procname   = "netfilter_forward_enable",
+               .data       = &sysctl_netfilter_forward_enable,
+               .maxlen     = sizeof(int),
+               .mode       = 0644,
+               .proc_handler   =proc_dointvec,
+       },
+#endif
 	{ .ctl_name = 0 }
 };
 

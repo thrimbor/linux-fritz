@@ -59,5 +59,6 @@ static inline void register_smp_ops(struct plat_smp_ops *ops)
 extern struct plat_smp_ops up_smp_ops;
 extern struct plat_smp_ops cmp_smp_ops;
 extern struct plat_smp_ops vsmp_smp_ops;
+extern struct plat_smp_ops smtc_smp_ops;
 
 #endif /* __ASM_SMP_OPS_H */

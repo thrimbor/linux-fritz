@@ -275,6 +275,12 @@
 #include <asm/uaccess.h>
 #include <asm/ioctls.h>
 
+#if defined(CONFIG_AVM_SCATTER_GATHER)
+unsigned int avm_scatter_gather_optimization = 1;
+module_param(avm_scatter_gather_optimization, uint, S_IRUSR | S_IWUSR);
+#endif
+
+
 int sysctl_tcp_fin_timeout __read_mostly = TCP_FIN_TIMEOUT;
 
 struct percpu_counter tcp_orphan_count;
@@ -754,6 +760,11 @@ static ssize_t do_tcp_sendpages(struct sock *sk, struct page **pages, int poffse
 	ssize_t copied;
 	long timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 
+#if defined(CONFIG_AVM_SCATTER_GATHER)
+	int send_entire_page = (psize == PAGE_SIZE );
+	int socket_is_corked = (tp->nonagle&TCP_NAGLE_CORK);
+#endif
+
 	/* Wait for a connection to finish. */
 	if ((1 << sk->sk_state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT))
 		if ((err = sk_stream_wait_connect(sk, &timeo)) != 0)
@@ -847,8 +858,25 @@ wait_for_memory:
 	}
 
 out:
-	if (copied)
+
+#if defined(CONFIG_AVM_SCATTER_GATHER)
+	if ((copied && !avm_scatter_gather_optimization) ||
+	    (copied && !send_entire_page) ||
+	    (copied && !socket_is_corked) ){
+	    /*
+	     * CBU@AVM:
+	     * This is a performance optimization for small instruction cache CPUs
+	     * It seems to be save to skip tcp_push here, as __tcp_push_pending_frames
+	     * is also called by:
+	     *      (1) tcp_rcv_established
+	     *      (2) tcp_fin handler
+	     */
+#else
+	if (copied){
+#endif
+
 		tcp_push(sk, flags, mss_now, tp->nonagle);
+    }
 	return copied;
 
 do_error:

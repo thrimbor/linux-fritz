@@ -564,6 +564,10 @@ static netdev_tx_t mpc_send_packet(struct sk_buff *skb,
 	return mpc->old_ops->ndo_start_xmit(skb,dev);
 }
 
+#if defined(CONFIG_IFX_PPA_A6) || defined(CONFIG_IFX_PPA_A5) || defined(CONFIG_IFX_PPA_A4) || defined(CONFIG_IFX_PPA_DATAPATH_MODULE)
+extern void (*ppa_hook_mpoa_setup)(struct atm_vcc *, int, int);
+#endif
+
 static int atm_mpoa_vcc_attach(struct atm_vcc *vcc, void __user *arg)
 {
 	int bytes_left;
@@ -603,6 +607,12 @@ static int atm_mpoa_vcc_attach(struct atm_vcc *vcc, void __user *arg)
 
 	vcc->proto_data = mpc->dev;
 	vcc->push = mpc_push;
+#if defined(CONFIG_IFX_PPA_A6) || defined(CONFIG_IFX_PPA_A5) || defined(CONFIG_IFX_PPA_A4) || defined(CONFIG_IFX_PPA_DATAPATH_MODULE)
+	if ( ppa_hook_mpoa_setup ){
+		ppa_hook_mpoa_setup(vcc, 3, 1);	//  IPoA, LLC
+        printk(KERN_ERR "[%s] %d ppa_hook_mpoa_setup=%pF\n", __func__, __LINE__, ppa_hook_mpoa_setup);
+    }
+#endif
 
 	return 0;
 }

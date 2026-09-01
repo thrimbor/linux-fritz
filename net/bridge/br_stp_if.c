@@ -203,6 +203,25 @@ void br_stp_change_bridge_id(struct net_bridge *br, const unsigned char *addr)
 		br_become_root_bridge(br);
 }
 
+/* AVM */
+void br_stp_set_bridge_id(struct net_bridge *br, void *addr)
+{
+	if (memcmp(br->bridge_id.addr, addr, ETH_ALEN)) {
+		/*
+		 * alte mac  aus der fdb loeschen, wenn sie nicht zu einem port
+		 * der br. gehoert
+		 */
+		br_fdb_delete_by_mac_if_local_without_port(br, br->bridge_id.addr);
+		/*
+		 * hier wird im fdb entry der port nicht ueberschrieben,
+		 * wenn die mac zu einem port der bridge gehoert
+		 */
+		br_fdb_insert(br, 0/*no attached port*/, addr);
+		br_stp_change_bridge_id(br, addr);
+	}
+}
+
+
 /* should be aligned on 2 bytes for compare_ether_addr() */
 static const unsigned short br_mac_zero_aligned[ETH_ALEN >> 1];
 
@@ -225,8 +244,11 @@ void br_stp_recalculate_bridge_id(struct net_bridge *br)
 
 	}
 
-	if (compare_ether_addr(br->bridge_id.addr, addr))
+	if (compare_ether_addr(br->bridge_id.addr, addr)) {
+		/* alte mac  aus der fdb loeschen, wenn sie nicht zu einem port der br. gehört */
+        br_fdb_delete_by_mac_if_local_without_port(br, br->bridge_id.addr);
 		br_stp_change_bridge_id(br, addr);
+    }
 }
 
 /* called under bridge lock */

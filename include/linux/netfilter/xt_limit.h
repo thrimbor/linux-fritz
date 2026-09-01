@@ -20,5 +20,8 @@ struct xt_rateinfo {
 	__u32 credit_cap, cost;
 
 	struct xt_limit_priv *master;
+#ifdef CONFIG_LTQ_NF_ADDONS
+       u_int8_t  invert; /* Invert: added mainly for synflood ipt_synflood */
+#endif
 };
 #endif /*_XT_RATE_H*/

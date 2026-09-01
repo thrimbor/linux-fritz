@@ -22,10 +22,62 @@
 
 /* #define VERBOSE_DEBUG */
 
+#if defined(CONFIG_USB_GADGET_IFX) || defined(CONFIG_USB_GADGET_IFX_MODULE)
+	#ifndef __IFX_USB_GADGET__
+		#define __IFX_USB_GADGET__
+	#endif
+#endif
+
+#ifndef __IFX_USB_GADGET__
+	#warning "__IFX_USB_GADGET__ Not SET"
+	#define __IFX_USB_GADGET__
+#endif
+
+
+#ifdef __IFX_USB_GADGET__
+	#ifndef __NOSWAPINCTRL__
+	#define __NOSWAPINCTRL__
+	#endif
+	#ifndef __ECM_NO_INTR__
+	//#define __ECM_NO_INTR__
+	#endif
+	#ifndef __RETAIN_BUF_TX__
+		#define __RETAIN_BUF_TX__
+	#endif
+	#ifndef __RETAIN_BUF_RX__
+		#define __RETAIN_BUF_RX__
+	#endif
+	#ifndef __MAC_ECM_FIX__
+	#define __MAC_ECM_FIX__
+	#endif
+#endif
+
+#ifndef __IFX_USB_GADGET__
+	#undef __NOSWAPINCTRL__
+	#undef __ECM_NO_INTR__
+	#undef __RETAIN_BUF_TX__
+	#undef __RETAIN_BUF_RX__
+	#undef __MAC_ECM_FIX__
+#endif
+
+#ifdef __IFX_USB_GADGET__
+	#undef CONFIG_USB_ETH_EEM
+#endif
+
 #include <linux/kernel.h>
 #include <linux/utsname.h>
+#include <linux/netdevice.h>
 
 #include "u_ether.h"
+
+#ifdef __IFX_USB_GADGET__
+	#ifndef NET_IP_ALIGN
+		#define NET_IP_ALIGN 2
+	#endif
+	#ifndef RX_EXTRA
+		#define RX_EXTRA	20		/* guard against rx overflows */
+	#endif
+#endif
 
 
 /*
@@ -96,6 +148,20 @@ static inline bool has_rndis(void)
 
 /*-------------------------------------------------------------------------*/
 
+#ifdef __IFX_USB_GADGET__
+	#if defined(__RETAIN_BUF_TX__)
+		int alloc_size_tx;
+	#endif
+	int alloc_size_rx;
+
+	void soft_reconnect_pcd( struct eth_dev *dev);
+	void soft_reconnect_pcd_net (struct net_device *net);
+	void free_skb(char *funcname,char *desc,struct sk_buff *skb,int dontcare);
+	static void *gadget_alloc_buffer(unsigned _bytes);
+	static void gadget_free_buffer(void *_buf);
+
+#endif
+
 /*
  * Kbuild is not very cooperative with respect to linking separately
  * compiled library objects into one module.  So for now we won't use
@@ -109,15 +175,55 @@ static inline bool has_rndis(void)
 #include "epautoconf.c"
 
 #include "f_ecm.c"
-#include "f_subset.c"
-#ifdef	CONFIG_USB_ETH_RNDIS
-#include "f_rndis.c"
-#include "rndis.c"
+#ifndef __IFX_USB_GADGET__
+	#include "f_subset.c"
 #endif
-#include "f_eem.c"
+#ifdef	CONFIG_USB_ETH_RNDIS
+	#include "f_rndis.c"
+	#include "rndis.c"
+#endif
+#ifndef __IFX_USB_GADGET__
+	#include "f_eem.c"
+#endif
 #include "u_ether.c"
 
+
+#if defined(__IFX_USB_GADGET__)
+	void soft_reconnect_pcd( struct eth_dev *dev)
+	{
+		usb_gadget_disconnect(dev->gadget);
+		usb_gadget_connect   (dev->gadget);
+	}
+
+	void soft_reconnect_pcd_net (struct net_device *net)
+	{
+		struct eth_dev          *dev = netdev_priv(net);
+		soft_reconnect_pcd(dev);
+	}
+
+	void free_skb(char *funcname,char *desc,struct sk_buff *skb,int dontcare)
+	{
+		if(!skb)
+			return;
+		if(in_irq()&& !dontcare)
+		{
+			printk(KERN_INFO "WARNING: Free SKB in IRQ %s() %s\n",
+				funcname?funcname:"",
+				desc?desc:"");
+		}
+		dev_kfree_skb_any (skb);
+	}
+#endif
+
+
+
 /*-------------------------------------------------------------------------*/
+
+#ifdef __IFX_USB_GADGET__
+	#define IFX_VENDOR_NUM	0x07A6	        /* Infineon */
+	#define IFX_PRODUCT_NUM	0x4610		    /* Ethernet/RNDIS Gadget */
+	#define STRING_SERIALNUMBER		2
+#endif
 
 /* DO NOT REUSE THESE IDs with a protocol-incompatible driver!!  Ever!!
  * Instead:  allocate your own, using normal USB-IF procedures.
@@ -161,8 +267,15 @@ static struct usb_device_descriptor device_desc = {
 	.bLength =		sizeof device_desc,
 	.bDescriptorType =	USB_DT_DEVICE,
 
-	.bcdUSB =		cpu_to_le16 (0x0200),
-
+	#ifdef __IFX_USB_GADGET__
+		#ifdef CONFIG_USB_GADGET_DUALSPEED
+			.bcdUSB =		cpu_to_le16 (0x0200),
+		#else
+			.bcdUSB =		cpu_to_le16 (0x0110),
+		#endif
+	#else
+		.bcdUSB =		cpu_to_le16 (0x0200),
+	#endif
 	.bDeviceClass =		USB_CLASS_COMM,
 	.bDeviceSubClass =	0,
 	.bDeviceProtocol =	0,
@@ -172,8 +285,14 @@ static struct usb_device_descriptor device_desc = {
 	 * we support.  (As does bNumConfigurations.)  These values can
 	 * also be overridden by module parameters.
 	 */
-	.idVendor =		cpu_to_le16 (CDC_VENDOR_NUM),
-	.idProduct =		cpu_to_le16 (CDC_PRODUCT_NUM),
+	#ifdef __IFX_USB_GADGET__
+		.idVendor            = cpu_to_le16 (IFX_VENDOR_NUM),
+		.idProduct           = cpu_to_le16 (IFX_PRODUCT_NUM),
+		.iSerialNumber       = STRING_SERIALNUMBER,
+	#else
+		.idVendor            = cpu_to_le16 (CDC_VENDOR_NUM),
+		.idProduct           = cpu_to_le16 (CDC_PRODUCT_NUM),
+	#endif
 	/* .bcdDevice = f(hardware) */
 	/* .iManufacturer = DYNAMIC */
 	/* .iProduct = DYNAMIC */
@@ -203,10 +322,14 @@ static const struct usb_descriptor_header *otg_desc[] = {
 #define STRING_PRODUCT_IDX		1
 
 static char manufacturer[50];
+char serial_number [20];
 
 static struct usb_string strings_dev[] = {
 	[STRING_MANUFACTURER_IDX].s = manufacturer,
 	[STRING_PRODUCT_IDX].s = PREFIX DRIVER_DESC,
+	#ifdef __IFX_USB_GADGET__
+		[STRING_SERIALNUMBER].s = serial_number,
+	#endif
 	{  } /* end of list */
 };
 
@@ -251,13 +374,16 @@ static struct usb_configuration rndis_config_driver = {
 
 /*-------------------------------------------------------------------------*/
 
-#ifdef CONFIG_USB_ETH_EEM
-static int use_eem = 1;
-#else
-static int use_eem;
+
+#ifndef __IFX_USB_GADGET__
+	#ifdef CONFIG_USB_ETH_EEM
+		static int use_eem = 1;
+	#else
+		static int use_eem;
+	#endif
+	module_param(use_eem, bool, 0);
+	MODULE_PARM_DESC(use_eem, "use CDC EEM mode");
 #endif
-module_param(use_eem, bool, 0);
-MODULE_PARM_DESC(use_eem, "use CDC EEM mode");
 
 /*
  * We _always_ have an ECM, CDC Subset, or EEM configuration.
@@ -271,12 +397,16 @@ static int __init eth_do_config(struct usb_configuration *c)
 		c->bmAttributes |= USB_CONFIG_ATT_WAKEUP;
 	}
 
-	if (use_eem)
-		return eem_bind_config(c);
-	else if (can_support_ecm(c->cdev->gadget))
+	#ifdef __IFX_USB_GADGET__
 		return ecm_bind_config(c, hostaddr);
-	else
-		return geth_bind_config(c, hostaddr);
+	#else
+		if (use_eem)
+			return eem_bind_config(c);
+		else if (can_support_ecm(c->cdev->gadget))
+			return ecm_bind_config(c, hostaddr);
+		else
+			return geth_bind_config(c, hostaddr);
+	#endif
 }
 
 static struct usb_configuration eth_config_driver = {
@@ -301,30 +431,35 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 		return status;
 
 	/* set up main config label and device descriptor */
-	if (use_eem) {
-		/* EEM */
-		eth_config_driver.label = "CDC Ethernet (EEM)";
-		device_desc.idVendor = cpu_to_le16(EEM_VENDOR_NUM);
-		device_desc.idProduct = cpu_to_le16(EEM_PRODUCT_NUM);
-	} else if (can_support_ecm(cdev->gadget)) {
-		/* ECM */
-		eth_config_driver.label = "CDC Ethernet (ECM)";
-	} else {
-		/* CDC Subset */
-		eth_config_driver.label = "CDC Subset/SAFE";
-
-		device_desc.idVendor = cpu_to_le16(SIMPLE_VENDOR_NUM);
-		device_desc.idProduct = cpu_to_le16(SIMPLE_PRODUCT_NUM);
-		if (!has_rndis())
-			device_desc.bDeviceClass = USB_CLASS_VENDOR_SPEC;
-	}
-
-	if (has_rndis()) {
-		/* RNDIS plus ECM-or-Subset */
-		device_desc.idVendor = cpu_to_le16(RNDIS_VENDOR_NUM);
-		device_desc.idProduct = cpu_to_le16(RNDIS_PRODUCT_NUM);
+	#ifdef __IFX_USB_GADGET__
+		eth_config_driver.label = "Lantiq Ether(ECM/RNDIS)";
 		device_desc.bNumConfigurations = 2;
-	}
+	#else
+		if (use_eem) {
+			/* EEM */
+			eth_config_driver.label = "CDC Ethernet (EEM)";
+			device_desc.idVendor = cpu_to_le16(EEM_VENDOR_NUM);
+			device_desc.idProduct = cpu_to_le16(EEM_PRODUCT_NUM);
+		} else if (can_support_ecm(cdev->gadget)) {
+			/* ECM */
+			eth_config_driver.label = "CDC Ethernet (ECM)";
+		} else {
+			/* CDC Subset */
+			eth_config_driver.label = "CDC Subset/SAFE";
+
+			device_desc.idVendor = cpu_to_le16(SIMPLE_VENDOR_NUM);
+			device_desc.idProduct = cpu_to_le16(SIMPLE_PRODUCT_NUM);
+			if (!has_rndis())
+				device_desc.bDeviceClass = USB_CLASS_VENDOR_SPEC;
+		}
+
+		if (has_rndis()) {
+			/* RNDIS plus ECM-or-Subset */
+			device_desc.idVendor = cpu_to_le16(RNDIS_VENDOR_NUM);
+			device_desc.idProduct = cpu_to_le16(RNDIS_PRODUCT_NUM);
+			device_desc.bNumConfigurations = 2;
+		}
+	#endif
 
 	gcnum = usb_gadget_controller_number(gadget);
 	if (gcnum >= 0)

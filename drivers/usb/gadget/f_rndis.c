@@ -386,9 +386,15 @@ rndis_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct usb_composite_dev *cdev = f->config->cdev;
 	struct usb_request	*req = cdev->req;
 	int			value = -EOPNOTSUPP;
-	u16			w_index = le16_to_cpu(ctrl->wIndex);
-	u16			w_value = le16_to_cpu(ctrl->wValue);
-	u16			w_length = le16_to_cpu(ctrl->wLength);
+	#if defined(__IFX_USB_GADGET__) && defined(__NOSWAPINCTRL__)
+		u16			w_index  =(ctrl->wIndex);
+		u16			w_value  =(ctrl->wValue);
+		u16			w_length =(ctrl->wLength);
+	#else
+		u16			w_index  =le16_to_cpu(ctrl->wIndex);
+		u16			w_value  =le16_to_cpu(ctrl->wValue);
+		u16			w_length =le16_to_cpu(ctrl->wLength);
+	#endif
 
 	/* composite driver infrastructure handles everything except
 	 * CDC class messages; interface activation uses set_alt().
@@ -629,7 +635,11 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 	rndis->notify_req = usb_ep_alloc_request(ep, GFP_KERNEL);
 	if (!rndis->notify_req)
 		goto fail;
-	rndis->notify_req->buf = kmalloc(STATUS_BYTECOUNT, GFP_KERNEL);
+	#if defined(__IFX_USB_GADGET__)
+		rndis->notify_req->buf = gadget_alloc_buffer(ECM_STATUS_BYTECOUNT);
+	#else
+		rndis->notify_req->buf = kmalloc(ECM_STATUS_BYTECOUNT, GFP_KERNEL);
+	#endif
 	if (!rndis->notify_req->buf)
 		goto fail;
 	rndis->notify_req->length = STATUS_BYTECOUNT;
@@ -692,6 +702,22 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 		goto fail0;
 #endif
 
+	#if !defined(__IFX_USB_GADGET__) || !defined(__RETAIN_BUF_TX__)
+	#else
+		alloc_size_tx = (sizeof (struct ethhdr) + ETH_FRAME_LEN);
+		alloc_size_tx += sizeof (struct rndis_packet_msg_type);
+		alloc_size_tx += rndis->port.in_ep->maxpacket - 1;
+		alloc_size_tx -= alloc_size_tx % rndis->port.in_ep->maxpacket;
+	#endif
+
+	#if defined(__IFX_USB_GADGET__) && defined(__RETAIN_BUF_RX__)
+		alloc_size_rx = (sizeof (struct ethhdr) + ETH_FRAME_LEN + RX_EXTRA+NET_IP_ALIGN);
+		alloc_size_rx += sizeof (struct rndis_packet_msg_type);
+		alloc_size_rx += rndis->port.out_ep->maxpacket - 1;
+		alloc_size_rx -= alloc_size_rx % rndis->port.out_ep->maxpacket;
+	#endif
+
+
 	/* NOTE:  all that is done without knowing or caring about
 	 * the network link ... which is unavailable to this code
 	 * until we're activated via set_alt().
@@ -710,7 +736,11 @@ fail:
 		usb_free_descriptors(f->descriptors);
 
 	if (rndis->notify_req) {
-		kfree(rndis->notify_req->buf);
+		#if defined(__IFX_USB_GADGET__)
+			gadget_free_buffer(rndis->notify_req->buf);
+		#else
+			kfree(rndis->notify_req->buf);
+		#endif
 		usb_ep_free_request(rndis->notify, rndis->notify_req);
 	}
 
@@ -739,7 +769,11 @@ rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 		usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);
 
-	kfree(rndis->notify_req->buf);
+	#if defined(__IFX_USB_GADGET__)
+		gadget_free_buffer(rndis->notify_req->buf);
+	#else
+		kfree(rndis->notify_req->buf);
+	#endif
 	usb_ep_free_request(rndis->notify, rndis->notify_req);
 
 	kfree(rndis);
@@ -755,6 +789,164 @@ static inline bool can_support_rndis(struct usb_configuration *c)
 	/* everything else is *presumably* fine */
 	return true;
 }
+
+#if defined(__IFX_USB_GADGET__) && defined(__RETAIN_BUF_TX__)
+	int rndis_wrap(struct gether *port,
+					u8 *buf,
+					struct sk_buff *skb,
+					int max_len)
+	{
+		int length;
+		struct rndis_packet_msg_type	*header;
+
+		if (!skb)
+			return -1;
+		if (!buf)
+			return -1;
+
+		length = skb->len+sizeof(struct rndis_packet_msg_type);
+		if(length > max_len)
+			return -1;
+		memcpy( buf + sizeof (struct rndis_packet_msg_type), skb->data,skb->len);
+		header = (void *) buf;
+		memset (header, 0, sizeof *header);
+		header->MessageType = __constant_cpu_to_le32(REMOTE_NDIS_PACKET_MSG);
+		header->MessageLength = cpu_to_le32(skb->len + sizeof *header);
+		header->DataOffset = __constant_cpu_to_le32 ((sizeof (*header)) -8);
+ 		header->DataLength = cpu_to_le32(skb->len );
+		return length;
+	}
+#endif
+
+#if defined(__IFX_USB_GADGET__)
+	#if defined(__RETAIN_BUF_RX__)
+		int rndis_unwrap(	struct gether *port,
+							u8 *buf, u16 len,
+							struct sk_buff_head *list)
+		{
+			int status=0;
+			uint32_t offset,length;
+			struct sk_buff *skb;
+			u32 *tmp = (u32 *)buf;
+
+			if (__constant_cpu_to_le32(REMOTE_NDIS_PACKET_MSG)
+			//if (REMOTE_NDIS_PACKET_MSG
+				!= get_unaligned(tmp))
+				status= -EINVAL;
+			if(!status)
+			{
+//				u32 *tmp = (u32 *)buf;
+				/* DataOffset, DataLength */
+				offset=le32_to_cpu(get_unaligned(tmp+2))+8;
+				length=le32_to_cpu(get_unaligned(tmp+3));
+				if(length+offset>len)
+					status=-EOVERFLOW;
+			}
+
+			if(!status)
+			{
+				#if defined(NET_IP_ALIGN) && NET_IP_ALIGN > 0
+					skb = dev_alloc_skb (length+NET_IP_ALIGN );
+				#else
+					skb = dev_alloc_skb (length);
+				#endif
+
+				if(!skb)
+				{
+					printk(KERN_INFO "%s() %d NO SKB\n",__func__,__LINE__);
+					status=-EOVERFLOW;
+				}
+			}
+			if(!status)
+			{
+				#if defined(NET_IP_ALIGN) && NET_IP_ALIGN > 0
+					skb_reserve(skb, NET_IP_ALIGN);
+				#endif
+				memcpy(skb->data,((void *)buf)+offset,length);
+				skb_put (skb, length);
+				skb_queue_tail(list, skb);
+			}
+
+			#ifdef __MAC_ECM_FIX__
+				if(port->ecm_only_postive>0 && port->ecm_only_negtive>0)
+				{
+					if(!status)
+					{
+						port->ecm_only_postive --;
+						if(port->ecm_only_postive==0)
+							printk(KERN_INFO "%s() RNDIS-only mode detected !!(%d %d)\n",__func__,port->ecm_only_postive,port->ecm_only_negtive);
+					}
+					else
+					{
+						port->ecm_only_negtive--;
+						if(port->ecm_only_negtive==0)
+						{
+							printk(KERN_INFO "%s() CDC-ECM-only mode detected!!(%d %d)\n",__func__,port->ecm_only_postive,port->ecm_only_negtive);
+							port->ecm_only=1;
+							soft_reconnect_pcd(port->ioport);
+						}
+					}
+				}
+			#endif
+			return status;
+		}
+	#elif defined(__MAC_ECM_FIX__)
+		int rndis_unwrap(	struct gether *port,
+						struct sk_buff *skb,
+						struct sk_buff_head *list)
+		{
+			int status=0;
+			/* tmp points to a struct rndis_packet_msg_type */
+			__le32		*tmp = (void *) skb->data;
+
+			/* MessageType, MessageLength */
+			if (cpu_to_le32(REMOTE_NDIS_PACKET_MSG)
+//			if (REMOTE_NDIS_PACKET_MSG)
+					!= get_unaligned(tmp++)) {
+				dev_kfree_skb_any(skb);
+				status= -EINVAL;
+			}
+			if(!status)
+			{
+				tmp++;
+				/* DataOffset, DataLength */
+				if (!skb_pull(skb, get_unaligned_le32(tmp++) + 8)) {
+					dev_kfree_skb_any(skb);
+					status= -EOVERFLOW;
+				}
+			}
+			if(!status)
+			{
+				skb_trim(skb, get_unaligned_le32(tmp++));
+				skb_queue_tail(list, skb);
+			}
+			else
+			{
+				if(port->ecm_only_postive>0 && port->ecm_only_negtive>0)
+				{
+					if(!status)
+					{
+						port->ecm_only_postive --;
+						if(port->ecm_only_postive==0)
+							printk(KERN_INFO "%s() RNDIS-only mode detected !!(%d %d)\n",__func__,port->ecm_only_postive,port->ecm_only_negtive);
+					}
+					else
+					{
+						port->ecm_only_negtive--;
+						if(port->ecm_only_negtive==0)
+						{
+							printk(KERN_INFO "%s() CDC-ECM-only mode detected!!(%d %d)\n",__func__,port->ecm_only_postive,port->ecm_only_negtive);
+							port->ecm_only=1;
+							soft_reconnect_pcd(port->ioport);
+						}
+					}
+				}
+			}
+			return status;
+	}
+#endif
+#endif
+
 
 /**
  * rndis_bind_config - add RNDIS network link to a configuration
@@ -812,8 +1004,18 @@ int __init rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN])
 
 	/* RNDIS has special (and complex) framing */
 	rndis->port.header_len = sizeof(struct rndis_packet_msg_type);
-	rndis->port.wrap = rndis_add_header;
-	rndis->port.unwrap = rndis_rm_hdr;
+
+	#if !defined(__IFX_USB_GADGET__) || !defined(__RETAIN_BUF_TX__)
+		rndis->port.wrap = rndis_add_header;
+	#else
+		rndis->port.wrap = rndis_wrap;
+	#endif
+
+	#if defined(__IFX_USB_GADGET__) && (defined(__RETAIN_BUF_RX__) || defined(__MAC_ECM_FIX__))
+		rndis->port.unwrap = rndis_unwrap;
+	#else
+		rndis->port.unwrap = rndis_rm_hdr;
+	#endif
 
 	rndis->port.func.name = "rndis";
 	rndis->port.func.strings = rndis_strings;

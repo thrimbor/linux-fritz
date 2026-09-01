@@ -68,6 +68,7 @@ static struct ipv4_devconf ipv4_devconf = {
 		[NET_IPV4_CONF_SEND_REDIRECTS - 1] = 1,
 		[NET_IPV4_CONF_SECURE_REDIRECTS - 1] = 1,
 		[NET_IPV4_CONF_SHARED_MEDIA - 1] = 1,
+		[NET_IPV4_CONF_IFADDR_RTABLE - 1] = RT_TABLE_MAIN,
 	},
 };
 
@@ -78,6 +79,7 @@ static struct ipv4_devconf ipv4_devconf_dflt = {
 		[NET_IPV4_CONF_SECURE_REDIRECTS - 1] = 1,
 		[NET_IPV4_CONF_SHARED_MEDIA - 1] = 1,
 		[NET_IPV4_CONF_ACCEPT_SOURCE_ROUTE - 1] = 1,
+		[NET_IPV4_CONF_IFADDR_RTABLE - 1] = RT_TABLE_MAIN,
 	},
 };
 
@@ -1477,6 +1479,7 @@ static struct devinet_sysctl_table {
 		DEVINET_SYSCTL_RW_ENTRY(ARP_IGNORE, "arp_ignore"),
 		DEVINET_SYSCTL_RW_ENTRY(ARP_ACCEPT, "arp_accept"),
 		DEVINET_SYSCTL_RW_ENTRY(ARP_NOTIFY, "arp_notify"),
+		DEVINET_SYSCTL_RW_ENTRY(IFADDR_RTABLE, "ifaddr_rtable"),
 
 		DEVINET_SYSCTL_FLUSHING_ENTRY(NOXFRM, "disable_xfrm"),
 		DEVINET_SYSCTL_FLUSHING_ENTRY(NOPOLICY, "disable_policy"),

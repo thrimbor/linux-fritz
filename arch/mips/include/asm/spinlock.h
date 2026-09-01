@@ -9,6 +9,10 @@
 #ifndef _ASM_SPINLOCK_H
 #define _ASM_SPINLOCK_H
 
+#ifndef __LINUX_SPINLOCK_H
+# error "please don't include this file directly"
+#endif
+
 #include <linux/compiler.h>
 
 #include <asm/barrier.h>
@@ -487,4 +491,6 @@ static inline int __raw_write_trylock(raw_rwlock_t *rw)
 #define _raw_read_relax(lock)	cpu_relax()
 #define _raw_write_relax(lock)	cpu_relax()
 
+extern bool arch_trigger_all_cpu_backtrace(void);
+#define arch_trigger_all_cpu_backtrace  arch_trigger_all_cpu_backtrace
 #endif /* _ASM_SPINLOCK_H */

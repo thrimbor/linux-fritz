@@ -100,14 +100,14 @@ early_initcall(init_call_single_data);
  */
 static void csd_lock_wait(struct call_single_data *data)
 {
-	while (data->flags & CSD_FLAG_LOCK)
+	while ((volatile u16)(data->flags) & CSD_FLAG_LOCK)
 		cpu_relax();
 }
 
 static void csd_lock(struct call_single_data *data)
 {
 	csd_lock_wait(data);
-	data->flags = CSD_FLAG_LOCK;
+	*(volatile u16 *)&(data->flags) = CSD_FLAG_LOCK;
 
 	/*
 	 * prevent CPU from reordering the above assignment
@@ -126,7 +126,8 @@ static void csd_unlock(struct call_single_data *data)
 	 */
 	smp_mb();
 
-	data->flags &= ~CSD_FLAG_LOCK;
+	*(volatile u16 *)&(data->flags) &= ~CSD_FLAG_LOCK;
+	smp_mb();
 }
 
 /*
@@ -142,8 +143,10 @@ void generic_exec_single(int cpu, struct call_single_data *data, int wait)
 	int ipi;
 
 	spin_lock_irqsave(&dst->lock, flags);
+	smp_mb();
 	ipi = list_empty(&dst->list);
 	list_add_tail(&data->list, &dst->list);
+	smp_mb();
 	spin_unlock_irqrestore(&dst->lock, flags);
 
 	/*
@@ -251,7 +254,9 @@ void generic_smp_call_function_single_interrupt(void)
 	WARN_ON_ONCE(!cpu_online(smp_processor_id()));
 
 	spin_lock(&q->lock);
+	smp_mb();
 	list_replace_init(&q->list, &list);
+	smp_mb();
 	spin_unlock(&q->lock);
 
 	while (!list_empty(&list)) {

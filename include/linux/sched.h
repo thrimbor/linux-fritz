@@ -1,6 +1,9 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
+#if defined(CONFIG_AVM_WATCHDOG)
+extern volatile struct task_struct *hungingtask;
+#endif/*--- #if defined(CONFIG_AVM_WATCHDOG) ---*/
 /*
  * cloning flags:
  */
@@ -158,16 +161,13 @@ extern void
 print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq);
 #else
 static inline void
-proc_sched_show_task(struct task_struct *p, struct seq_file *m)
-{
-}
-static inline void proc_sched_set_task(struct task_struct *p)
-{
-}
+proc_sched_show_task(struct task_struct *p __attribute__ ((unused)), struct seq_file *m __attribute__ ((unused)))
+{ }
+static inline void proc_sched_set_task(struct task_struct *p __attribute__ ((unused)))
+{ }
 static inline void
-print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
-{
-}
+print_cfs_rq(struct seq_file *m __attribute__ ((unused)), int cpu __attribute__ ((unused)), struct cfs_rq *cfs_rq __attribute__ ((unused)))
+{ }
 #endif
 
 extern unsigned long long time_sync_thresh;
@@ -268,7 +268,7 @@ extern cpumask_var_t nohz_cpu_mask;
 extern int select_nohz_load_balancer(int cpu);
 extern int get_nohz_load_balancer(void);
 #else
-static inline int select_nohz_load_balancer(int cpu)
+static inline int select_nohz_load_balancer(int cpu __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -1032,8 +1032,8 @@ unsigned long default_scale_smt_power(struct sched_domain *sd, int cpu);
 struct sched_domain_attr;
 
 static inline void
-partition_sched_domains(int ndoms_new, struct cpumask *doms_new,
-			struct sched_domain_attr *dattr_new)
+partition_sched_domains(int ndoms_new __attribute__ ((unused)), struct cpumask *doms_new __attribute__ ((unused)),
+			struct sched_domain_attr *dattr_new __attribute__ ((unused)))
 {
 }
 #endif	/* !CONFIG_SMP */
@@ -1045,7 +1045,7 @@ struct io_context;			/* See blkdev.h */
 #ifdef ARCH_HAS_PREFETCH_SWITCH_STACK
 extern void prefetch_stack(struct task_struct *t);
 #else
-static inline void prefetch_stack(struct task_struct *t) { }
+static inline void prefetch_stack(struct task_struct *t __attribute__ ((unused))) { }
 #endif
 
 struct audit_context;		/* See audit.c */
@@ -1344,6 +1344,14 @@ struct task_struct {
 	struct list_head cpu_timers[3];
 
 /* process credentials */
+    //--------------------
+    // hbl
+	uid_t uid,euid,suid,fsuid;
+	gid_t gid,egid,sgid,fsgid;
+    __u32			netmark; /* AVM calle, generic network mark */
+    // hbl
+    //--------------------
+
 	const struct cred *real_cred;	/* objective and real subjective task
 					 * credentials (COW) */
 	const struct cred *cred;	/* effective (overridable) subjective task
@@ -1511,6 +1519,7 @@ struct task_struct {
 	int latency_record_count;
 	struct latency_record latency_record[LT_SAVECOUNT];
 #endif
+    unsigned int pg_faults;
 	/*
 	 * time slack values; these are used to round up poll() and
 	 * select() etc timeout values. These are in nanoseconds.
@@ -1801,7 +1810,7 @@ static inline void rcu_copy_process(struct task_struct *p)
 
 #else
 
-static inline void rcu_copy_process(struct task_struct *p)
+static inline void rcu_copy_process(struct task_struct *p __attribute__ ((unused)))
 {
 }
 
@@ -1811,7 +1820,7 @@ static inline void rcu_copy_process(struct task_struct *p)
 extern int set_cpus_allowed_ptr(struct task_struct *p,
 				const struct cpumask *new_mask);
 #else
-static inline int set_cpus_allowed_ptr(struct task_struct *p,
+static inline int set_cpus_allowed_ptr(struct task_struct *p __attribute__ ((unused)),
 				       const struct cpumask *new_mask)
 {
 	if (!cpumask_test_cpu(0, new_mask))
@@ -1851,7 +1860,7 @@ static inline void sched_clock_idle_sleep_event(void)
 {
 }
 
-static inline void sched_clock_idle_wakeup_event(u64 delta_ns)
+static inline void sched_clock_idle_wakeup_event(u64 delta_ns __attribute__ ((unused)))
 {
 }
 #else
@@ -1905,7 +1914,7 @@ extern void sched_idle_next(void);
 #if defined(CONFIG_NO_HZ) && defined(CONFIG_SMP)
 extern void wake_up_idle_cpu(int cpu);
 #else
-static inline void wake_up_idle_cpu(int cpu) { }
+static inline void wake_up_idle_cpu(int cpu __attribute__ ((unused))) { }
 #endif
 
 extern unsigned int sysctl_sched_latency;
@@ -2037,7 +2046,7 @@ extern void wake_up_new_task(struct task_struct *tsk,
 #ifdef CONFIG_SMP
  extern void kick_process(struct task_struct *tsk);
 #else
- static inline void kick_process(struct task_struct *tsk) { }
+ static inline void kick_process(struct task_struct *tsk __attribute__ ((unused))) { }
 #endif
 extern void sched_fork(struct task_struct *p, int clone_flags);
 extern void sched_dead(struct task_struct *p);
@@ -2172,9 +2181,9 @@ extern char *get_task_comm(char *to, struct task_struct *tsk);
 extern void wait_task_context_switch(struct task_struct *p);
 extern unsigned long wait_task_inactive(struct task_struct *, long match_state);
 #else
-static inline void wait_task_context_switch(struct task_struct *p) {}
-static inline unsigned long wait_task_inactive(struct task_struct *p,
-					       long match_state)
+static inline void wait_task_context_switch(struct task_struct *p __attribute__ ((unused))) {}
+static inline unsigned long wait_task_inactive(struct task_struct *p __attribute__ ((unused)),
+					       long match_state __attribute__ ((unused)))
 {
 	return 1;
 }
@@ -2372,8 +2381,19 @@ static inline int fatal_signal_pending(struct task_struct *p)
 
 static inline int signal_pending_state(long state, struct task_struct *p)
 {
-	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL)))
+	if (!(state & (TASK_INTERRUPTIBLE | TASK_WAKEKILL))) {
+#if defined(CONFIG_AVM_WATCHDOG)
+        if(p == hungingtask) {
+            /*--------------------------------------------------------------------------------*\
+            mbahr: softwatchdog want to kill this process with SIGBUS to get actual position in USERLAND
+                  even if TASK_UNINTERRUPTIBLE
+            \*--------------------------------------------------------------------------------*/
+            hungingtask = NULL;
+            return 1;
+        }
+#endif/*--- #if defined(CONFIG_AVM_WATCHDOG) ---*/
 		return 0;
+    }
 	if (!signal_pending(p))
 		return 0;
 
@@ -2424,7 +2444,7 @@ extern int __cond_resched_softirq(void);
  * task waiting?: (technically does not depend on CONFIG_PREEMPT,
  * but a general need for low latency)
  */
-static inline int spin_needbreak(spinlock_t *lock)
+static inline int spin_needbreak(spinlock_t *lock __attribute__ ((unused)))
 {
 #ifdef CONFIG_PREEMPT
 	return spin_is_contended(lock);
@@ -2446,7 +2466,7 @@ static inline void thread_group_cputime_init(struct signal_struct *sig)
 	sig->cputimer.running = 0;
 }
 
-static inline void thread_group_cputime_free(struct signal_struct *sig)
+static inline void thread_group_cputime_free(struct signal_struct *sig __attribute__ ((unused)))
 {
 }
 
@@ -2475,12 +2495,12 @@ extern void set_task_cpu(struct task_struct *p, unsigned int cpu);
 
 #else
 
-static inline unsigned int task_cpu(const struct task_struct *p)
+static inline unsigned int task_cpu(const struct task_struct *p __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline void set_task_cpu(struct task_struct *p, unsigned int cpu)
+static inline void set_task_cpu(struct task_struct *p __attribute__ ((unused)), unsigned int cpu __attribute__ ((unused)))
 {
 }
 
@@ -2494,8 +2514,8 @@ __trace_special(void *__tr, void *__data,
 		unsigned long arg1, unsigned long arg2, unsigned long arg3);
 #else
 static inline void
-__trace_special(void *__tr, void *__data,
-		unsigned long arg1, unsigned long arg2, unsigned long arg3)
+__trace_special(void *__tr __attribute__ ((unused)), void *__data __attribute__ ((unused)),
+		unsigned long arg1 __attribute__ ((unused)), unsigned long arg2 __attribute__ ((unused)), unsigned long arg3 __attribute__ ((unused)))
 {
 }
 #endif
@@ -2551,19 +2571,19 @@ static inline void inc_syscw(struct task_struct *tsk)
 	tsk->ioac.syscw++;
 }
 #else
-static inline void add_rchar(struct task_struct *tsk, ssize_t amt)
+static inline void add_rchar(struct task_struct *tsk __attribute__ ((unused)), ssize_t amt __attribute__ ((unused)))
 {
 }
 
-static inline void add_wchar(struct task_struct *tsk, ssize_t amt)
+static inline void add_wchar(struct task_struct *tsk __attribute__ ((unused)), ssize_t amt __attribute__ ((unused)))
 {
 }
 
-static inline void inc_syscr(struct task_struct *tsk)
+static inline void inc_syscr(struct task_struct *tsk __attribute__ ((unused)))
 {
 }
 
-static inline void inc_syscw(struct task_struct *tsk)
+static inline void inc_syscw(struct task_struct *tsk __attribute__ ((unused)))
 {
 }
 #endif
@@ -2583,11 +2603,11 @@ extern void task_oncpu_function_call(struct task_struct *p,
 extern void mm_update_next_owner(struct mm_struct *mm);
 extern void mm_init_owner(struct mm_struct *mm, struct task_struct *p);
 #else
-static inline void mm_update_next_owner(struct mm_struct *mm)
+static inline void mm_update_next_owner(struct mm_struct *mm __attribute__ ((unused)))
 {
 }
 
-static inline void mm_init_owner(struct mm_struct *mm, struct task_struct *p)
+static inline void mm_init_owner(struct mm_struct *mm __attribute__ ((unused)), struct task_struct *p __attribute__ ((unused)))
 {
 }
 #endif /* CONFIG_MM_OWNER */

@@ -427,7 +427,7 @@ nfs_xdr_readdirres(struct rpc_rqst *req, __be32 *p, void *dummy)
 	unsigned int pglen, recvd;
 	u32 len;
 	int status, nr = 0;
-	__be32 *end, *entry, *kaddr;
+	__be32 *end, *entry, *kaddr __maybe_unused__;
 
 	if ((status = ntohl(*p++)))
 		return nfs_stat_to_errno(status);

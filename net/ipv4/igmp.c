@@ -113,7 +113,11 @@
 
 #define IGMP_V1_Router_Present_Timeout		(400*HZ)
 #define IGMP_V2_Router_Present_Timeout		(400*HZ)
+#if 0 
 #define IGMP_Unsolicited_Report_Interval	(10*HZ)
+#else
+#define IGMP_Unsolicited_Report_Interval	(2*HZ)
+#endif
 #define IGMP_Query_Response_Interval		(10*HZ)
 #define IGMP_Unsolicited_Report_Count		2
 
@@ -147,6 +151,22 @@ static void sf_markstate(struct ip_mc_list *pmc);
 static void ip_mc_clear_src(struct ip_mc_list *pmc);
 static int ip_mc_add_src(struct in_device *in_dev, __be32 *pmca, int sfmode,
 			 int sfcount, __be32 *psfsrc, int delta);
+
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+extern int sysctl_netfilter_output_enable; 
+#endif
+
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+extern int sysctl_netfilter_output_enable; 
+#endif
+
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+extern int sysctl_netfilter_output_enable; 
+#endif
+
+#ifdef CONFIG_LTQ_NETFILTER_PROCFS
+extern int sysctl_netfilter_output_enable; 
+#endif
 
 static void ip_ma_put(struct ip_mc_list *im)
 {
@@ -1145,9 +1165,14 @@ static void igmp_group_dropped(struct ip_mc_list *im)
 		}
 		/* IGMPv3 */
 		igmpv3_add_delrec(in_dev, im);
-
+#if 0 
 		igmp_ifc_event(in_dev);
-	}
+#endif
+		in_dev->mr_ifc_count = in_dev->mr_qrv ? in_dev->mr_qrv :
+			IGMP_Unsolicited_Report_Count;
+		in_dev_hold(in_dev);
+		igmp_ifc_timer_expire((unsigned long)in_dev);
+    }
 done:
 #endif
 	ip_mc_clear_src(im);
@@ -1169,16 +1194,28 @@ static void igmp_group_added(struct ip_mc_list *im)
 	if (in_dev->dead)
 		return;
 	if (IGMP_V1_SEEN(in_dev) || IGMP_V2_SEEN(in_dev)) {
+#if 0 
 		spin_lock_bh(&im->lock);
 		igmp_start_timer(im, IGMP_Initial_Report_Delay);
 		spin_unlock_bh(&im->lock);
+#else
+		atomic_inc(&im->refcnt);
+		igmp_timer_expire((unsigned long)im);
+#endif
 		return;
 	}
 	/* else, v3 */
 
-	im->crcount = in_dev->mr_qrv ? in_dev->mr_qrv :
-		IGMP_Unsolicited_Report_Count;
+	if (im->sfmode == MCAST_EXCLUDE)
+	    im->crcount = in_dev->mr_qrv ? in_dev->mr_qrv : IGMP_Unsolicited_Report_Count;
+#if 0 
 	igmp_ifc_event(in_dev);
+#else
+	in_dev->mr_ifc_count = in_dev->mr_qrv ? in_dev->mr_qrv :
+		IGMP_Unsolicited_Report_Count;
+	in_dev_hold(in_dev);
+	igmp_ifc_timer_expire((unsigned long)in_dev);
+#endif
 #endif
 }
 
@@ -1192,7 +1229,7 @@ static void igmp_group_added(struct ip_mc_list *im)
  *	A socket has joined a multicast group on device dev.
  */
 
-void ip_mc_inc_group(struct in_device *in_dev, __be32 addr)
+void ip_mc_inc_group_for_mode(struct in_device *in_dev, __be32 addr, int omode)
 {
 	struct ip_mc_list *im;
 
@@ -1201,7 +1238,7 @@ void ip_mc_inc_group(struct in_device *in_dev, __be32 addr)
 	for (im=in_dev->mc_list; im; im=im->next) {
 		if (im->multiaddr == addr) {
 			im->users++;
-			ip_mc_add_src(in_dev, &addr, MCAST_EXCLUDE, 0, NULL, 0);
+			ip_mc_add_src(in_dev, &addr, omode, 0, NULL, 0);
 			goto out;
 		}
 	}
@@ -1215,9 +1252,15 @@ void ip_mc_inc_group(struct in_device *in_dev, __be32 addr)
 	in_dev_hold(in_dev);
 	im->multiaddr = addr;
 	/* initial mode is (EX, empty) */
+	if (omode == MCAST_EXCLUDE) {
 	im->sfmode = MCAST_EXCLUDE;
 	im->sfcount[MCAST_INCLUDE] = 0;
 	im->sfcount[MCAST_EXCLUDE] = 1;
+	} else {
+		im->sfmode = MCAST_INCLUDE;
+		im->sfcount[MCAST_INCLUDE] = 1;
+		im->sfcount[MCAST_EXCLUDE] = 0;
+	}
 	im->sources = NULL;
 	im->tomb = NULL;
 	im->crcount = 0;
@@ -1266,6 +1309,11 @@ void ip_mc_rejoin_group(struct ip_mc_list *im)
 		IGMP_Unsolicited_Report_Count;
 	igmp_ifc_event(in_dev);
 #endif
+}
+
+void ip_mc_inc_group(struct in_device *in_dev, u32 addr)
+{
+	ip_mc_inc_group_for_mode(in_dev, addr, MCAST_EXCLUDE);
 }
 
 /*
@@ -1756,7 +1804,7 @@ static void ip_mc_clear_src(struct ip_mc_list *pmc)
 /*
  * Join a multicast group
  */
-int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
+int ip_mc_join_group_for_mode(struct sock *sk , struct ip_mreqn *imr, int omode)
 {
 	int err;
 	__be32 addr = imr->imr_multiaddr.s_addr;
@@ -1798,13 +1846,18 @@ int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
 	memcpy(&iml->multi, imr, sizeof(*imr));
 	iml->next = inet->mc_list;
 	iml->sflist = NULL;
-	iml->sfmode = MCAST_EXCLUDE;
+ 	iml->sfmode = omode;
 	inet->mc_list = iml;
-	ip_mc_inc_group(in_dev, addr);
+ 	ip_mc_inc_group_for_mode(in_dev, addr, omode);
 	err = 0;
 done:
 	rtnl_unlock();
 	return err;
+}
+
+int ip_mc_join_group(struct sock *sk , struct ip_mreqn *imr)
+{
+	return ip_mc_join_group_for_mode(sk, imr, MCAST_EXCLUDE);
 }
 
 static int ip_mc_leave_src(struct sock *sk, struct ip_mc_socklist *iml,
@@ -2210,7 +2263,7 @@ int ip_mc_sf_allow(struct sock *sk, __be32 loc_addr, __be32 rmt_addr, int dif)
 	int i;
 
 	if (!ipv4_is_multicast(loc_addr))
-		return 1;
+		return sock_flag(sk, SOCK_BROADCAST) ? 1 : 0;
 
 	for (pmc=inet->mc_list; pmc; pmc=pmc->next) {
 		if (pmc->multi.imr_multiaddr.s_addr == loc_addr &&
@@ -2644,3 +2697,4 @@ EXPORT_SYMBOL(ip_mc_dec_group);
 EXPORT_SYMBOL(ip_mc_inc_group);
 EXPORT_SYMBOL(ip_mc_join_group);
 EXPORT_SYMBOL(ip_mc_rejoin_group);
+EXPORT_SYMBOL(ip_mc_join_group_for_mode);

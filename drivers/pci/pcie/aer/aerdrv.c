@@ -183,6 +183,14 @@ static void aer_remove(struct pcie_device *dev)
 	}
 }
 
+struct pci_dev *aer_dev_to_pci_dev(void *context)
+{
+	struct pcie_device *dev = (struct pcie_device *)context;
+
+	return dev->port;
+}
+EXPORT_SYMBOL_GPL(aer_dev_to_pci_dev);
+
 /**
  * aer_probe - initialize resources
  * @dev: pointer to the pcie_dev data structure
@@ -209,6 +217,12 @@ static int __devinit aer_probe(struct pcie_device *dev)
 		return -ENOMEM;
 	}
 
+#ifdef CONFIG_IFX_PCIE
+	{
+		extern int ifx_pcie_rc_aer_irq_register(struct pci_dev *dev, void *context);
+		ifx_pcie_rc_aer_irq_register(dev->port, dev);
+	}
+#else
 	/* Request IRQ ISR */
 	status = request_irq(dev->irq, aer_irq, IRQF_SHARED, "aerdrv", dev);
 	if (status) {
@@ -216,7 +230,7 @@ static int __devinit aer_probe(struct pcie_device *dev)
 		aer_remove(dev);
 		return status;
 	}
-
+#endif
 	rpc->isr = 1;
 
 	aer_enable_rootport(rpc);

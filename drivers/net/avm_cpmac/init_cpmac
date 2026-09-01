@@ -1,0 +1,3 @@
+#!/bin/bash
+./init_cpmac.pl $1 $2
+

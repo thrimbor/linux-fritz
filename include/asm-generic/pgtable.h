@@ -92,7 +92,7 @@ do {									\
 
 #ifndef __HAVE_ARCH_PTEP_SET_WRPROTECT
 struct mm_struct;
-static inline void ptep_set_wrprotect(struct mm_struct *mm, unsigned long address, pte_t *ptep)
+static inline void ptep_set_wrprotect(struct mm_struct *mm __attribute__ ((unused)), unsigned long address __attribute__ ((unused)), pte_t *ptep)
 {
 	pte_t old_pte = *ptep;
 	set_pte_at(mm, address, ptep, pte_wrprotect(old_pte));
@@ -216,8 +216,8 @@ static inline pte_t __ptep_modify_prot_start(struct mm_struct *mm,
 	return ptep_get_and_clear(mm, addr, ptep);
 }
 
-static inline void __ptep_modify_prot_commit(struct mm_struct *mm,
-					     unsigned long addr,
+static inline void __ptep_modify_prot_commit(struct mm_struct *mm __attribute__ ((unused)),
+					     unsigned long addr __attribute__ ((unused)),
 					     pte_t *ptep, pte_t pte)
 {
 	/*
@@ -306,8 +306,8 @@ static inline void ptep_modify_prot_commit(struct mm_struct *mm,
  * track_pfn_vma_new is called when a _new_ pfn mapping is being established
  * for physical range indicated by pfn and size.
  */
-static inline int track_pfn_vma_new(struct vm_area_struct *vma, pgprot_t *prot,
-					unsigned long pfn, unsigned long size)
+static inline int track_pfn_vma_new(struct vm_area_struct *vma __attribute__ ((unused)), pgprot_t *prot __attribute__ ((unused)),
+					unsigned long pfn __attribute__ ((unused)), unsigned long size __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -319,7 +319,7 @@ static inline int track_pfn_vma_new(struct vm_area_struct *vma, pgprot_t *prot,
  * track_pfn_vma_copy is called when vma that is covering the pfnmap gets
  * copied through copy_page_range().
  */
-static inline int track_pfn_vma_copy(struct vm_area_struct *vma)
+static inline int track_pfn_vma_copy(struct vm_area_struct *vma __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -332,8 +332,8 @@ static inline int track_pfn_vma_copy(struct vm_area_struct *vma)
  * untrack can be called for a specific region indicated by pfn and size or
  * can be for the entire vma (in which case size can be zero).
  */
-static inline void untrack_pfn_vma(struct vm_area_struct *vma,
-					unsigned long pfn, unsigned long size)
+static inline void untrack_pfn_vma(struct vm_area_struct *vma __attribute__ ((unused)),
+					unsigned long pfn __attribute__ ((unused)), unsigned long size __attribute__ ((unused)))
 {
 }
 #else

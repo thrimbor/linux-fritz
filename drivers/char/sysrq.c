@@ -199,23 +199,48 @@ static struct sysrq_key_op sysrq_showlocks_op = {
 
 #ifdef CONFIG_SMP
 static DEFINE_SPINLOCK(show_lock);
+static void *cpu_stackp[NR_CPUS];
 
-static void showacpu(void *dummy)
+static void showacpu(void *dummy __attribute__((unused)))
 {
 	unsigned long flags;
 
+#if !defined(CONFIG_MIPS)
 	/* Idle CPUs have no interesting backtrace. */
 	if (idle_cpu(smp_processor_id()))
 		return;
+#endif/*--- #if !defined(CONFIG_MIPS) ---*/
 
 	spin_lock_irqsave(&show_lock, flags);
-	printk(KERN_INFO "CPU%d:\n", smp_processor_id());
-	show_stack(NULL, NULL);
+#if defined(CONFIG_MIPS)
+    if(cpu_stackp[smp_processor_id()]) {
+#endif/*--- #if defined(CONFIG_MIPS) ---*/
+        printk(KERN_INFO "CPU%d:\n", smp_processor_id());
+        show_stack(NULL, cpu_stackp[smp_processor_id()]);
+#if defined(CONFIG_MIPS)
+    }
+#endif/*--- #if defined(CONFIG_MIPS) ---*/
 	spin_unlock_irqrestore(&show_lock, flags);
 }
 
 static void sysrq_showregs_othercpus(struct work_struct *dummy)
 {
+#if defined(CONFIG_MIPS)
+    {
+    int cpu;
+    unsigned long flags, cpuflags;
+	local_irq_save(flags);
+    cpuflags = dvpe();
+    for_each_online_cpu(cpu) {
+        /*--- get stackpointer form all cpus ---*/
+        struct task_struct *task = curr_task(cpu);
+        /* Idle CPUs have no interesting backtrace. */
+        cpu_stackp[cpu] = task && (idle_cpu(cpu) == 0) ? task->thread.reg29 : NULL;
+    }
+    evpe(cpuflags);
+	local_irq_restore(flags);
+    }
+#endif/*--- #else ---*//*--- #if defined(CONFIG_MIPS) ---*/
 	smp_call_function(showacpu, NULL, 0);
 }
 

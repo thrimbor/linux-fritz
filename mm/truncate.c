@@ -303,6 +303,86 @@ void truncate_inode_pages(struct address_space *mapping, loff_t lstart)
 }
 EXPORT_SYMBOL(truncate_inode_pages);
 
+#ifdef CONFIG_FUSIV_USB_OPTIMIZATION
+/* Dervied from __invalidate_mapping_pages. Maximum 32 pages can be validated 
+   and index is stored back */
+unsigned long fusiv_invalidate_mapping_pages(struct address_space *mapping,pgoff_t end)
+{
+	struct pagevec pvec;
+	pgoff_t next;
+	unsigned long ret = 0,error=0;
+        struct page *page;
+        int i;
+
+        next = mapping->page_tree.last_reclaim_index;
+	pagevec_init(&pvec, 0);
+	while (next <= end && (ret < 32 ) && (!error)&&
+			pagevec_lookup(&pvec, mapping, next, PAGEVEC_SIZE)) {
+		for (i = 0; i < pagevec_count(&pvec); i++) {
+			pgoff_t index;
+			page = pvec.pages[i];
+
+			if ( !trylock_page(page)) {
+                               error =1;
+				break;
+                        }
+
+			/*
+			 * We really shouldn't be looking at the ->index of an
+			 * unlocked page.  But we're not allowed to lock these
+			 * pages.  So we rely upon nobody altering the ->index
+			 * of this (pinned-by-us) page.
+			 */
+			index = page->index;
+			if (index > next)
+				next = index;
+			next++;
+
+			if (!(PageDirty(page) || PageWriteback(page)||
+                                 (page_mapped(page)))) {
+			       ret += invalidate_complete_page(mapping, page);
+                        }
+                        else error=1;
+			unlock_page(page);
+			if ((next > end) || error || (ret >=32 ) )
+			    break;
+		}
+		pagevec_release(&pvec);
+	}
+        if ( !ret ) { // No page could be free up... it could be due to wrong reclaim index
+             if ( !error ) {
+                 if (!(page = find_get_page(mapping,mapping->page_tree.last_reclaim_index))) 
+                       mapping->page_tree.last_reclaim_index=0; // start from 0 offset  
+                 else 
+                     page_cache_release(page); // free up reference
+              }
+        }
+        else
+           mapping->page_tree.last_reclaim_index=next;
+	return ret;
+}
+EXPORT_SYMBOL(fusiv_invalidate_mapping_pages);
+
+/**
+ * invalidate_mapping_pages - Invalidate all the unlocked pages of one inode
+ * @mapping: the address_space which holds the pages to invalidate
+ * @start: the offset 'from' which to invalidate
+ * @end: the offset 'to' which to invalidate (inclusive)
+ *
+ * This function only removes the unlocked pages, if you want to
+ * remove all the pages of one inode, you must call truncate_inode_pages.
+ *
+ * invalidate_mapping_pages() will not block on IO activity. It will not
+ * invalidate pages which are dirty, locked, under writeback or mapped into
+ * pagetables.
+ */
+unsigned long invalidate_mapping_pages(struct address_space *mapping,
+				pgoff_t start, pgoff_t end)
+{
+	return __invalidate_mapping_pages(mapping, start, end, false);
+}
+EXPORT_SYMBOL(invalidate_mapping_pages);
+#else /*--- #ifdef CONFIG_FUSIV_USB_OPTIMIZATION ---*/
 /**
  * invalidate_mapping_pages - Invalidate all the unlocked pages of one inode
  * @mapping: the address_space which holds the pages to invalidate
@@ -359,6 +439,7 @@ unsigned long invalidate_mapping_pages(struct address_space *mapping,
 	return ret;
 }
 EXPORT_SYMBOL(invalidate_mapping_pages);
+#endif /*--- #else ---*/ /*--- #ifdef CONFIG_FUSIV_USB_OPTIMIZATION ---*/
 
 /*
  * This is like invalidate_complete_page(), except it ignores the page's

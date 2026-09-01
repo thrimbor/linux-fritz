@@ -1,0 +1,7 @@
+#
+# Makefile for the igmp proxy
+#
+  obj-$(CONFIG_IFX_IGMP_PROXY)	+= iproxyd.o
+
+  iproxyd-objs	:= mMain.o mUtil.o
+

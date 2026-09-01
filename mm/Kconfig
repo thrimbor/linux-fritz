@@ -244,6 +244,17 @@ config DEFAULT_MMAP_MIN_ADDR
 	  This value can be changed after boot using the
 	  /proc/sys/vm/mmap_min_addr tunable.
 
+config AVM_LOW_MEMORY_STRATEGY
+    bool "Enable low memory block reuse strategie fix"
+    depends on MMU
+    default 'n'
+    help
+        Tow fixes a inserted into block reuse agorithm. 
+        a) try not to free block with page count more then XX. This value is 
+           between 2 an 10, depending how low memory is. This value changes dynamicly.
+        b) chance the relation between inactive and active blocks from 1:1 to 1:2
+        
+
 config ARCH_SUPPORTS_MEMORY_FAILURE
 	bool
 

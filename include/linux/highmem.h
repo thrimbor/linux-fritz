@@ -14,7 +14,7 @@ static inline void flush_anon_page(struct vm_area_struct *vma, struct page *page
 #endif
 
 #ifndef ARCH_HAS_FLUSH_KERNEL_DCACHE_PAGE
-static inline void flush_kernel_dcache_page(struct page *page)
+static inline void flush_kernel_dcache_page(struct page *page __attribute__((unused)))
 {
 }
 #endif
@@ -27,7 +27,7 @@ void debug_kmap_atomic(enum km_type type);
 
 #else
 
-static inline void debug_kmap_atomic(enum km_type type)
+static inline void debug_kmap_atomic(enum km_type type __attribute__((unused)))
 {
 }
 
@@ -55,11 +55,11 @@ static inline void *kmap(struct page *page)
 	return page_address(page);
 }
 
-static inline void kunmap(struct page *page)
+static inline void kunmap(struct page *page __attribute__((unused)))
 {
 }
 
-static inline void *kmap_atomic(struct page *page, enum km_type idx)
+static inline void *kmap_atomic(struct page *page, enum km_type idx __attribute__((unused)))
 {
 	pagefault_disable();
 	return page_address(page);
@@ -102,7 +102,7 @@ static inline void clear_user_highpage(struct page *page, unsigned long vaddr)
  */
 static inline struct page *
 __alloc_zeroed_user_highpage(gfp_t movableflags,
-			struct vm_area_struct *vma,
+			struct vm_area_struct *vma __attribute__((unused)),
 			unsigned long vaddr)
 {
 	struct page *page = alloc_page_vma(GFP_HIGHUSER | movableflags,

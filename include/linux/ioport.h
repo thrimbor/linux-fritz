@@ -109,6 +109,19 @@ struct resource_list {
 /* PC/ISA/whatever - the normal PC address spaces: IO and memory */
 extern struct resource ioport_resource;
 extern struct resource iomem_resource;
+extern struct resource sflash_resource;
+extern struct resource nand_flash_resource;
+extern struct resource gpio_resource;
+
+#ifdef CONFIG_MIPS_UR8
+extern struct resource nwss_tx_queue_resource;
+extern struct resource nwss_tx_completion_queue_resource;
+extern struct resource nwss_rx_queue_resource;
+extern struct resource nwss_free_buffer_queue_resource;
+extern struct resource nwss_free_packet_queue_resource;
+extern struct resource gpio_resource;
+extern struct resource timer_resource;
+#endif /*--- #ifdef CONFIG_MIPS_UR8 ---*/
 
 extern int request_resource(struct resource *root, struct resource *new);
 extern int release_resource(struct resource *new);
@@ -128,7 +141,7 @@ int adjust_resource(struct resource *res, resource_size_t start,
 resource_size_t resource_alignment(struct resource *res);
 static inline resource_size_t resource_size(struct resource *res)
 {
-	return res->end - res->start + 1;
+	return (res->end - res->start) + 1;
 }
 static inline unsigned long resource_type(struct resource *res)
 {

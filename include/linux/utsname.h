@@ -58,11 +58,11 @@ static inline void put_uts_ns(struct uts_namespace *ns)
 	kref_put(&ns->kref, free_uts_ns);
 }
 #else
-static inline void get_uts_ns(struct uts_namespace *ns)
+static inline void get_uts_ns(struct uts_namespace *ns __attribute__((unused)))
 {
 }
 
-static inline void put_uts_ns(struct uts_namespace *ns)
+static inline void put_uts_ns(struct uts_namespace *ns __attribute__((unused)))
 {
 }
 

@@ -315,9 +315,10 @@ static inline void pfx##write##bwlq(type val,				\
 									\
 	__val = pfx##ioswab##bwlq(__mem, val);				\
 									\
-	if (sizeof(type) != sizeof(u64) || sizeof(u64) == sizeof(long))	\
+	if (sizeof(type) != sizeof(u64) || sizeof(u64) == sizeof(long))	{ \
 		*__mem = __val;						\
-	else if (cpu_has_64bits) {					\
+        mb(); \
+    } else if (cpu_has_64bits) {					\
 		unsigned long __flags;					\
 		type __tmp;						\
 									\
@@ -346,9 +347,10 @@ static inline type pfx##read##bwlq(const volatile void __iomem *mem)	\
 									\
 	__mem = (void *)__swizzle_addr_##bwlq((unsigned long)(mem));	\
 									\
-	if (sizeof(type) != sizeof(u64) || sizeof(u64) == sizeof(long))	\
+	if (sizeof(type) != sizeof(u64) || sizeof(u64) == sizeof(long)) {	\
 		__val = *__mem;						\
-	else if (cpu_has_64bits) {					\
+        mb(); \
+    } else if (cpu_has_64bits) {					\
 		unsigned long __flags;					\
 									\
 		if (irq)						\
@@ -388,6 +390,7 @@ static inline void pfx##out##bwlq##p(type val, unsigned long port)	\
 	BUILD_BUG_ON(sizeof(type) > sizeof(unsigned long));		\
 									\
 	*__addr = __val;						\
+    mb(); \
 	slow;								\
 }									\
 									\
@@ -401,6 +404,7 @@ static inline type pfx##in##bwlq##p(unsigned long port)			\
 	BUILD_BUG_ON(sizeof(type) > sizeof(unsigned long));		\
 									\
 	__val = *__addr;						\
+    mb(); \
 	slow;								\
 									\
 	return pfx##ioswab##bwlq(__addr, __val);			\

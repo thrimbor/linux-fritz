@@ -100,10 +100,20 @@ static inline struct sock *__inet6_lookup_skb(struct inet_hashinfo *hashinfo,
 
 	if (unlikely(sk = skb_steal_sock(skb)))
 		return sk;
-	else return __inet6_lookup(dev_net(skb_dst(skb)->dev), hashinfo,
+#ifdef CONFIG_AVM_PA
+	sk = __inet6_lookup(dev_net(skb_dst(skb)->dev), hashinfo,
 				   &ipv6_hdr(skb)->saddr, sport,
 				   &ipv6_hdr(skb)->daddr, ntohs(dport),
 				   inet6_iif(skb));
+    if (sk)
+       avm_pa_add_local_session(skb, sk);
+    return sk;
+#else
+	return __inet6_lookup(dev_net(skb_dst(skb)->dev), hashinfo,
+				   &ipv6_hdr(skb)->saddr, sport,
+				   &ipv6_hdr(skb)->daddr, ntohs(dport),
+				   inet6_iif(skb));
+#endif
 }
 
 extern struct sock *inet6_lookup(struct net *net, struct inet_hashinfo *hashinfo,

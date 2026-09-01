@@ -19,6 +19,10 @@
 #include <asm/uaccess.h>
 #include "br_private.h"
 
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+void (*br_handle_mcast_frame_ptr)(struct net_bridge *br, struct sk_buff *skb) = NULL;
+#endif
+
 /* net device transmit always called with no BH (preempt_disabled) */
 netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 {
@@ -31,6 +35,18 @@ netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	skb_reset_mac_header(skb);
 	skb_pull(skb, ETH_HLEN);
+
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+	if (dest[0] == 1)
+	{
+		if (br->mfdb)
+		{
+			if (br_handle_mcast_frame_ptr)
+				br_handle_mcast_frame_ptr(br , skb);
+			return 0;
+		}
+	}
+#endif
 
 	if (dest[0] & 1)
 		br_flood_deliver(br, skb);
@@ -83,18 +99,24 @@ static int br_change_mtu(struct net_device *dev, int new_mtu)
 }
 
 /* Allow setting mac address to any valid ethernet address. */
-static int br_set_mac_address(struct net_device *dev, void *p)
+static int br_set_mac_address(struct net_device *dev, void *addr_struct_p)
 {
-	struct net_bridge *br = netdev_priv(dev);
-	struct sockaddr *addr = p;
+	struct net_bridge *br;
+	struct sockaddr *addr = (struct sockaddr *)(addr_struct_p);
+	unsigned char br_mac_zero[6] = {0,0,0,0,0,0};
 
-	if (!is_valid_ether_addr(addr->sa_data))
-		return -EINVAL;
-
+	br = netdev_priv(dev);
 	spin_lock_bh(&br->lock);
-	memcpy(dev->dev_addr, addr->sa_data, ETH_ALEN);
-	br_stp_change_bridge_id(br, addr->sa_data);
-	br->flags |= BR_SET_MAC_ADDR;
+
+	if (!memcmp(addr->sa_data, br_mac_zero, ETH_ALEN)) {
+		if (br->automatic_mac_disabled) {
+			br->automatic_mac_disabled = 0;
+			br_stp_recalculate_bridge_id(br);
+		}
+	} else {
+		br->automatic_mac_disabled = 1;
+		br_stp_set_bridge_id(br, addr->sa_data);
+	}
 	spin_unlock_bh(&br->lock);
 
 	return 0;
@@ -180,8 +202,16 @@ void br_dev_setup(struct net_device *dev)
 	SET_ETHTOOL_OPS(dev, &br_ethtool_ops);
 	dev->tx_queue_len = 0;
 	dev->priv_flags = IFF_EBRIDGE;
+        /* == AVM/RSP 20100915 ==
+         * Reserve extra space for WLAN header to avoid
+         * skb copy.
+         */
+        dev->hard_header_len = ETH_HLEN + 40;
 
 	dev->features = NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_HIGHDMA |
 			NETIF_F_GSO_MASK | NETIF_F_NO_CSUM | NETIF_F_LLTX |
 			NETIF_F_NETNS_LOCAL | NETIF_F_GSO;
 }
+#if defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP) || defined(CONFIG_FUSIV_KERNEL_IGMP_SNOOP_MODULE)
+EXPORT_SYMBOL(br_handle_mcast_frame_ptr);
+#endif

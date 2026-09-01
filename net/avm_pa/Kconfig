@@ -1,0 +1,44 @@
+#
+# Packet configuration
+#
+
+config AVM_PA
+	bool "AVM Packet acceleration"
+	select GENERIC_CONNTRACK
+	---help---
+	  The AVM Packet acceleration can be used to let packets travel
+	  directly from input device to output device.
+
+	  If unsure, say N.
+
+config AVM_PA_MAX_PID
+	int "AVM Packet acceleration max PIDs"
+    depends on AVM_PA
+	range 32 256
+	default 32
+	---help---
+        Max number of interfaces supported by AVM_PA
+        allowed range:     32 - 256
+        reasonable range:  32 -  64
+
+config AVM_PA_MAX_VPID
+	int "AVM Packet acceleration max VPIDs"
+    depends on AVM_PA
+	range 32 256
+	default 32
+	---help---
+        Max number of virtual interfaces supported by AVM_PA
+        allowed range:     32 - 256
+        reasonable range:  32 -  64
+
+config AVM_PA_MAX_SESSION
+	int "AVM Packet acceleration max Sessions"
+    depends on AVM_PA
+	range 256 32678
+	default 256
+	---help---
+        Max number of sessions supported by AVM_PA
+        allowed range:     256 - 32678
+        reasonable range:  256 -  4096
+
+

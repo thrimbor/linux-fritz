@@ -37,6 +37,13 @@ void fat_fs_error(struct super_block *s, const char *fmt, ...)
 	else if (opts->errors == FAT_ERRORS_RO && !(s->s_flags & MS_RDONLY)) {
 		s->s_flags |= MS_RDONLY;
 		printk(KERN_ERR "    File system has been set read-only\n");
+		/* AVM/WK 20100625 Call usermode notifier */
+		{
+		 	char* argc[]= {"/sbin/fs_error", s->s_id, NULL};
+		 	char* envp[]= {"ACTION=fat_fs_panic", NULL};
+
+			call_usermodehelper (argc[0], argc, envp, UMH_NO_WAIT);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(fat_fs_error);

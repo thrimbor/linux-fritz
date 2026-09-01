@@ -16,6 +16,7 @@
 #include <linux/sched.h>
 #include <linux/buffer_head.h>
 #include <linux/capability.h>
+#include <linux/blkdev.h>
 
 /*
  * balloc.c contains the blocks allocation and deallocation routines
@@ -558,6 +559,9 @@ do_more:
 	mark_buffer_dirty(bitmap_bh);
 	if (sb->s_flags & MS_SYNCHRONOUS)
 		sync_dirty_buffer(bitmap_bh);
+
+    //printk(KERN_ERR "[%s/%d] block:%lu, count:%lu", __func__, __LINE__, block, count);
+    sb_issue_discard(sb, block, count); // Koennte ein Hack sein...
 
 	group_adjust_blocks(sb, block_group, desc, bh2, group_freed);
 	freed += group_freed;

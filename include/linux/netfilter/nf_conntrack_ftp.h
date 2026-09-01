@@ -26,6 +26,9 @@ struct nf_ct_ftp_master {
 	u_int32_t seq_aft_nl[IP_CT_DIR_MAX][NUM_SEQ_TO_REMEMBER];
 	/* 0 means seq_match_aft_nl not set */
 	int seq_aft_nl_num[IP_CT_DIR_MAX];
+#if defined(CONFIG_IP_NF_MATCH_LTQATTACK) || defined(CONFIG_IP_NF_MATCH_LTQATTACK_MODULE)
+        int active_ftp_port;
+#endif
 };
 
 struct nf_conntrack_expect;

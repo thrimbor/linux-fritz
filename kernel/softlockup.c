@@ -150,17 +150,26 @@ void softlockup_tick(void)
 	per_cpu(print_timestamp, this_cpu) = touch_timestamp;
 
 	spin_lock(&print_lock);
+    console_verbose();
+	if (softlockup_panic) {
+        restore_printk();
+    }
 	printk(KERN_ERR "BUG: soft lockup - CPU#%d stuck for %lus! [%s:%d]\n",
 			this_cpu, now - touch_timestamp,
 			current->comm, task_pid_nr(current));
+#ifdef CONFIG_SMP
+	if (softlockup_panic) {
+        /*--- get information about all cpus ! ---*/
+        BUG();
+    }
+#endif
 	print_modules();
 	print_irqtrace_events(current);
-	if (regs)
+	if (regs) 
 		show_regs(regs);
 	else
 		dump_stack();
 	spin_unlock(&print_lock);
-
 	if (softlockup_panic)
 		panic("softlockup: hung tasks");
 }

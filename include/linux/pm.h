@@ -511,7 +511,7 @@ extern void __suspend_report_result(const char *function, void *fn, int ret);
 #define device_pm_lock() do {} while (0)
 #define device_pm_unlock() do {} while (0)
 
-static inline int dpm_suspend_start(pm_message_t state)
+static inline int dpm_suspend_start(pm_message_t state __attribute__ ((unused)))
 {
 	return 0;
 }

@@ -152,7 +152,7 @@ static inline struct net *get_net(struct net *net)
 	return net;
 }
 
-static inline void put_net(struct net *net)
+static inline void put_net(struct net *net __attribute__ ((unused)))
 {
 }
 
@@ -162,7 +162,7 @@ static inline struct net *maybe_get_net(struct net *net)
 }
 
 static inline
-int net_eq(const struct net *net1, const struct net *net2)
+int net_eq(const struct net *net1 __attribute__ ((unused)), const struct net *net2 __attribute__ ((unused)))
 {
 	return 1;
 }
@@ -188,7 +188,7 @@ static inline struct net *hold_net(struct net *net)
 	return net;
 }
 
-static inline void release_net(struct net *net)
+static inline void release_net(struct net *net __attribute__ ((unused)))
 {
 }
 #endif

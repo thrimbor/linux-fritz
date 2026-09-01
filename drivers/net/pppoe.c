@@ -863,7 +863,7 @@ static int pppoe_sendmsg(struct kiocb *iocb, struct socket *sock,
 		goto end;
 
 
-	skb = sock_wmalloc(sk, total_len + dev->hard_header_len + 32,
+	skb = sock_wmalloc(sk, total_len + dev->hard_header_len + 32 + NET_SKB_PAD,
 			   0, GFP_KERNEL);
 	if (!skb) {
 		error = -ENOMEM;
@@ -871,7 +871,7 @@ static int pppoe_sendmsg(struct kiocb *iocb, struct socket *sock,
 	}
 
 	/* Reserve space for headers. */
-	skb_reserve(skb, dev->hard_header_len);
+	skb_reserve(skb, dev->hard_header_len + NET_SKB_PAD);
 	skb_reset_network_header(skb);
 
 	skb->dev = dev;
@@ -1228,6 +1228,117 @@ static void __exit pppoe_exit(void)
 	unregister_pernet_gen_device(pppoe_net_id, &pppoe_net_ops);
 }
 
+#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+enum{
+	PPPOE_GET_ADDR = 1,
+	PPPOE_GET_SESSION_ID,
+	PPPOE_GET_ETH_ADDR,
+};
+
+int32_t ppa_check_pppoe_addr_valid(struct net_device *dev, struct pppoe_addr *pa)
+{
+	struct pppox_sock *po=NULL;
+	struct pppoe_net *pn;
+    struct net_device *pppoe_netdev;
+	int32_t ret = -EFAULT;
+
+    pn = pppoe_pernet(dev_net(dev));
+    if (pppoe_netdev = dev_get_by_name(dev_net(dev), pa->dev)) {
+	    dev_put (pppoe_netdev);
+    }
+	po = get_item(pn, pa->sid, pa->remote, pppoe_netdev->ifindex);
+	if (!po){
+		printk("Cannot find the pppoe addr in hash table \n");
+		goto err;
+	}	
+
+	if (!po->pppoe_dev || 
+		(po->pppoe_pa.remote[0] | po->pppoe_pa.remote[1] | po->pppoe_pa.remote[2] |
+		 po->pppoe_pa.remote[3] | po->pppoe_pa.remote[4] | po->pppoe_pa.remote[5]) == 0){
+		 printk("no pppoe device or remote address is zero\n");
+		goto err;
+	}
+
+	ret = 0;
+
+err:
+	if (po)
+		sock_put(sk_pppox(po));
+
+	return ret;
+}
+
+int32_t ppa_pppoe_get_pppoe_addr(struct net_device *dev, struct pppoe_addr *pa)
+{
+	uint32_t id = (PPPOE_GET_ADDR << PPA_PPP_MASK_LEN) | PPA_PPPOE_ID;
+
+	return ppa_ppp_get_info(dev, id, pa);
+}
+
+__u16 ppa_pppoe_get_pppoe_session_id(struct net_device *dev)
+{
+	uint16_t seid = 0;
+	uint32_t id = (PPPOE_GET_SESSION_ID << PPA_PPP_MASK_LEN) | PPA_PPPOE_ID;
+
+	ppa_ppp_get_info(dev, id, &seid);
+
+	return seid;
+}
+
+__u16 ppa_get_pkt_pppoe_session_id(struct sk_buff *skb)
+{
+	if(!skb)
+		return 0;
+	
+	return ppa_pppoe_get_pppoe_session_id(skb->dev);
+}
+
+int32_t ppa_pppoe_get_eth_netif(struct net_device *dev, char pppoe_eth_ifname[IFNAMSIZ])
+{
+	uint32_t id = (PPPOE_GET_ETH_ADDR << PPA_PPP_MASK_LEN) | PPA_PPPOE_ID;
+
+	return ppa_ppp_get_info(dev, id, pppoe_eth_ifname);
+}
+
+int32_t ppa_get_pppoe_info(struct net_device *dev, void *po, uint32_t pppoe_id, void *value)
+{
+	struct pppoe_addr pa;
+
+	if(!po){
+		printk("No pppoe sock \n");
+		return -1;
+	}
+
+	if((pppox_sk(po)->chan.private != po)){
+		return -1;
+	}
+
+	pa = pppox_sk(po)->pppoe_pa;
+
+	if(ppa_check_pppoe_addr_valid(dev, &pa) < 0)
+		return -1;
+
+	switch(pppoe_id){
+		case PPPOE_GET_ADDR:
+			*(struct pppoe_addr *)value = pa; break;
+		case PPPOE_GET_SESSION_ID:
+			*(u_int16_t *)value = pa.sid; break;
+		case PPPOE_GET_ETH_ADDR:
+			memcpy(value, pa.dev, sizeof(pa.dev));  break;
+		default:
+			return -1;
+	}
+
+	return 0;
+		
+}
+
+EXPORT_SYMBOL(ppa_pppoe_get_pppoe_addr);
+EXPORT_SYMBOL(ppa_pppoe_get_pppoe_session_id);
+EXPORT_SYMBOL(ppa_get_pkt_pppoe_session_id);
+EXPORT_SYMBOL(ppa_pppoe_get_eth_netif);
+EXPORT_SYMBOL(ppa_get_pppoe_info);
+#endif
 module_init(pppoe_init);
 module_exit(pppoe_exit);
 

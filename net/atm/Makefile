@@ -13,3 +13,7 @@ atm-$(CONFIG_PROC_FS) += proc.o
 obj-$(CONFIG_ATM_LANE) += lec.o
 obj-$(CONFIG_ATM_MPOA) += mpoa.o
 obj-$(CONFIG_PPPOATM) += pppoatm.o
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/net/atm/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

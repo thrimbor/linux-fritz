@@ -983,7 +983,10 @@ void rndis_free_response (int configNr, u8 *buf)
 		r = list_entry (act, rndis_resp_t, list);
 		if (r && r->buf == buf) {
 			list_del (&r->list);
-			kfree (r);
+			#if defined(__IFX_USB_GADGET__)
+				gadget_free_buffer(r->buf);
+			#endif
+			kfree(r);
 		}
 	}
 }
@@ -1014,10 +1017,20 @@ static rndis_resp_t *rndis_add_response (int configNr, u32 length)
 	rndis_resp_t	*r;
 
 	/* NOTE:  this gets copied into ether.c USB_BUFSIZ bytes ... */
-	r = kmalloc (sizeof (rndis_resp_t) + length, GFP_ATOMIC);
-	if (!r) return NULL;
-
-	r->buf = (u8 *) (r + 1);
+	#ifdef __IFX_USB_GADGET__
+		r = kmalloc (sizeof (rndis_resp_t), GFP_ATOMIC);
+		if (!r) return NULL;
+		r->buf = (u8 *) gadget_alloc_buffer(length);
+		if (!r->buf) 
+		{
+			kfree(r);
+			return NULL;
+		}
+	#else
+		r = kmalloc (sizeof (rndis_resp_t) + length, GFP_ATOMIC);
+		if (!r) return NULL;
+		r->buf = (u8 *) (r + 1);
+	#endif
 	r->length = length;
 	r->send = 0;
 

@@ -104,6 +104,9 @@
 
 #define __access_mask get_fs().seg
 
+#ifdef __KLOCWORK__
+extern int __access_ok(long, long, long);
+#else
 #define __access_ok(addr, size, mask)					\
 ({									\
 	unsigned long __addr = (unsigned long) (addr);			\
@@ -116,6 +119,7 @@
 		__ua_size(__size)));					\
 	__ok == 0;							\
 })
+#endif /* __KLOCWORK__ */
 
 #define access_ok(type, addr, size)					\
 	likely(__access_ok((addr), (size), __access_mask))
@@ -672,6 +676,19 @@ extern void __put_user_unaligned_unknown(void);
 
 extern size_t __copy_user(void *__to, const void *__from, size_t __n);
 
+#ifdef __KLOCWORK__
+extern long __invoke_copy_to_user(void *, const void *, long);
+extern long __copy_to_user(void *, const void *, long);
+extern long __copy_to_user_inatomic(void *, const void *, long);
+extern long __copy_from_user_inatomic(void *, const void *, long);
+extern long copy_to_user(void *, const void *, long);
+extern long __invoke_copy_from_user(void *, const void *, long);
+extern long __invoke_copy_from_user_inatomic(void *, const void *, long);
+extern long __copy_from_user(void *, const void *, long);
+extern long copy_from_user(void *, const void *, long);
+extern long __copy_in_user(void *, const void *, long);
+extern long copy_in_user(void *, const void *, long);
+#else
 #define __invoke_copy_to_user(to, from, n)				\
 ({									\
 	register void __user *__cu_to_r __asm__("$4");			\
@@ -920,6 +937,8 @@ extern size_t __copy_user_inatomic(void *__to, const void *__from, size_t __n);
 	}								\
 	__cu_len;							\
 })
+
+#endif /* __KLOCWORK __*/
 
 /*
  * __clear_user: - Zero a block of memory in user space, with less checking.

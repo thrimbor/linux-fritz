@@ -11,3 +11,7 @@ obj-$(CONFIG_PCIEPORTBUS)	+= pcieportdrv.o
 
 # Build PCI Express AER if needed
 obj-$(CONFIG_PCIEAER)		+= aer/
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/pci/pcie/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

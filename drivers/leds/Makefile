@@ -40,3 +40,9 @@ obj-$(CONFIG_LEDS_TRIGGER_HEARTBEAT)	+= ledtrig-heartbeat.o
 obj-$(CONFIG_LEDS_TRIGGER_BACKLIGHT)	+= ledtrig-backlight.o
 obj-$(CONFIG_LEDS_TRIGGER_GPIO)		+= ledtrig-gpio.o
 obj-$(CONFIG_LEDS_TRIGGER_DEFAULT_ON)	+= ledtrig-default-on.o
+obj-$(CONFIG_LEDS_TRIGGER_MORSE)	+= ledtrig-morse.o
+obj-$(CONFIG_LEDS_TRIGGER_NETDEV)      += ledtrig-netdev.o
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/leds/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

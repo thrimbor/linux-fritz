@@ -1,0 +1,25 @@
+#!/bin/bash
+
+KERNEL_CLASS=$1
+DRIVER_NAME=$2
+
+if [ -z "$KERNEL_CLASS" ] ; then
+    KERNEL_CLASS=26
+fi
+
+for i in `find . -name Makefile.$KERNEL_CLASS` ; do
+    dest=${i%.$KERNEL_CLASS}
+    source="`pwd`/$i"
+    rm -f $dest
+    ln -fvs $source $dest
+done
+
+ln -fs `pwd`/linux_avm_power.h ../../../include/linux/avm_power.h 
+
+if [ -n "$FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD" ] ; then
+    if [ ! -d $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux ] ; then
+        mkdir -p $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux 
+    fi
+    cp -vf `pwd`/linux_avm_power.h $FRITZ_BOX_BUILD_DIR/$KERNEL_BUILD/filesystem/include/linux/avm_power.h 
+fi
+exit 0

@@ -21,6 +21,11 @@
 #include "usb.h"
 #include "hcd.h"
 
+#ifdef CONFIG_AVM_POWERMETER
+#include <linux/avm_power.h>
+#include <linux/avm_hw_config.h>
+#endif /*--- #ifdef CONFIG_AVM_POWERMETER ---*/
+
 static inline const char *plural(int n)
 {
 	return (n == 1 ? "" : "s");
@@ -102,6 +107,83 @@ int usb_choose_configuration(struct usb_device *udev)
 			continue;
 		}
 
+#if defined(CONFIG_AVM_POWERMETER)
+		{
+			int hub_port;
+			enum _avm_hw_param param;
+#if defined (CONFIG_MACH_AR934x)
+		//check if internal hub is not present
+			if (avm_get_hw_config(AVM_HW_CONFIG_VERSION, "usb_hub_external_port1", &hub_port, &param) != 0) {
+#else			
+			if (1) {
+#endif
+				if (udev->level == 1) {
+					unsigned nextmA = (c->desc.bMaxPower * 2);
+
+					/* A device should display at least 100 mA in AVM_POWERMETER */
+					if (nextmA < 100) {
+						nextmA = 100;
+					}
+
+					{
+#if defined(CONFIG_AR9)
+						unsigned totalmA;
+						unsigned avm_powerdevice;
+						/* set minimum power (100mA) first, then query power for both ports */
+						avm_powerdevice = (udev->bus->busnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+						printk (KERN_INFO "Bus#%u config: AVM Powermeter biased to 100 mA\n", udev->bus->busnum);
+						PowerManagmentRessourceInfo(avm_powerdevice, 100);
+
+						/* fix: 100 mA off for this very port */
+						totalmA = PowerManagmentActivatePowerMode("usb_current_req") - 100;
+						if ((nextmA + totalmA) > 600) {
+							if (le16_to_cpu(udev->descriptor.idVendor) != 0x057C) {
+								printk (KERN_INFO "AVM: rejecting new USB device with %u mA; old power was %u mA!\n", nextmA, totalmA);
+								insufficient_power++;
+								continue;
+							}
+						} else
+#endif // CONFIG_AR9
+						{
+							unsigned avm_powerdevice;
+#if defined (CONFIG_FUSIV_VX180)
+							avm_powerdevice = (udev->portnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+							printk (KERN_INFO "Port#%u config: AVM Powermeter changed to %u mA\n", udev->portnum, nextmA);
+#else
+							avm_powerdevice = (udev->bus->busnum == 1)? powerdevice_usb_host : powerdevice_usb_host2;
+							printk (KERN_INFO "Bus#%u config: AVM Powermeter changed to %u mA\n", udev->bus->busnum, nextmA);
+#endif
+							PowerManagmentRessourceInfo(avm_powerdevice, nextmA);
+						}
+					}
+				}
+			} else {
+				if (udev->level == 2) {
+					unsigned avm_powerdevice = 0;
+					if (udev->portnum == hub_port) {
+						avm_powerdevice = powerdevice_usb_host;
+					} else {
+						if (avm_get_hw_config(AVM_HW_CONFIG_VERSION, "usb_hub_external_port2", &hub_port, &param) == 0) {
+							if (udev->portnum == hub_port) {
+								avm_powerdevice = powerdevice_usb_host2;
+							}
+						}
+					}
+					if (avm_powerdevice) {
+						unsigned nextmA = (c->desc.bMaxPower * 2);
+
+						/* A device should display at least 100 mA in AVM_POWERMETER */
+						if (nextmA < 100) {
+							nextmA = 100;
+						}
+						printk (KERN_INFO "HubPort#%u config: AVM Powermeter changed to %u mA\n", udev->portnum, nextmA);
+						PowerManagmentRessourceInfo(avm_powerdevice, nextmA);
+					}
+				}
+			}
+		}
+#endif // CONFIG_AVM_POWERMETER
+
 		/* When the first config's first interface is one of Microsoft's
 		 * pet nonstandard Ethernet-over-USB protocols, ignore it unless
 		 * this kernel has enabled the necessary host side driver.
@@ -162,6 +244,10 @@ static int generic_probe(struct usb_device *udev)
 		;		/* Don't configure if the device is owned */
 	else if (udev->authorized == 0)
 		dev_err(&udev->dev, "Device is not authorized for usage\n");
+#if 1 /* == 20101129 AVM/WK Extension  == */
+	else if (udev->noprobe)
+		dev_err(&udev->dev, "Probing is disabled for this device\n");
+#endif
 	else {
 		c = usb_choose_configuration(udev);
 		if (c >= 0) {

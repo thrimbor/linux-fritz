@@ -231,7 +231,7 @@ void __sched __down_write_nested(struct rw_semaphore *sem, int subclass)
 	;
 }
 
-void __sched __down_write(struct rw_semaphore *sem)
+inline void __sched __down_write(struct rw_semaphore *sem)
 {
 	__down_write_nested(sem, 0);
 }

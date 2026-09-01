@@ -568,15 +568,14 @@ unsigned short css_depth(struct cgroup_subsys_state *css);
 
 static inline int cgroup_init_early(void) { return 0; }
 static inline int cgroup_init(void) { return 0; }
-static inline void cgroup_fork(struct task_struct *p) {}
-static inline void cgroup_fork_callbacks(struct task_struct *p) {}
-static inline void cgroup_post_fork(struct task_struct *p) {}
-static inline void cgroup_exit(struct task_struct *p, int callbacks) {}
+static inline void cgroup_fork(struct task_struct *p __attribute__ ((unused))) {}
+static inline void cgroup_fork_callbacks(struct task_struct *p __attribute__ ((unused))) {}
+static inline void cgroup_post_fork(struct task_struct *p __attribute__ ((unused))) {}
+static inline void cgroup_exit(struct task_struct *p __attribute__ ((unused)), int callbacks __attribute__ ((unused))) {}
 
 static inline void cgroup_lock(void) {}
 static inline void cgroup_unlock(void) {}
-static inline int cgroupstats_build(struct cgroupstats *stats,
-					struct dentry *dentry)
+static inline int cgroupstats_build(struct cgroupstats *stats __attribute__ ((unused)), struct dentry *dentry __attribute__ ((unused)))
 {
 	return -EINVAL;
 }

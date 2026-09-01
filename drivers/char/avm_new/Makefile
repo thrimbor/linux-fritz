@@ -1,0 +1,125 @@
+#############################################
+# Makefile: automaticly genereated by ./init_avm
+#           Mi 11. Jun 13:36:16 CEST 2014
+#############################################
+
+#####################################################################################
+#
+#   vim: noexpandtab
+#
+#####################################################################################
+#   
+#   Copyright (C) 2006 AVM GmbH <fritzbox_info@avm.de>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA 
+# 
+#####################################################################################
+
+
+avm-objs	:= avm_sammel.o
+
+
+######################################################################################
+ifeq ($(CONFIG_AVM_LED),y)
+avm-objs	+= avm_led_init.o \
+				   avm_led_file.o \
+				   avm_led_write.o \
+				   avm_led_event.o \
+				   \
+				   avm_led_mode.o \
+				   avm_led_if.o \
+				   \
+				   avm_led_old.o \
+				   avm_led_hardware_error.o 
+
+ifeq ($(CONFIG_AVM_LED_OUTPUT_GPIO),y)
+avm-objs     += \
+				   avm_led_gpio_bit_driver.o \
+				   avm_led_gpio_mask_driver.o 
+
+ifeq ($(CONFIG_AVM_LED_BIER_HOLEN),y)
+avm-objs     += avm_led_shift_register_bier_holen_driver.o  \
+ 				avm_led_gpio_bier_holen_driver.o 
+endif # ifeq ($(CONFIG_AVM_LED_BIER_HOLEN),y)
+
+ifeq ($(CONFIG_AVM_LED_OUTPUT_DUAL_GPIO),y)
+avm-objs     += avm_led_gpio_dual_bit_driver.o 
+endif  # ifeq ($(CONFIG_AVM_LED_OUTPUT_DUAL_GPIO),y)
+endif  # ifeq ($(CONFIG_AVM_LED_OUTPUT_GPIO),y)
+
+ifeq ($(CONFIG_AVM_LED_OUTPUT_SHIFT_REGISTER),y)
+avm-objs     += \
+				   avm_led_shift_register_bit_driver.o \
+				   avm_led_shift_register_mask_driver.o 
+endif # ifeq ($(CONFIG_AVM_LED_OUTPUT_SHIFT_REGISTER),y)
+endif # ifeq ($(CONFIG_AVM_LED_OUTPUT_GPIO),y)
+ifeq ($(CONFIG_AVM_SIMPLE_PROFILING),y)
+avm-objs     += \
+				   avm_led_profile.o 
+endif # ifeq ($(CONFIG_AVM_SIMPLE_PROFILING),y)
+
+######################################################################################
+ifeq ($(CONFIG_AVM_EVENT),y)
+    avm-objs     += avm_event_main.o \
+                    avm_event_file.o \
+                    avm_event_alloc.o
+ifeq ($(CONFIG_AVM_PUSH_BUTTON),y)
+ifeq ($(CONFIG_MIPS_FUSIV),y)
+    avm-objs     += ikan_avm_event_push_button.o
+else # ifeq ($(CONFIG_MIPS_FUSIV),y)
+    avm-objs     += avm_event_push_button.o
+endif # else # ifeq ($(CONFIG_MIPS_FUSIV),y)
+endif # ifeq ($(CONFIG_AVM_PUSH_BUTTON),y)
+endif # ifeq ($(CONFIG_AVM_EVENT),y)
+
+######################################################################################
+ifeq ($(CONFIG_AVM_WATCHDOG),y)
+    avm-objs	 += ar7wdt_main.o \
+                    ar7wdt_file.o 
+ifeq ($(CONFIG_MIPS_UR8),y)
+	avm-objs     += ar7wdt_hw_26.o
+endif
+ifeq ($(CONFIG_ARCH_PUMA5),y)
+	avm-objs     += ar7wdt_hw_26.o
+endif
+ifeq ($(CONFIG_MACH_PUMA6),y)
+	avm-objs     += ar7wdt_hw_puma.o
+endif
+ifeq ($(CONFIG_MIPS_FUSIV),y)
+	avm-objs     += ikan_wdt.o
+endif
+ifeq ($(CONFIG_LANTIQ),y)
+	avm-objs     += ifxmips_wdt.o
+endif
+ifeq ($(CONFIG_MACH_ATHEROS),y)
+	avm-objs     += ath_wdt.o
+endif
+ifeq ($(CONFIG_ARCH_DAVINCI),y)
+	avm-objs     += davinci_watchdog_hw.o
+endif
+endif
+
+
+######################################################################################
+ifeq ($(CONFIG_AVM_DEBUG),y)
+    avm-objs	 += avm_debug.o
+endif
+
+######################################################################################
+obj-$(CONFIG_AVM_SAMMEL) += avm.o 
+
+EXTRA_CFLAGS	+= -Wall -Wextra
+# EXTRA_CFLAGS	+= -g -ggdb -save-temps
+EXTRA_CFLAGS	+= -DAVM_NEW_HWREV_LIST="\" 156 191 171 137 168 197 139 145 167 141 144 170 175 177 181 183 196 202 203 185 193 192 198 189 179 188 180 96 184 195 207 190 201 194 200 205 172 173 \""

@@ -39,6 +39,7 @@
 #include <linux/kallsyms.h>
 #include <linux/perf_event.h>
 #include <linux/sched.h>
+#include <linux/avm_profile.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -62,6 +63,10 @@ EXPORT_SYMBOL(jiffies_64);
 #define TVR_SIZE (1 << TVR_BITS)
 #define TVN_MASK (TVN_SIZE - 1)
 #define TVR_MASK (TVR_SIZE - 1)
+
+#if defined(CONFIG_CHECK_TIMER_ON_FREED_MODULE)
+extern int module_alloc_check_pointer(unsigned long addr, char **name) __attribute__ ((weak));
+#endif
 
 struct tvec {
 	struct list_head vec[TVN_SIZE];
@@ -1023,7 +1028,25 @@ static inline void __run_timers(struct tvec_base *base)
 				lock_map_acquire(&lockdep_map);
 
 				trace_timer_expire_entry(timer);
+#if defined(CONFIG_AVM_SIMPLE_PROFILING)
+                avm_simple_profiling_log(avm_profile_data_type_timer_begin, (unsigned int)fn, (unsigned int)data);
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
+		
+#if defined(CONFIG_CHECK_TIMER_ON_FREED_MODULE)
+                if(!IS_ERR(module_alloc_check_pointer)) {
+                    char *name;
+                    int ret = module_alloc_check_pointer((unsigned long)fn, &name);
+                    if(ret == -1) {
+                        panic("TIMER: call pointer from freed module '%s' \n", name ? name: "unbekannt");
+                    }
+                }
+#endif /*--- #if defined(CONFIG_CHECK_TIMER_ON_FREED_MODULE) ---*/
+
 				fn(data);
+#if defined(CONFIG_AVM_SIMPLE_PROFILING)
+                avm_simple_profiling_log(avm_profile_data_type_timer_end, (unsigned int)fn, (unsigned int)data);
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
+
 				trace_timer_expire_exit(timer);
 
 				lock_map_release(&lockdep_map);
@@ -1325,7 +1348,7 @@ SYSCALL_DEFINE0(getegid)
 
 #endif
 
-static void process_timeout(unsigned long __data)
+static inline void process_timeout(unsigned long __data)
 {
 	wake_up_process((struct task_struct *)__data);
 }

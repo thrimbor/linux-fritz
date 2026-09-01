@@ -1,0 +1,7 @@
+#! /bin/bash
+
+ln -fvs ../../drivers/char/avm_net_trace/avm_net_trace.h ../../../include/linux/avm_net_trace.h
+ln -fvs ../../drivers/char/avm_net_trace/avm_net_trace_ioctl.h ../../../include/linux/avm_net_trace_ioctl.h
+
+exit 0
+

@@ -170,4 +170,11 @@ struct pppol2tp_ioc_stats {
 #define ifr_mtu	ifr_ifru.ifru_metric
 #endif
 
+#if (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+#define PPA_PPP_MASK_LEN	2
+#define PPA_PPP_MASK		3
+#define PPA_PPPOE_ID 		0x00000001
+#define PPA_PPPOA_ID		0x00000002
+#endif
+
 #endif /* _IF_PPP_H_ */

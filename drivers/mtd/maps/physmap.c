@@ -21,6 +21,8 @@
 #include <linux/mtd/concat.h>
 #include <linux/io.h>
 
+#define MTD_AVM_PARTITION_PARSER
+
 #define MAX_RESOURCES		4
 
 struct physmap_flash_info {
@@ -80,7 +82,7 @@ static const char *rom_probe_types[] = {
 					"map_rom",
 					NULL };
 #ifdef CONFIG_MTD_PARTITIONS
-static const char *part_probe_types[] = { "cmdlinepart", "RedBoot", NULL };
+static const char *part_probe_types[] __attribute__((unused)) = { "cmdlinepart", "RedBoot", NULL };
 #endif
 
 static int physmap_flash_probe(struct platform_device *dev)
@@ -96,6 +98,7 @@ static int physmap_flash_probe(struct platform_device *dev)
 	if (physmap_data == NULL)
 		return -ENODEV;
 
+    printk("[%s] line=%d, doing probes\n" ,__FUNCTION__, __LINE__);
 	info = devm_kzalloc(&dev->dev, sizeof(struct physmap_flash_info),
 			    GFP_KERNEL);
 	if (info == NULL) {
@@ -139,6 +142,7 @@ static int physmap_flash_probe(struct platform_device *dev)
 		probe_type = rom_probe_types;
 		for (; info->mtd[i] == NULL && *probe_type != NULL; probe_type++)
 			info->mtd[i] = do_map_probe(*probe_type, &info->map[i]);
+
 		if (info->mtd[i] == NULL) {
 			dev_err(&dev->dev, "map_probe failed\n");
 			err = -ENXIO;
@@ -170,21 +174,33 @@ static int physmap_flash_probe(struct platform_device *dev)
 		goto err_out;
 
 #ifdef CONFIG_MTD_PARTITIONS
+#ifdef MTD_AVM_PARTITION_PARSER
+	if (physmap_data->probes) {
+		err = parse_mtd_partitions(info->cmtd, physmap_data->probes, &info->parts, 0);
+		if (err > 0) {
+			add_mtd_partitions(info->cmtd, info->parts, err);
+			return 0;
+		}
+	}
+#else /*--- #if CONFIG_MTD_AVM_PARTITION_PARSER ---*/
 	err = parse_mtd_partitions(info->cmtd, part_probe_types,
 				&info->parts, 0);
 	if (err > 0) {
+        printk("[%s] line=%d, err=%d \n" ,__FUNCTION__, __LINE__, err);
+
 		add_mtd_partitions(info->cmtd, info->parts, err);
 		info->nr_parts = err;
 		return 0;
 	}
 
+#endif /*--- #else #if CONFIG_MTD_AVM_PARTITION_PARSER ---*/
 	if (physmap_data->nr_parts) {
 		printk(KERN_NOTICE "Using physmap partition information\n");
 		add_mtd_partitions(info->cmtd, physmap_data->parts,
 				   physmap_data->nr_parts);
 		return 0;
 	}
-#endif
+#endif /*--- #ifdef CONFIG_MTD_PARTITIONS ---*/
 
 	add_mtd_device(info->cmtd);
 	return 0;
@@ -267,6 +283,7 @@ static int __init physmap_init(void)
 #ifdef CONFIG_MTD_PHYSMAP_COMPAT
 	if (err == 0)
 		platform_device_register(&physmap_flash);
+	printk("[%s] compat registriert \n",__FUNCTION__);
 #endif
 
 	return err;

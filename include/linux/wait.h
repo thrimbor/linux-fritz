@@ -133,7 +133,7 @@ static inline void __add_wait_queue_tail(wait_queue_head_t *head,
 	list_add_tail(&new->task_list, &head->task_list);
 }
 
-static inline void __remove_wait_queue(wait_queue_head_t *head,
+static inline void __remove_wait_queue(wait_queue_head_t *head __attribute__ ((unused)),
 							wait_queue_t *old)
 {
 	list_del(&old->task_list);

@@ -44,6 +44,8 @@
 
 #include "8250.h"
 
+#define MIPS_UR8_HACK
+
 #ifdef CONFIG_SPARC
 #include "suncore.h"
 #endif
@@ -300,6 +302,13 @@ static const struct serial8250_config uart_config[] = {
 		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_00,
 		.flags		= UART_CAP_FIFO | UART_CAP_AFE,
 	},
+	[PORT_UR8] = {
+		.name		= "UR8",
+		.fifo_size	= 16,
+		.tx_loadsz	= 16,
+		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_00,
+		.flags		= UART_CAP_FIFO, 
+	},
 };
 
 #if defined (CONFIG_SERIAL_8250_AU1X00)
@@ -422,6 +431,18 @@ static unsigned int mem32_serial_in(struct uart_port *p, int offset)
 	return readl(p->membase + offset);
 }
 
+static void mem16_serial_out(struct uart_port *p, int offset, int value)
+{
+	offset = map_8250_out_reg(p, offset) << p->regshift;
+	*(volatile unsigned short *)(p->membase + offset) = (unsigned short)value;
+}
+
+static unsigned int mem16_serial_in(struct uart_port *p, int offset)
+{
+	offset = map_8250_in_reg(p, offset) << p->regshift;
+	return (unsigned int)*(volatile unsigned short *)(p->membase + offset);
+}
+
 #ifdef CONFIG_SERIAL_8250_AU1X00
 static unsigned int au_serial_in(struct uart_port *p, int offset)
 {
@@ -503,6 +524,11 @@ static void set_io_from_upio(struct uart_port *p)
 		p->serial_out = mem32_serial_out;
 		break;
 
+	case UPIO_MEM16:
+		p->serial_in = mem16_serial_in;
+		p->serial_out = mem16_serial_out;
+		break;
+
 #ifdef CONFIG_SERIAL_8250_AU1X00
 	case UPIO_AU:
 		p->serial_in = au_serial_in;
@@ -535,6 +561,7 @@ serial_out_sync(struct uart_8250_port *up, int offset, int value)
 	switch (p->iotype) {
 	case UPIO_MEM:
 	case UPIO_MEM32:
+	case UPIO_MEM16:
 #ifdef CONFIG_SERIAL_8250_AU1X00
 	case UPIO_AU:
 #endif
@@ -941,6 +968,7 @@ static void autoconfig_16550a(struct uart_8250_port *up)
 	unsigned char status1, status2;
 	unsigned int iersave;
 
+	printk("[%s]\n", __FUNCTION__);
 	up->port.type = PORT_16550A;
 	up->capabilities |= UART_CAP_FIFO;
 
@@ -1222,6 +1250,10 @@ static void autoconfig(struct uart_8250_port *up, unsigned int probeflags)
 	/* if access method is AU, it is a 16550 with a quirk */
 	if (up->port.type == PORT_16550A && up->port.iotype == UPIO_AU)
 		up->bugs |= UART_BUG_NOMSR;
+#endif
+
+#if defined(CONFIG_AR9100) || defined(CONFIG_MACH_AR7240) || defined(CONFIG_MACH_AR724x) || defined(CONFIG_MACH_AR934x)
+        up->bugs |= UART_BUG_NOMSR;
 #endif
 
 	serial_outp(up, UART_LCR, save_lcr);
@@ -1803,7 +1835,7 @@ static unsigned int serial8250_get_mctrl(struct uart_port *port)
 {
 	struct uart_8250_port *up = (struct uart_8250_port *)port;
 	unsigned int status;
-	unsigned int ret;
+	unsigned int ret = 0;
 
 	status = check_modem_status(up);
 
@@ -1836,7 +1868,6 @@ static void serial8250_set_mctrl(struct uart_port *port, unsigned int mctrl)
 		mcr |= UART_MCR_LOOP;
 
 	mcr = (mcr & up->mcr_mask) | up->mcr_force | up->mcr;
-
 	serial_out(up, UART_MCR, mcr);
 }
 
@@ -2165,6 +2196,13 @@ dont_test_tx_en:
 		(void) inb_p(icp);
 	}
 
+	{	
+		volatile unsigned int *my_fcr = (unsigned int *)0xA8610E08;
+		volatile unsigned int *my_ier = (unsigned int *)0xA8610E04;
+		*my_fcr = 0x1;
+		*my_ier = 0x5;
+		printk("[%s] FIFO eingeschaltet\n", __FUNCTION__);
+	}	
 	return 0;
 }
 
@@ -2173,6 +2211,7 @@ static void serial8250_shutdown(struct uart_port *port)
 	struct uart_8250_port *up = (struct uart_8250_port *)port;
 	unsigned long flags;
 
+	return 0;
 	/*
 	 * Disable interrupts from this port
 	 */
@@ -2239,6 +2278,7 @@ static void
 serial8250_set_termios(struct uart_port *port, struct ktermios *termios,
 		       struct ktermios *old)
 {
+#if !defined(CONFIG_MACH_FUSIV)
 	struct uart_8250_port *up = (struct uart_8250_port *)port;
 	unsigned char cval, fcr = 0;
 	unsigned long flags;
@@ -2286,10 +2326,13 @@ serial8250_set_termios(struct uart_port *port, struct ktermios *termios,
 		quot++;
 
 	if (up->capabilities & UART_CAP_FIFO && up->port.fifosize > 1) {
+		printk("[%s] %d port has FIFO cap = %#x \n", __FUNCTION__, __LINE__, up->capabilities);
 		if (baud < 2400)
 			fcr = UART_FCR_ENABLE_FIFO | UART_FCR_TRIGGER_1;
 		else
 			fcr = uart_config[up->port.type].fcr;
+	} else {
+		printk("[%s] %d port has NO FIFO, cap = %#x \n", __FUNCTION__, __LINE__, up->capabilities);
 	}
 
 	/*
@@ -2395,23 +2438,34 @@ serial8250_set_termios(struct uart_port *port, struct ktermios *termios,
 	 * LCR DLAB must be set to enable 64-byte FIFO mode. If the FCR
 	 * is written without DLAB set, this mode will be disabled.
 	 */
-	if (up->port.type == PORT_16750)
+	if (up->port.type == PORT_16750){
+		printk ("[%s] %d: fcr[%#x]=%#x\n", __FUNCTION__, __LINE__,UART_FCR, fcr);
+#if !defined(MIPS_UR8_HACK)
 		serial_outp(up, UART_FCR, fcr);
+#endif
+	}
 
 	serial_outp(up, UART_LCR, cval);		/* reset DLAB */
 	up->lcr = cval;					/* Save LCR */
 	if (up->port.type != PORT_16750) {
 		if (fcr & UART_FCR_ENABLE_FIFO) {
 			/* emulated UARTs (Lucent Venus 167x) need two steps */
+			printk ("[%s] %d: fcr=%#x\n", __FUNCTION__, __LINE__, UART_FCR_ENABLE_FIFO);
+#if !defined(MIPS_UR8_HACK)
 			serial_outp(up, UART_FCR, UART_FCR_ENABLE_FIFO);
+#endif
 		}
+#if !defined(MIPS_UR8_HACK)
 		serial_outp(up, UART_FCR, fcr);		/* set fcr */
+#endif
+		printk ("[%s] %d: fcr=%#x\n", __FUNCTION__, __LINE__, fcr);
 	}
 	serial8250_set_mctrl(&up->port, up->port.mctrl);
 	spin_unlock_irqrestore(&up->port.lock, flags);
 	/* Don't rewrite B0 */
 	if (tty_termios_baud_rate(termios))
 		tty_termios_encode_baud_rate(termios, baud, baud);
+#endif
 }
 
 static void
@@ -2449,6 +2503,7 @@ static int serial8250_request_std_resource(struct uart_8250_port *up)
 	case UPIO_AU:
 	case UPIO_TSI:
 	case UPIO_MEM32:
+	case UPIO_MEM16:
 	case UPIO_MEM:
 	case UPIO_DWAPB:
 		if (!up->port.mapbase)
@@ -2486,6 +2541,7 @@ static void serial8250_release_std_resource(struct uart_8250_port *up)
 	case UPIO_AU:
 	case UPIO_TSI:
 	case UPIO_MEM32:
+	case UPIO_MEM16:
 	case UPIO_MEM:
 	case UPIO_DWAPB:
 		if (!up->port.mapbase)
@@ -2779,6 +2835,10 @@ serial8250_console_write(struct console *co, const char *s, unsigned int count)
 
 static int __init serial8250_console_setup(struct console *co, char *options)
 {
+#if defined(CONFIG_MACH_FUSIV) || defined(CONFIG_MACH_ADI_FUSIV) || defined(CONFIG_MIPS_FUSIV) /*setup in loader */
+        /* use whatever bootloader settting */
+        return 0;
+#else
 	struct uart_port *port;
 	int baud = 9600;
 	int bits = 8;
@@ -2800,6 +2860,7 @@ static int __init serial8250_console_setup(struct console *co, char *options)
 		uart_parse_options(options, &baud, &parity, &bits, &flow);
 
 	return uart_set_options(port, co, baud, parity, bits, flow);
+#endif
 }
 
 static int serial8250_console_early_setup(void)
@@ -3094,6 +3155,7 @@ int serial8250_register_port(struct uart_port *port)
 	if (port->uartclk == 0)
 		return -EINVAL;
 
+	printk("[%s]\n", __FUNCTION__);
 	mutex_lock(&serial_mutex);
 
 	uart = serial8250_find_match_or_unused(port);

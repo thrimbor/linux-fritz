@@ -1,0 +1,7 @@
+
+EXTRA_CFLAGS += -I$(PWD)/include
+VLANCLASSIFIER_OBJ := vlan_classifier.o policy_vlan.o
+
+obj-$(CONFIG_FUSIV_KERNEL_POLICY_VLAN) :=  vlan_classifier_lkm.o
+vlan_classifier_lkm-objs := $(VLANCLASSIFIER_OBJ)
+

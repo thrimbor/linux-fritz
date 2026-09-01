@@ -99,6 +99,8 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 
+#include <linux/reboot.h>
+
 #ifdef	CONFIG_ARM
 #include <mach/hardware.h>
 #include <mach/memory.h>
@@ -111,9 +113,19 @@
 #ifdef CONFIG_ARCH_DAVINCI
 #include "davinci.h"
 #endif
+#ifdef CONFIG_MIPS_UR8
+#include "ur8.h"
+#endif
 
 #define TA_WAIT_BCON(m) max_t(int, (m)->a_wait_bcon, OTG_TIME_A_WAIT_BCON)
 
+int musb_reboot(struct notifier_block *nb, unsigned long event, void *buf);
+static struct notifier_block musb_notifier = {
+	musb_reboot,   /* callback   */
+	NULL,         /* next block */
+	1             /* priority   */
+};
+static struct platform_device *musb_global_pdev = NULL;
 
 unsigned musb_debug;
 module_param_named(debug, musb_debug, uint, S_IRUGO | S_IWUSR);
@@ -552,13 +564,21 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u8 int_usb,
 				musb->port1_status);
 
 		/* go through A_WAIT_VFALL then start a new session */
+#ifdef CONFIG_MIPS_UR8
+        musb_set_vbus(musb, UR8_vbus_power_trigger_restart);
+#else        
 		if (!ignore)
 			musb_set_vbus(musb, 0);
+#endif// CONFIG_MIPS_UR8
 		handled = IRQ_HANDLED;
 	}
 
 	if (int_usb & MUSB_INTR_CONNECT) {
 		struct usb_hcd *hcd = musb_to_hcd(musb);
+
+#ifdef CONFIG_MIPS_UR8
+        musb_set_vbus(musb, UR8_vbus_power_on);
+#endif
 
 		handled = IRQ_HANDLED;
 		musb->is_active = 1;
@@ -688,6 +708,15 @@ b_host:
 		}
 
 		handled = IRQ_HANDLED;
+#ifdef CONFIG_MIPS_UR8
+		if (is_host_capable() && (devctl & MUSB_DEVCTL_HM) == 0) {
+			ERR("BABBLE->session restart\n");
+
+			musb_root_disconnect(musb);
+			musb_set_vbus(musb, UR8_vbus_power_trigger_restart);
+		}
+#endif
+
 	}
 	schedule_work(&musb->irq_work);
 
@@ -767,6 +796,9 @@ static irqreturn_t musb_stage2_irq(struct musb *musb, u8 int_usb,
 		case OTG_STATE_A_SUSPEND:
 			usb_hcd_resume_root_hub(musb_to_hcd(musb));
 			musb_root_disconnect(musb);
+#ifdef CONFIG_MIPS_UR8
+			musb_set_vbus(musb, UR8_vbus_power_trigger_cp);
+#endif// CONFIG_MIPS_UR8
 			if (musb->a_wait_bcon != 0 && is_otg_enabled(musb))
 				musb_platform_try_idle(musb, jiffies
 					+ msecs_to_jiffies(musb->a_wait_bcon));
@@ -1044,6 +1076,8 @@ static struct fifo_cfg __initdata mode_1_cfg[] = {
 { .hw_ep_num = 4, .style = FIFO_RXTX, .maxpacket = 256, },
 };
 
+
+#if 0
 /* mode 2 - fits in 4KB */
 static struct fifo_cfg __initdata mode_2_cfg[] = {
 { .hw_ep_num = 1, .style = FIFO_TX,   .maxpacket = 512, },
@@ -1053,6 +1087,19 @@ static struct fifo_cfg __initdata mode_2_cfg[] = {
 { .hw_ep_num = 3, .style = FIFO_RXTX, .maxpacket = 256, },
 { .hw_ep_num = 4, .style = FIFO_RXTX, .maxpacket = 256, },
 };
+#else
+/* 20110518 AVM/WK: config change: no shared EP */
+/* mode 2 - fits in 4KB */
+static struct fifo_cfg __initdata mode_2_cfg[] = {
+{ .hw_ep_num = 1, .style = FIFO_TX,   .maxpacket = 512, },
+{ .hw_ep_num = 1, .style = FIFO_RX,   .maxpacket = 512, },
+{ .hw_ep_num = 2, .style = FIFO_TX,   .maxpacket = 512, },
+{ .hw_ep_num = 2, .style = FIFO_RX,   .maxpacket = 512, },
+{ .hw_ep_num = 3, .style = FIFO_TX,   .maxpacket = 512, },
+{ .hw_ep_num = 3, .style = FIFO_RX,   .maxpacket = 512, },
+{ .hw_ep_num = 4, .style = FIFO_RX,   .maxpacket = 512, },
+};
+#endif
 
 /* mode 3 - fits in 4KB */
 static struct fifo_cfg __initdata mode_3_cfg[] = {
@@ -1450,8 +1497,7 @@ static int __init musb_core_init(u16 musb_type, struct musb *musb)
 #endif
 
 		if (hw_ep->max_packet_sz_tx) {
-			DBG(1,
-				"%s: hw_ep %d%s, %smax %d\n",
+			ERR("%s: hw_ep %d%s, %smax %d\n",
 				musb_driver_name, i,
 				hw_ep->is_shared_fifo ? "shared" : "tx",
 				hw_ep->tx_double_buffered
@@ -1459,8 +1505,7 @@ static int __init musb_core_init(u16 musb_type, struct musb *musb)
 				hw_ep->max_packet_sz_tx);
 		}
 		if (hw_ep->max_packet_sz_rx && !hw_ep->is_shared_fifo) {
-			DBG(1,
-				"%s: hw_ep %d%s, %smax %d\n",
+			ERR("%s: hw_ep %d%s, %smax %d\n",
 				musb_driver_name, i,
 				"rx",
 				hw_ep->rx_double_buffered
@@ -1468,7 +1513,7 @@ static int __init musb_core_init(u16 musb_type, struct musb *musb)
 				hw_ep->max_packet_sz_rx);
 		}
 		if (!(hw_ep->max_packet_sz_tx || hw_ep->max_packet_sz_rx))
-			DBG(1, "hw_ep %d not configured\n", i);
+			ERR("hw_ep %d not configured\n", i);
 	}
 
 	return 0;
@@ -1792,6 +1837,7 @@ allocate_instance(struct device *dev,
 	INIT_LIST_HEAD(&musb->out_bulk);
 
 	hcd->uses_new_polling = 1;
+	/* 20110722 AVM/WK Patch needed for Kernel 2.6.32-41 */
 	hcd->has_tt = 1;
 
 	musb->vbuserr_retry = VBUSERR_RETRY_COUNT;
@@ -2124,41 +2170,60 @@ static int __init musb_probe(struct platform_device *pdev)
 	int		irq = platform_get_irq(pdev, 0);
 	struct resource	*iomem;
 	void __iomem	*base;
+	int ret;
 
 	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!iomem || irq == 0)
 		return -ENODEV;
 
+#if defined (CONFIG_MIPS_UR8)
+	base = (void *)iomem->start;
+#else	
 	base = ioremap(iomem->start, iomem->end - iomem->start + 1);
 	if (!base) {
 		dev_err(dev, "ioremap failed\n");
 		return -ENOMEM;
 	}
+#endif
 
 #ifndef CONFIG_MUSB_PIO_ONLY
 	/* clobbered by use_dma=n */
 	orig_dma_mask = dev->dma_mask;
 #endif
-	return musb_init_controller(dev, irq, base);
+
+	ret = musb_init_controller(dev, irq, base);
+	if (ret >= 0) {
+		musb_global_pdev = pdev;
+		register_reboot_notifier(&musb_notifier);
+	}
+	
+	return ret;
 }
 
 static int __devexit musb_remove(struct platform_device *pdev)
 {
 	struct musb	*musb = dev_to_musb(&pdev->dev);
+#if !defined (CONFIG_MIPS_UR8)
 	void __iomem	*ctrl_base = musb->ctrl_base;
+#endif
 
 	/* this gets called on rmmod.
 	 *  - Host mode: host may still be active
 	 *  - Peripheral mode: peripheral is deactivated (or never-activated)
 	 *  - OTG mode: both roles are deactivated (or never-activated)
 	 */
+	musb_global_pdev = NULL;
+	unregister_reboot_notifier(&musb_notifier);
+	
 	musb_shutdown(pdev);
 #ifdef CONFIG_USB_MUSB_HDRC_HCD
 	if (musb->board_mode == MUSB_HOST)
 		usb_remove_hcd(musb_to_hcd(musb));
 #endif
 	musb_free(musb);
+#if !defined (CONFIG_MIPS_UR8)
 	iounmap(ctrl_base);
+#endif
 	device_init_wakeup(&pdev->dev, 0);
 #ifndef CONFIG_MUSB_PIO_ONLY
 	pdev->dev.dma_mask = orig_dma_mask;
@@ -2238,6 +2303,27 @@ static struct platform_driver musb_driver = {
 	.shutdown	= musb_shutdown,
 };
 
+/*--------------------------------------------------------------------------------*\
+\*--------------------------------------------------------------------------------*/
+int musb_reboot(struct notifier_block *nb __attribute__((unused)), unsigned long event, void *buf __attribute__((unused))) {
+
+    printk("[%s] resetting musb event=%x ...\n",__FUNCTION__, (unsigned int)event);
+	if ((event != SYS_RESTART) && (event != SYS_HALT) && (event != SYS_POWER_OFF)) {
+		return (NOTIFY_DONE);
+    }
+
+	/* Aufraeumen */
+    if(!musb_global_pdev) {
+        printk("[%s] musb is not initialized yet...\n", __FUNCTION__);
+		return (NOTIFY_DONE);
+    }
+
+	musb_shutdown(musb_global_pdev);
+
+    printk("[%s] done!n", __FUNCTION__);
+	return (NOTIFY_OK);
+}
+
 /*-------------------------------------------------------------------------*/
 
 static int __init musb_init(void)
@@ -2282,3 +2368,4 @@ static void __exit musb_cleanup(void)
 	platform_driver_unregister(&musb_driver);
 }
 module_exit(musb_cleanup);
+

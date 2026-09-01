@@ -29,8 +29,7 @@ extern void build_tlb_refill_handler(void);
 #define UNIQUE_ENTRYHI(idx) (CKSEG0 + ((idx) << (PAGE_SHIFT + 1)))
 
 /* Atomicity and interruptability */
-#ifdef CONFIG_MIPS_MT_SMTC
-
+#if defined(CONFIG_MIPS_MT_SMTC) || defined(CONFIG_MIPS_MT_SMP)
 #include <asm/smtc.h>
 #include <asm/mipsmtregs.h>
 
@@ -48,7 +47,7 @@ extern void build_tlb_refill_handler(void);
 #define ENTER_CRITICAL(flags) local_irq_save(flags)
 #define EXIT_CRITICAL(flags) local_irq_restore(flags)
 
-#endif /* CONFIG_MIPS_MT_SMTC */
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMTC) || defined(CONFIG_MIPS_MT_SMP) ---*/
 
 #if defined(CONFIG_CPU_LOONGSON2)
 /*
@@ -212,13 +211,13 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 		page &= (PAGE_MASK << 1);
 		ENTER_CRITICAL(flags);
 		oldpid = read_c0_entryhi();
-		write_c0_entryhi(page | newpid);
+		write_c0_entryhi(page | newpid); /*--- per tc ---*/
 		mtc0_tlbw_hazard();
 		tlb_probe();
 		tlb_probe_hazard();
 		idx = read_c0_index();
-		write_c0_entrylo0(0);
-		write_c0_entrylo1(0);
+		write_c0_entrylo0(0); 
+		write_c0_entrylo1(0); /*--- per vpe ---*/
 		if (idx < 0)
 			goto finish;
 		/* Make sure all entries differ. */

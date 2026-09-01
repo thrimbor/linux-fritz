@@ -1,0 +1,56 @@
+#####################################################################################
+#
+#   vim: noexpandtab
+#
+#####################################################################################
+
+#EXTRA_CFLAGS	+= -g -ggdb -O1
+EXTRA_CFLAGS	+= -Wall -Wextra -O2
+
+obj-$(CONFIG_AVM_POWER) += avm_power.o 
+
+ifeq ($(CONFIG_AVM_POWER),y)
+avm_power-objs	:=   avm_power_file.o \
+					 avm_power_loadcontrol.o \
+					 dectsync.o
+
+ifeq ($(CONFIG_MIPS_OHIO),y)
+avm_power-objs	+=   \
+					 wyatt_earp.o \
+					 we_ethernet.o \
+					 we_xilinx.o \
+					 we_usb.o \
+					 we_isdn.o \
+					 we_led.o \
+					 we_wlan.o
+endif
+ifeq ($(CONFIG_MIPS_AR7),y)
+avm_power-objs	+=   \
+					 wyatt_earp.o \
+					 we_ethernet.o \
+					 we_xilinx.o \
+					 we_usb.o \
+					 we_isdn.o \
+					 we_led.o \
+					 we_wlan.o
+endif
+ifeq ($(CONFIG_MIPS_UR8),y)
+avm_power-objs	+=   \
+					 wyatt_earp.o \
+					 we_ethernet.o \
+					 we_xilinx.o \
+					 we_usb.o \
+					 we_isdn.o \
+					 we_led.o \
+					 we_wlan.o 
+endif
+ifeq ($(CONFIG_AR10),y)
+avm_power-objs	+=   \
+					 temperature_policy.o
+endif
+ifeq ($(CONFIG_FUSIV_VX180),y)
+avm_power-objs	+=   \
+					 wyatt_earp_vx180.o \
+					 i2c.o
+endif
+endif

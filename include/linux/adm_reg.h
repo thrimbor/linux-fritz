@@ -1,0 +1,1 @@
+../../drivers/net/avm_cpmac/linux_adm_reg.h

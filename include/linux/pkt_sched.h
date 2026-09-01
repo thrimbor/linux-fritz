@@ -182,7 +182,36 @@ struct tc_sfq_xstats
  *
  *	The only reason for this is efficiency, it is possible
  *	to change these parameters in compile time.
+ *
+ *	If you need to play with these values, use esfq instead.
  */
+
+/* ESFQ section */
+
+enum
+{
+        /* traditional */
+	TCA_SFQ_HASH_CLASSIC,
+	TCA_SFQ_HASH_DST,
+	TCA_SFQ_HASH_SRC,
+	TCA_SFQ_HASH_FWMARK,
+	/* conntrack */
+	TCA_SFQ_HASH_CTORIGDST,
+	TCA_SFQ_HASH_CTORIGSRC,
+	TCA_SFQ_HASH_CTREPLDST,
+	TCA_SFQ_HASH_CTREPLSRC,
+	TCA_SFQ_HASH_CTNATCHG,
+};
+
+struct tc_esfq_qopt
+{
+	unsigned	quantum;	/* Bytes per round allocated to flow */
+	int		perturb_period;	/* Period of hash perturbation */
+	__u32		limit;		/* Maximal packets in queue */
+	unsigned	divisor;	/* Hash divisor  */
+	unsigned	flows;		/* Maximal number of flows  */
+	unsigned	hash_kind;	/* Hash function to use for flow identification */
+};
 
 /* RED section */
 
@@ -516,6 +545,34 @@ enum
 struct tc_drr_stats
 {
 	__u32	deficit;
+};
+
+/* LLQ section */
+
+enum {
+	TCA_LLQ_UNSPEC,
+	TCA_LLQ_OPTIONS,
+	__TCA_LLQ_MAX,
+};
+
+#define TCA_LLQ_MAX	(__TCA_LLQ_MAX - 1)
+
+struct tc_llq_copt {
+	__u8 priority;
+	__u8 weight;
+};
+
+struct tc_llq_cinfo {
+	__u8 priority;
+	__u8 weight;
+    long deficit;
+	long quantum;
+};
+
+struct tc_llq_qopt {
+	__s32			       maxq; /* biggest possible quantum in classes */
+	__s32			       minq; /* smallest possible quantum in classes */ 
+	__u32		           defaultclass;
 };
 
 #endif

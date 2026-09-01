@@ -75,6 +75,7 @@ obj-$(CONFIG_CRYPTO_SEED) += seed.o
 obj-$(CONFIG_CRYPTO_SALSA20) += salsa20_generic.o
 obj-$(CONFIG_CRYPTO_DEFLATE) += deflate.o
 obj-$(CONFIG_CRYPTO_ZLIB) += zlib.o
+obj-$(CONFIG_CRYPTO_UNLZMA) += unlzma.o
 obj-$(CONFIG_CRYPTO_MICHAEL_MIC) += michael_mic.o
 obj-$(CONFIG_CRYPTO_CRC32C) += crc32c.o
 obj-$(CONFIG_CRYPTO_AUTHENC) += authenc.o
@@ -86,7 +87,16 @@ obj-$(CONFIG_CRYPTO_TEST) += tcrypt.o
 obj-$(CONFIG_CRYPTO_GHASH) += ghash-generic.o
 
 #
+# OCF
+#
+obj-$(CONFIG_OCF_OCF) += ocf/
+
+#
 # generic algorithms and the async_tx api
 #
 obj-$(CONFIG_XOR_BLOCKS) += xor.o
 obj-$(CONFIG_ASYNC_CORE) += async_tx/
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/crypto/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

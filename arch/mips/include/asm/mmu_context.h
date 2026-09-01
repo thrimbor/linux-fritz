@@ -99,6 +99,16 @@ get_new_mmu_context(struct mm_struct *mm, unsigned long cpu)
 {
 	unsigned long asid = asid_cache(cpu);
 
+#ifdef CONFIG_IFX_VPE_EXT 
+       extern int stlb; //defined in arch/mips/kernel/mips-mt.c
+       /* If TLB is shared between AP & RP, leave out max ASID i.e.
+          ASID_MASK for RP. If it is not shared follow the old
+          processing
+        */
+       if (stlb && ((asid & ASID_MASK) == (ASID_MASK - 1)))    //shared TLB
+               asid++; //skip ASID_MASK ie. last entry
+#endif
+
 	if (! ((asid += ASID_INC) & ASID_MASK) ) {
 		if (cpu_has_vtag_icache)
 			flush_icache_all();

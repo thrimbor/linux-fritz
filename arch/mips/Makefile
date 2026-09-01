@@ -14,6 +14,17 @@
 
 KBUILD_DEFCONFIG := ip22_defconfig
 
+ifndef CONFIG_FUNCTION_TRACER
+cflags-y := \
+ 			-freorder-blocks-and-partition \
+            -ffunction-sections \
+            -falign-functions=32 \
+            -falign-loops=32 \
+            -falign-jumps=32
+endif
+
+cflags-y += -fstrict-volatile-bitfields
+
 #
 # Select the object file format to substitute into the linker script.
 #
@@ -48,7 +59,16 @@ ifneq ($(SUBARCH),$(ARCH))
   endif
 endif
 
-cflags-y := -ffunction-sections
+ifndef CONFIG_FUNCTION_TRACER
+ifndef CONFIG_MACH_AR7240
+### für GDB auskommentiert ###
+# cflags-y := -ffunction-sections
+endif
+ifndef CONFIG_PROFILING
+### für GDB auskommentiert ###
+# cflags-y := -ffunction-sections
+endif
+endif # CONFIG_FUNCTION_TRACER
 cflags-y += $(call cc-option, -mno-check-zero-division)
 
 ifdef CONFIG_32BIT
@@ -113,7 +133,13 @@ cflags-$(CONFIG_SB1XXX_CORELIS)	+= $(call cc-option,-mno-sched-prolog) \
 #
 # CPU-dependent compiler/assembler options for optimization.
 #
+
+# Compilation flags for Fusiv MIPS1 LX4189 architecture
+ifdef CONFIG_MACH_FUSIV_MIPS1
+cflags-$(CONFIG_CPU_R3000)	+= $(call cc-option,-march=lx4189,-mcpu=mips1)
+else
 cflags-$(CONFIG_CPU_R3000)	+= -march=r3000
+endif
 cflags-$(CONFIG_CPU_TX39XX)	+= -march=r3900
 cflags-$(CONFIG_CPU_R6000)	+= -march=r6000 -Wa,--trap
 cflags-$(CONFIG_CPU_R4300)	+= -march=r4300 -Wa,--trap
@@ -129,6 +155,12 @@ cflags-$(CONFIG_CPU_MIPS32_R1)	+= $(call cc-option,-march=mips32,-mips32 -U_MIPS
 			-Wa,-mips32 -Wa,--trap
 cflags-$(CONFIG_CPU_MIPS32_R2)	+= $(call cc-option,-march=mips32r2,-mips32r2 -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS32) \
 			-Wa,-mips32r2 -Wa,--trap
+cflags-$(CONFIG_CPU_MIPS_24K)	+= $(call cc-option,-march=24kc -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS32) \
+			-Wa,-march=24kc -Wa,--trap
+cflags-$(CONFIG_CPU_MIPS_34K)	+= $(call cc-option,-march=34kc -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS32) \
+			-Wa,-march=34kc -Wa,--trap
+cflags-$(CONFIG_CPU_MIPS_74K)	+= $(call cc-option,-march=74kc -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS32) \
+			-Wa,-march=74kc -Wa,--trap
 cflags-$(CONFIG_CPU_MIPS64_R1)	+= $(call cc-option,-march=mips64,-mips64 -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS64) \
 			-Wa,-mips64 -Wa,--trap
 cflags-$(CONFIG_CPU_MIPS64_R2)	+= $(call cc-option,-march=mips64r2,-mips64r2 -U_MIPS_ISA -D_MIPS_ISA=_MIPS_ISA_MIPS64) \
@@ -177,11 +209,39 @@ libs-y				+= arch/mips/fw/lib/
 #
 
 #
+# Fusiv MIPS32 core
+#
+core-$(CONFIG_MACH_FUSIV_MIPS32)	+= arch/mips/fusiv/fusiv_mips32/
+cflags-$(CONFIG_MACH_FUSIV_MIPS32)	+= -I$(srctree)/arch/mips/include/asm/mach-fusiv
+load-$(CONFIG_MACH_FUSIV_MIPS32)	+= 0xffffffff80010000
+ifdef CONFIG_MACH_FUSIV_MIPS32
+adiimage: vmlinux
+	$(Q)$(MAKE) $(build)=arch/mips/fusiv/fusiv_mips32/bootimg $@
+endif
+
+#
+# Fusiv MIPS1 LX4189 core
+#
+# core-$(CONFIG_MACH_FUSIV_MIPS1)		+= arch/mips/fusiv/fusiv_mips1_lexra/
+# cflags-$(CONFIG_MACH_FUSIV_MIPS1)	+= -I$(srctree)/arch/mips/include/asm/mach-fusiv
+# load-$(CONFIG_MACH_FUSIV_MIPS1)		+= 0xffffffff80010000
+# ifdef CONFIG_MACH_FUSIV_MIPS1
+# adiimage: vmlinux
+# 	$(Q)$(MAKE) $(build)=arch/mips/fusiv/fusiv_mips1_lexra/bootimg $@
+# endif
+
 # Texas Instruments AR7
 #
 core-$(CONFIG_AR7)		+= arch/mips/ar7/
 cflags-$(CONFIG_AR7)		+= -I$(srctree)/arch/mips/include/asm/mach-ar7
 load-$(CONFIG_AR7)		+= 0xffffffff94100000
+
+#
+# Texas Instruments UR8
+#
+core-$(CONFIG_MIPS_UR8)		+= arch/mips/ur8/
+cflags-$(CONFIG_MIPS_UR8)	+= -I$(srctree)/arch/mips/include/asm/mach-ur8
+load-$(CONFIG_MIPS_UR8)		+= 0xffffffff94100000
 
 #
 # Acer PICA 61, Mips Magnum 4000 and Olivetti M700.
@@ -332,6 +392,10 @@ core-$(CONFIG_MIPS_MALTA)	+= arch/mips/mti-malta/
 cflags-$(CONFIG_MIPS_MALTA)	+= -I$(srctree)/arch/mips/include/asm/mach-malta
 load-$(CONFIG_MIPS_MALTA)	+= 0xffffffff80100000
 all-$(CONFIG_MIPS_MALTA)	:= vmlinux.bin
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/arch/mips/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)
 
 #
 # MIPS SIM
@@ -624,7 +688,55 @@ else
 load-$(CONFIG_CPU_CAVIUM_OCTEON) 	+= 0xffffffff81100000
 endif
 
+# Atheros Ar7240 (Virian alte Version)
+#
+core-$(CONFIG_MACH_AR7240)	+= arch/mips/ar7240/
+cflags-$(CONFIG_MACH_AR7240)	+= -I$(srctree)/arch/mips/include/asm/mach-ar7240 
+load-$(CONFIG_MACH_AR7240)	+= 0xffffffff80002000
+#load-$(CONFIG_MACH_AR724x)	+= 0xffffffffa0002000
+#
+
+
+# Atheros Ar724x (Virian, Python)
+#
+core-$(CONFIG_MACH_AR724x)	+= arch/mips/atheros/
+cflags-$(CONFIG_MACH_AR724x)	+= -I$(srctree)/arch/mips/include/asm/mach-atheros
+# cflags-$(CONFIG_MACH_AR724x)	+= -I$(srctree)/arch/mips/include/asm/mach-ar7240
+load-$(CONFIG_MACH_AR724x)	+= 0xffffffff80002000
+#load-$(CONFIG_MACH_AR724x)	+= 0xffffffffa0002000
+#
+
+# Atheros Ar933x (Hornet)
+#
+core-$(CONFIG_MACH_AR933x)	+= arch/mips/atheros/
+load-$(CONFIG_MACH_AR933x)	+= 0xffffffff80002000
+cflags-$(CONFIG_MACH_AR933x)	+= -I$(srctree)/arch/mips/include/asm/mach-atheros
+# cflags-$(CONFIG_MACH_AR933x)	+= -I$(srctree)/arch/mips/include/asm/mach-ar7240
+#
+
+# Atheros Ar934x (Wasp)
+#
+core-$(CONFIG_MACH_AR934x)	+= arch/mips/atheros/
+cflags-$(CONFIG_MACH_AR934x)	+= -I$(srctree)/arch/mips/include/asm/mach-atheros
+# cflags-$(CONFIG_MACH_AR934x)	+= -I$(srctree)/arch/mips/include/asm/mach-ar7240
+load-$(CONFIG_MACH_AR934x)	+= 0xffffffff80002000
+#
+
+# QCA955x (Scorpion)
+#
+core-$(CONFIG_MACH_QCA955x)	+= arch/mips/atheros/
+cflags-$(CONFIG_MACH_QCA955x)	+= -I$(srctree)/arch/mips/include/asm/mach-atheros
+load-$(CONFIG_MACH_QCA955x)	+= 0xffffffff80002000
+#
+
+##Atheros Ar7100 ( Hydra )
+#
+core-$(CONFIG_MACH_AR7100)    += arch/mips/ar7100/
+load-$(CONFIG_MACH_AR7100)    += 0x80002000
+cflags-$(CONFIG_MACH_AR7100)  += -I$(srctree)/arch/mips/include/asm/mach-ar7100
+
 cflags-y			+= -I$(srctree)/arch/mips/include/asm/mach-generic
+
 drivers-$(CONFIG_PCI)		+= arch/mips/pci/
 
 #
@@ -710,6 +822,15 @@ vmlinux.ecoff: $(vmlinux-32)
 
 vmlinux.srec: $(vmlinux-32)
 	+@$(call makeboot,$@)
+
+uImage.lzma: $(vmlinux-32)
+	+@$(call makeboot,LOADADDR=$(load-y) $@)
+
+uImage.bzip2: $(vmlinux-32)
+	+@$(call makeboot,LOADADDR=$(load-y) $@)
+
+uImage.gzip: $(vmlinux-32)
+	+@$(call makeboot,LOADADDR=$(load-y) $@)
 
 CLEAN_FILES += vmlinux.ecoff \
 	       vmlinux.srec

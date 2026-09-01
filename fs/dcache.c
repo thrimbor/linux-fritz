@@ -1550,7 +1550,7 @@ static void _d_rehash(struct dentry * entry)
  * Adds a dentry to the hash according to its name.
  */
  
-void d_rehash(struct dentry * entry)
+inline void d_rehash(struct dentry * entry)
 {
 	spin_lock(&dcache_lock);
 	spin_lock(&entry->d_lock);

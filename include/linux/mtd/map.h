@@ -203,9 +203,11 @@ struct map_info {
 
 #ifdef CONFIG_MTD_COMPLEX_MAPPINGS
 	map_word (*read)(struct map_info *, unsigned long);
+    map_word (*cmd_read)(struct map_info *, unsigned long);
 	void (*copy_from)(struct map_info *, void *, unsigned long, ssize_t);
 
 	void (*write)(struct map_info *, const map_word, unsigned long);
+    void (*cmd_write)(struct map_info *, const map_word, unsigned long);
 	void (*copy_to)(struct map_info *, unsigned long, const void *, ssize_t);
 
 	/* We can perhaps put in 'point' and 'unpoint' methods, if we really
@@ -323,6 +325,8 @@ static inline map_word map_word_load(struct map_info *map, const void *ptr)
 #endif
 	else if (map_bankwidth_is_large(map))
 		memcpy(r.x, ptr, map->bankwidth);
+    else
+        r.x[0] = 0;
 
 	return r;
 }
@@ -386,6 +390,8 @@ static inline map_word inline_map_read(struct map_info *map, unsigned long ofs)
 #endif
 	else if (map_bankwidth_is_large(map))
 		memcpy_fromio(r.x, map->virt+ofs, map->bankwidth);
+    else
+        r.x[0] = 0;
 
 	return r;
 }
@@ -422,8 +428,10 @@ static inline void inline_map_copy_to(struct map_info *map, unsigned long to, co
 
 #ifdef CONFIG_MTD_COMPLEX_MAPPINGS
 #define map_read(map, ofs) (map)->read(map, ofs)
+#define map_cmd_read(map, ofs)					((map)->cmd_read ? (map)->cmd_read(map, ofs) : (map)->read(map, ofs))
 #define map_copy_from(map, to, from, len) (map)->copy_from(map, to, from, len)
 #define map_write(map, datum, ofs) (map)->write(map, datum, ofs)
+#define map_cmd_write(map, datum, ofs)			((map)->cmd_write ? (map)->cmd_write(map, datum, ofs) : (map)->write(map, datum, ofs))
 #define map_copy_to(map, to, from, len) (map)->copy_to(map, to, from, len)
 
 extern void simple_map_init(struct map_info *);

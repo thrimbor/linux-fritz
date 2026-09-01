@@ -42,6 +42,10 @@ __acquires(ohci->lock)
 {
 	// ASSERT (urb->hcpriv != 0);
 
+#ifdef CONFIG_FUSIV_USB_LED
+         if ( urb->dev && urb->dev->portnum )
+              fusiv_usb_led_set(urb->dev->portnum-1,FUSIV_USB_LED_XTR_BIT);
+#endif
 	urb_free_priv (ohci, urb->hcpriv);
 	if (likely(status == -EINPROGRESS))
 		status = 0;

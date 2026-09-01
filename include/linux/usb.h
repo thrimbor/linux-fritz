@@ -480,6 +480,11 @@ struct usb_device {
 	unsigned authorized:1;
  	unsigned authenticated:1;
 	unsigned wusb:1;
+
+#if 1 /* == 20101129 AVM/WK  Extension: Reserve a device for usermode access == */
+	unsigned noprobe:1;
+#endif
+
 	int string_langid;
 
 	/* static strings from the device */

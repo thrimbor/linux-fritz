@@ -64,6 +64,11 @@ struct musb_ep;
 #include "musb_host.h"
 
 
+#ifdef CONFIG_MIPS_UR8
+#include <asm/mach-ur8/hdrc_cnf.h>
+#else
+#include <asm/arch/hdrc_cnf.h>
+#endif
 
 #ifdef CONFIG_USB_MUSB_OTG
 
@@ -346,6 +351,11 @@ struct musb {
 	struct list_head	out_bulk;	/* of musb_qh */
 
 	struct timer_list	otg_timer;
+
+#ifdef CONFIG_AVM_POWER
+	struct list_head        urb_giveback_list;
+#endif /*--- #ifdef CONFIG_AVM_POWER ---*/
+
 #endif
 
 	/* called with IRQs blocked; ON/nonzero implies starting a session,

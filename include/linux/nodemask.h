@@ -429,20 +429,20 @@ static inline void node_set_offline(int nid)
 }
 #else
 
-static inline int node_state(int node, enum node_states state)
+static inline int node_state(int node, enum node_states state __attribute__ ((unused)))
 {
 	return node == 0;
 }
 
-static inline void node_set_state(int node, enum node_states state)
+static inline void node_set_state(int node __attribute__ ((unused)), enum node_states state __attribute__ ((unused)))
 {
 }
 
-static inline void node_clear_state(int node, enum node_states state)
+static inline void node_clear_state(int node __attribute__ ((unused)), enum node_states state __attribute__ ((unused)))
 {
 }
 
-static inline int num_node_state(enum node_states state)
+static inline int num_node_state(enum node_states state __attribute__ ((unused)))
 {
 	return 1;
 }

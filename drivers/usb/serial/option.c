@@ -70,6 +70,28 @@ static int  option_suspend(struct usb_serial *serial, pm_message_t message);
 static int  option_resume(struct usb_serial *serial);
 #endif
 
+/*== AVM/WK 20101109 Patch from AVM Kernel 2.6.19 ==
+**== Use params instead of default tables ==*/
+#define OPTION_USE_ID_PARAMS
+#ifdef OPTION_USE_ID_PARAMS
+static __u16 vendor  = 0;
+static __u16 product = 0;
+
+module_param(vendor, ushort, 0);
+MODULE_PARM_DESC(vendor, "User specified USB idVendor");
+
+module_param(product, ushort, 0);
+MODULE_PARM_DESC(product, "User specified USB idProduct");
+
+static struct usb_device_id option_param_ids[] = {
+	{ },
+	{ } /* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE(usb, option_param_ids);
+
+#else
+
 /* Vendor and product IDs */
 #define OPTION_VENDOR_ID			0x0AF0
 #define OPTION_PRODUCT_COLT			0x5000
@@ -933,6 +955,7 @@ static struct usb_device_id option_ids[] = {
 	{ } /* Terminating entry */
 };
 MODULE_DEVICE_TABLE(usb, option_ids);
+#endif
 
 static struct usb_driver option_driver = {
 	.name       = "option",
@@ -943,7 +966,13 @@ static struct usb_driver option_driver = {
 	.resume     = usb_serial_resume,
 	.supports_autosuspend =	1,
 #endif
+/*== AVM/WK 20101109 Patch from AVM Kernel 2.6.19 ==
+**== Use params instead of default tables ==*/
+#ifdef OPTION_USE_ID_PARAMS	
+	.id_table   = option_param_ids,
+#else	
 	.id_table   = option_ids,
+#endif
 	.no_dynamic_id = 	1,
 };
 
@@ -958,7 +987,12 @@ static struct usb_serial_driver option_1port_device = {
 	},
 	.description       = "GSM modem (1-port)",
 	.usb_driver        = &option_driver,
-	.id_table          = option_ids,
+/*== AVM/WK 20101109 Use params instead of default tables ==*/
+#ifdef OPTION_USE_ID_PARAMS	
+	.id_table   = option_param_ids,
+#else	
+	.id_table   = option_ids,
+#endif	
 	.num_ports         = 1,
 	.probe             = option_probe,
 	.open              = option_open,
@@ -1021,6 +1055,18 @@ struct option_port_private {
 static int __init option_init(void)
 {
 	int retval;
+	/*== AVM/WK 20101109 Use params instead of default tables ==*/
+#ifdef OPTION_USE_ID_PARAMS
+	if (vendor == 0) {
+		printk (KERN_ERR "option: vendor and product params missing!\n");
+		return -ENODEV;
+	}
+	printk (KERN_INFO "option: use params vendor=%x product=%x\n", vendor, product);
+		
+	option_param_ids[0].idVendor = vendor;
+	option_param_ids[0].idProduct = product;
+	option_param_ids[0].match_flags = USB_DEVICE_ID_MATCH_VENDOR | USB_DEVICE_ID_MATCH_PRODUCT;
+#endif
 	retval = usb_serial_register(&option_1port_device);
 	if (retval)
 		goto failed_1port_device_register;
@@ -1048,6 +1094,47 @@ static void __exit option_exit(void)
 module_init(option_init);
 module_exit(option_exit);
 
+#ifdef OPTION_USE_ID_PARAMS
+/* AVM/WK 20101109 Patch taken from AVM Kernel 2.6.19 */
+static int option_probe(struct usb_serial *serial,
+			const struct usb_device_id *id)
+{
+	struct option_intf_private *data;
+	struct usb_host_interface *iface_desc = serial->interface->cur_altsetting;
+	struct usb_endpoint_descriptor *endpoint;
+	int num_bulk_out=0;
+	int num_bulk_in=0;
+	int i;
+	
+	if (iface_desc->desc.bInterfaceClass == 8) {
+		return -ENODEV;
+	}
+
+	for (i = 0; i < iface_desc->desc.bNumEndpoints; i++) {
+		endpoint = &iface_desc->endpoint[i].desc;
+		if ((endpoint->bmAttributes & 0x03) == 0x02) {
+			if (endpoint->bEndpointAddress & 0x80) {
+				++num_bulk_in;
+			} else {
+				++num_bulk_out;
+			}
+		}
+	}
+	
+	/* we need both directions */
+	if (num_bulk_out == 0 || num_bulk_in == 0) {
+		dbg("Invalid interface, discarding");
+		return -ENODEV;
+	}
+
+
+	data = serial->private = kzalloc(sizeof(struct option_intf_private), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+	spin_lock_init(&data->susp_lock);
+	return 0;
+}
+#else
 static int option_probe(struct usb_serial *serial,
 			const struct usb_device_id *id)
 {
@@ -1078,6 +1165,7 @@ static int option_probe(struct usb_serial *serial,
 	spin_lock_init(&data->susp_lock);
 	return 0;
 }
+#endif
 
 static void option_set_termios(struct tty_struct *tty,
 		struct usb_serial_port *port, struct ktermios *old_termios)

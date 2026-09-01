@@ -165,12 +165,21 @@ work_notifysig:				# deal with pending signals and
 	j	resume_userspace
 
 FEXPORT(syscall_exit_work_partial)
+	local_irq_disable		# make sure need_resched doesn't
+					# change between and return
+	LONG_L	a2, TI_FLAGS($28)	# current->work
+	li	t0, _TIF_ALLWORK_MASK
+	and	t0, a2
+	beqz	t0, restore_partial
 	SAVE_STATIC
 syscall_exit_work:
-	li	t0, _TIF_SYSCALL_TRACE | _TIF_SYSCALL_AUDIT
+	LONG_L	t0, PT_STATUS(sp)		# returning to kernel mode?
+	andi	t0, t0, KU_USER
+	beqz	t0, resume_kernel
+	li	t0, _TIF_WORK_SYSCALL_EXIT
 	and	t0, a2			# a2 is preloaded with TI_FLAGS
 	beqz	t0, work_pending	# trace bit set?
-	local_irq_enable		# could let do_syscall_trace()
+	local_irq_enable		# could let syscall_trace_leave()
 					# call schedule() instead
 	move	a0, sp
 	li	a1, 1

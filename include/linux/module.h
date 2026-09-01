@@ -192,16 +192,24 @@ void *__symbol_get_gpl(const char *symbol);
 #define __CRC_SYMBOL(sym, sec)
 #endif
 
+#ifdef MODULE
+#define __EXPORT_SUFFIX(sym)
+#else
+#define __EXPORT_SUFFIX(sym) "." #sym
+#endif
+
 /* For every exported symbol, place a struct in the __ksymtab section */
 #define __EXPORT_SYMBOL(sym, sec)				\
 	extern typeof(sym) sym;					\
 	__CRC_SYMBOL(sym, sec)					\
 	static const char __kstrtab_##sym[]			\
-	__attribute__((section("__ksymtab_strings"), aligned(1))) \
+	__attribute__((section("__ksymtab_strings"		\
+	  __EXPORT_SUFFIX(sym)), aligned(1)))			\
 	= MODULE_SYMBOL_PREFIX #sym;                    	\
 	static const struct kernel_symbol __ksymtab_##sym	\
 	__used							\
-	__attribute__((section("__ksymtab" sec), unused))	\
+	__attribute__((section("__ksymtab" sec			\
+	  __EXPORT_SUFFIX(sym)), unused))			\
 	= { (unsigned long)&sym, __kstrtab_##sym }
 
 #define EXPORT_SYMBOL(sym)					\
@@ -452,7 +460,7 @@ void __symbol_put(const char *symbol);
 #define symbol_put(x) __symbol_put(MODULE_SYMBOL_PREFIX #x)
 void symbol_put_addr(void *addr);
 
-static inline local_t *__module_ref_addr(struct module *mod, int cpu)
+static inline local_t *__module_ref_addr(struct module *mod, int cpu __attribute__ ((unused)))
 {
 #ifdef CONFIG_SMP
 	return (local_t *) (mod->refptr + per_cpu_offset(cpu));
@@ -715,13 +723,13 @@ void module_bug_cleanup(struct module *);
 
 #else	/* !CONFIG_GENERIC_BUG */
 
-static inline int  module_bug_finalize(const Elf_Ehdr *hdr,
-					const Elf_Shdr *sechdrs,
-					struct module *mod)
+static inline int  module_bug_finalize(const Elf_Ehdr *hdr __attribute__ ((unused)),
+					const Elf_Shdr *sechdrs __attribute__ ((unused)),
+					struct module *mod __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline void module_bug_cleanup(struct module *mod) {}
+static inline void module_bug_cleanup(struct module *mod __attribute__ ((unused))) {}
 #endif	/* CONFIG_GENERIC_BUG */
 
 #endif /* _LINUX_MODULE_H */

@@ -5099,3 +5099,33 @@ __offline_isolated_pages(unsigned long start_pfn, unsigned long end_pfn)
 	spin_unlock_irqrestore(&zone->lock, flags);
 }
 #endif
+
+#ifdef CONFIG_FUSIV_USB_OPTIMIZATION
+/*
+ * Function checks read/write page cache and if there are more pages then try
+ * to free unused pages 
+ */
+void check_and_reduce_unused_page_cache(struct  kiocb *iocb)
+{
+        loff_t pos =iocb->ki_pos; 
+        struct inode *inode = iocb->ki_filp->f_dentry->d_inode; 
+        struct file *file = iocb->ki_filp;
+        struct  address_space *mapping=file->f_mapping;
+
+        if ( mapping->nrpages > FUSIV_MAX_CACHE_MEM_THRHLD )
+        {
+             pos=pos >> PAGE_CACHE_SHIFT; // convert into page offset
+             fusiv_invalidate_mapping_pages(mapping,pos-1);
+        }
+        if ( inode->i_sb && inode->i_sb->s_bdev ) {
+            mapping=inode->i_sb->s_bdev->bd_inode->i_mapping;
+            if (mapping ) 
+            {
+              if ( mapping->nrpages > FUSIV_MAX_CACHE_MEM_THRHLD ){ 
+                 fusiv_invalidate_mapping_pages(mapping,-1);
+              }
+            }
+       }
+}
+EXPORT_SYMBOL(check_and_reduce_unused_page_cache);
+#endif

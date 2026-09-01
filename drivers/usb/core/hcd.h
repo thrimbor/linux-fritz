@@ -23,6 +23,10 @@
 
 #include <linux/rwsem.h>
 
+#ifdef CONFIG_AVM_NET_TRACE
+#include "avmusbtrace.h"
+#endif
+
 #define MAX_TOPO_LEVEL		6
 
 /* This file contains declarations of usbcore internals that are mostly
@@ -133,6 +137,10 @@ struct usb_hcd {
 	 * input size of periodic table to an interrupt scheduler.
 	 * (ohci 32, uhci 1024, ehci 256/512/1024).
 	 */
+
+#ifdef AVM_USB_TRACE
+	struct avm_net_trace_device *avm_ntd;
+#endif
 
 	/* The HC driver's private data is stored at the end of
 	 * this structure.
@@ -552,6 +560,24 @@ extern struct rw_semaphore ehci_cf_port_reset_rwsem;
 #define USB_OHCI_LOADED		1
 #define USB_EHCI_LOADED		2
 extern unsigned long usb_hcds_loaded;
+#ifdef CONFIG_FUSIV_USB_LED
+ #define FUSIV_USB_MAX_LEDS          2
+ #define FUSIV_USB_LED_HALF_PERIOD   50  //500 ms 
+ typedef struct
+ {
+   unsigned int gpio_no; 
+   unsigned int port_status; // could be one of following
+ #define FUSIV_USB_LED_ATTCHD_BIT    ( 1 << 0 )
+ #define FUSIV_USB_LED_XTR_BIT       ( 1 << 1 )
+   unsigned int count ;  // timer counter for blinking slow or fast
+   unsigned int led_status; // either ON or Off
+   unsigned int blink_status; // whether blinking or not
+ }fusiv_led_t;
+extern fusiv_led_t fusiv_leds[FUSIV_USB_MAX_LEDS];
+void fusiv_usb_led_set( unsigned int portnum,unsigned int bit);
+void fusiv_usb_led_clear( unsigned int portnum,unsigned int bit);
+void fusiv_usb_led_init( void );
+#endif
 
 #endif /* __KERNEL__ */
 

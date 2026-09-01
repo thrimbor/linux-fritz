@@ -243,7 +243,7 @@ static inline void dup_mm_exe_file(struct mm_struct *oldmm,
 
 #if !defined(CONFIG_PROC_KCORE)
 static inline void
-kclist_add(struct kcore_list *new, void *addr, size_t size, int type)
+kclist_add(struct kcore_list *new __attribute__ ((unused)), void *addr __attribute__ ((unused)), size_t size __attribute__ ((unused)), int type __attribute__ ((unused)))
 {
 }
 #else

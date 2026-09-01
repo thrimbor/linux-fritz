@@ -21,6 +21,11 @@
  */
 #define MESSAGE_AGE_INCR	((HZ < 256) ? 1 : (HZ/256))
 
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+#if (defined(CONFIG_MCAST_AP_SUPPORT) && CONFIG_MCAST_AP_SUPPORT)
+void (*ap2apDelAllMulticastEntries_ptr) (void) = NULL;
+#endif
+#endif
 static const char *const br_port_state_names[] = {
 	[BR_STATE_DISABLED] = "disabled",
 	[BR_STATE_LISTENING] = "listening",
@@ -107,6 +112,11 @@ static void br_root_selection(struct net_bridge *br)
 	struct net_bridge_port *p;
 	u16 root_port = 0;
 
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+#if (defined(CONFIG_MCAST_AP_SUPPORT) && CONFIG_MCAST_AP_SUPPORT)
+	(*ap2apDelAllMulticastEntries_ptr)();
+#endif
+#endif
 	list_for_each_entry(p, &br->port_list, list) {
 		if (br_should_become_root_port(p, root_port))
 			root_port = p->port_no;
@@ -474,3 +484,8 @@ void br_received_tcn_bpdu(struct net_bridge_port *p)
 		br_topology_change_acknowledge(p);
 	}
 }
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+#if (defined(CONFIG_MCAST_AP_SUPPORT) && CONFIG_MCAST_AP_SUPPORT)
+EXPORT_SYMBOL(ap2apDelAllMulticastEntries_ptr);
+#endif
+#endif

@@ -36,6 +36,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/workqueue.h>
 
+#if defined(CONFIG_AVM_SIMPLE_PROFILING) 
+#include <linux/avm_profile.h>
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/ 
 /*
  * The per-CPU workqueue (if single thread, we always use the first
  * possible cpu).
@@ -288,7 +291,13 @@ static void run_workqueue(struct cpu_workqueue_struct *cwq)
 		work_clear_pending(work);
 		lock_map_acquire(&cwq->wq->lockdep_map);
 		lock_map_acquire(&lockdep_map);
+#if defined(CONFIG_AVM_SIMPLE_PROFILING)
+        avm_simple_profiling_log(avm_profile_data_type_workitem_begin, (unsigned int)f, (unsigned int)work);
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
 		f(work);
+#if defined(CONFIG_AVM_SIMPLE_PROFILING)
+        avm_simple_profiling_log(avm_profile_data_type_workitem_end, (unsigned int)f, (unsigned int)work);
+#endif /*--- #if defined(CONFIG_AVM_SIMPLE_PROFILING) ---*/
 		lock_map_release(&lockdep_map);
 		lock_map_release(&cwq->wq->lockdep_map);
 

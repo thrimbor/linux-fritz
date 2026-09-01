@@ -37,7 +37,14 @@
 #include <linux/debugfs.h>
 
 #include "../core/hcd.h"
-
+#ifdef CONFIG_MACH_ATHEROS
+#if defined(CONFIG_MACH_AR934x) || \
+    defined(CONFIG_MACH_QCA955x)
+#include "../gadget/ath_defs.h"
+#else
+#include "../gadget/ar9130_defs.h"
+#endif
+#endif
 #include <asm/byteorder.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -64,7 +71,6 @@
 #define DRIVER_DESC "USB 2.0 'Enhanced' Host Controller (EHCI) Driver"
 
 static const char	hcd_name [] = "ehci_hcd";
-
 
 #undef VERBOSE_DEBUG
 #undef EHCI_URB_TRACE
@@ -101,6 +107,15 @@ static int ignore_oc = 0;
 module_param (ignore_oc, bool, S_IRUGO);
 MODULE_PARM_DESC (ignore_oc, "ignore bogus hardware overcurrent indications");
 
+#ifdef CONFIG_MACH_AR934x
+#define EHCI_DBE_COUNT
+#endif
+#ifdef EHCI_DBE_COUNT
+static unsigned int DBE_count = 0;
+module_param(DBE_count, uint, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC (DBE_count, "AVM Data Buffer Error count");
+#endif
+
 #define	INTR_MASK (STS_IAA | STS_FATAL | STS_PCD | STS_ERR | STS_INT)
 
 /* for ASPM quirk of ISOC on AMD SB800 */
@@ -111,7 +126,56 @@ static struct pci_dev *amd_nb_dev;
 #include "ehci.h"
 #include "ehci-dbg.c"
 
+/* ADI's VOX160 USB host controller & Ikanos's iIKF68XX USB host controller
+ * do not interface with PCI bus
+ */
+#ifdef CONFIG_MACH_FUSIV
+#undef  CONFIG_PCI
+#endif
+
 /*-------------------------------------------------------------------------*/
+
+#if defined(CONFIG_MACH_QCA955x) || \
+    defined(CONFIG_MACH_AR934x)
+/*
+ * Scorpion and Wasp specific.
+ * By Default, the TX-TX IPG violation is seen and IPG happens to be only of 79 Bit Times 
+ * instead of 88 bit times required by USB Spec.
+ * Enable HW fix for TX-TX IPG violation.
+ * Program the IPG value as 0x58 (88 cycles).
+ */
+static inline void ath_usb_set_ipg_val(u32 ath_usb_phy_ctrl_reg)
+{
+#define TX_TX_IPG   0x58
+	ath_reg_wr(ath_usb_phy_ctrl_reg, ((ath_reg_rd(ath_usb_phy_ctrl_reg) & ~(0xff)) | TX_TX_IPG));
+#undef TX_TX_IPG
+}
+
+/*
+ * Scorpion and Wasp specific.
+ * Patch for USB Suspend/Resume. 
+ * USB Would enter a Bad state during Resume Signaling from Host and eventually fail for data transfer 
+ * or enter continuous interrupt mode. Though attempted a clean fix in Scorpion, did not work out 
+ * and hence SW WAR is required for Scorpion.
+ * Scorpion - Set the host_res_fix_en, bit[29] in PHY_CTRL6 Register.
+ * Scorpion and Wasp - Immediately after the Resume sequence Completion, for HS Mode, use the PHY_CTRL 
+ * jk_override option to force SE0 state on the DPDM Lines to do the Resume completion.
+ */
+static inline void ath_usb_phy_ctrl_sqnce_ovrde(struct usb_hcd *hcd, u32 ath_usb_phy_ctrl_reg) {
+	struct ehci_hcd		*ehci = hcd_to_ehci (hcd);
+
+	if (is_qca955x()) {
+		ath_reg_wr(ath_usb_phy_ctrl_reg, (ath_reg_rd(ath_usb_phy_ctrl_reg) & (~(1<<29))));
+	}
+
+	if ((ath_reg_rd(&ehci->regs->status) & STS_PCD) && (hcd->state != HC_STATE_SUSPENDED) &&
+			((1<<USB_PORT_FEAT_HIGHSPEED) == ehci_port_speed(ehci, ehci_readl(ehci, &ehci->regs->port_status[0])))) {
+		ath_reg_wr(ath_usb_phy_ctrl_reg, (ath_reg_rd(ath_usb_phy_ctrl_reg) |
+					((1<<17) | (1<<22) | (1<<23))) & (~((0x3<<18) | (0x1<<20))));
+		ath_reg_wr(ath_usb_phy_ctrl_reg, (ath_reg_rd(ath_usb_phy_ctrl_reg)) & (~(1<<17)));
+	}
+}
+#endif
 
 static void
 timer_action(struct ehci_hcd *ehci, enum ehci_timer_action action)
@@ -252,6 +316,67 @@ static int ehci_reset (struct ehci_hcd *ehci)
 	command |= CMD_RESET;
 	dbg_cmd (ehci, "reset", command);
 	ehci_writel(ehci, command, &ehci->regs->command);
+#if defined(CONFIG_MACH_ATHEROS) && !defined(CONFIG_MACH_AR7100)
+#if defined(CONFIG_MACH_AR7240) || defined(CONFIG_MACH_HORNET)
+#define ath_usb_reg_wr		ar9130_reg_wr
+#define ath_usb_reg_rd		ar9130_reg_rd
+#define ATH_USB_USB_MODE	AR9130_USB_MODE
+#define ATH_USB_MODE_CM_HOST	AR9130_USBMODE_CM_HOST
+#endif
+	udelay(1000);
+#ifdef CONFIG_MACH_AR934x
+	ath_usb_reg_wr(ATH_USB_USB_MODE,
+			(ath_usb_reg_rd(ATH_USB_USB_MODE) | ATH_USB_SET_HOST_MODE));
+
+#elif defined(CONFIG_MACH_QCA955x)
+
+#ifdef CONFIG_USB_EHCI_ATH_HOST1
+
+	ath_usb_reg_wr(ATH_USB_USB_MODE,
+			(ath_usb_reg_rd(ATH_USB_USB_MODE) | ATH_USB_SET_HOST_MODE));
+#endif/* CONFIG_USB_EHCI_ATH_HOST1*/
+
+#ifdef CONFIG_USB_EHCI_ATH_HOST2
+
+	ath_usb_reg_wr(ATH_USB_USB2_MODE,
+			(ath_usb_reg_rd(ATH_USB_USB2_MODE) | ATH_USB_SET_HOST_MODE));
+#endif/* CONFIG_USB_EHCI_ATH_HOST2 */
+
+#else
+	ath_usb_reg_wr(ATH_USB_USB_MODE,
+			(ath_usb_reg_rd(ATH_USB_USB_MODE) | ATH_USB_MODE_CM_HOST));
+#endif/* CONFIG_MACH_AR934x */
+
+	printk("%s Intialize USB CONTROLLER in host mode: %x\n",
+			__func__, ath_usb_reg_rd(ATH_USB_USB_MODE));
+
+	udelay(1000);
+	writel((readl(&ehci->regs->port_status[0]) | (1 << 28) ), &ehci->regs->port_status[0]);
+	printk("%s Port Status %x \n", __func__, readl(&ehci->regs->port_status[0]));
+#endif
+
+#ifdef CONFIG_MACH_AR934x
+	/*
+	 * Enable HW fix for TX-TX IPG violation seen in Wasp 1.2 and earlier.
+	 */
+	if (is_ar934x_13_or_later()) {
+		ath_usb_set_ipg_val(ATH_USB_PHY_CTRL5);
+	}
+#endif
+
+#ifdef CONFIG_MACH_QCA955x
+	/*
+	 * Enable HW fix for TX-TX IPG violation for Scorpion.
+	 */
+#ifdef CONFIG_USB_EHCI_ATH_HOST1
+	ath_usb_set_ipg_val(ATH_USB_PHY_CTRL5);
+#endif
+
+#ifdef CONFIG_USB_EHCI_ATH_HOST2
+	ath_usb_set_ipg_val(ATH_USB2_PHY_CTRL5);
+#endif
+#endif
+
 	ehci_to_hcd(ehci)->state = HC_STATE_HALT;
 	ehci->next_statechange = jiffies;
 	retval = handshake (ehci, &ehci->regs->command,
@@ -412,6 +537,7 @@ static void ehci_silence_controller(struct ehci_hcd *ehci)
  * This forcibly disables dma and IRQs, helping kexec and other cases
  * where the next system software may expect clean state.
  */
+static void ehci_shutdown(struct usb_hcd *hcd) __maybe_unused__;
 static void ehci_shutdown(struct usb_hcd *hcd)
 {
 	struct ehci_hcd	*ehci = hcd_to_ehci(hcd);
@@ -424,6 +550,7 @@ static void ehci_shutdown(struct usb_hcd *hcd)
 	spin_unlock_irq(&ehci->lock);
 }
 
+static void ehci_port_power (struct ehci_hcd *ehci, int is_on) __maybe_unused__;
 static void ehci_port_power (struct ehci_hcd *ehci, int is_on)
 {
 	unsigned port;
@@ -510,6 +637,12 @@ static void ehci_stop (struct usb_hcd *hcd)
 		amd_nb_dev = NULL;
 	}
 
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+	/* == AVM/BC 20110215 NMI Arbiter Workaround == */
+	if (ehci->nmi_wa_handle >= 0)
+		ath_workaround_nmi_unlink(ehci->nmi_wa_handle);
+#endif
+
 #ifdef	EHCI_STATS
 	ehci_dbg (ehci, "irq normal %ld err %ld reclaim %ld (lost %ld)\n",
 		ehci->stats.normal, ehci->stats.error, ehci->stats.reclaim,
@@ -521,6 +654,36 @@ static void ehci_stop (struct usb_hcd *hcd)
 	dbg_status (ehci, "ehci_stop completed",
 		    ehci_readl(ehci, &ehci->regs->status));
 }
+
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+/* == AVM/BC 20110216 NMI Arbiter Workaround == */
+void nmi_wa_timer_function(unsigned long arg)
+{
+	struct ehci_hcd	*ehci = (struct ehci_hcd *)arg;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ehci->nmi_wa_lock, flags);
+    if(ehci->nmi_wa_status == NMI_WA_STATUS_NOINIT) {
+        ehci->nmi_wa_handle = ath_workaround_nmi_link("ehci");
+        if(ehci->nmi_wa_handle < 0) {
+            /*--- printk("%s: link failed \n", __func__); ---*/
+            spin_unlock_irqrestore(&ehci->nmi_wa_lock, flags);
+            return;
+        }
+        ehci->nmi_wa_status = NMI_WA_STATUS_WORK;
+    }
+
+	WARN_ON(ehci->nmi_wa_status != NMI_WA_STATUS_WORK);
+
+	ehci->nmi_wa_status = NMI_WA_STATUS_IDLE;
+
+	spin_unlock_irqrestore(&ehci->nmi_wa_lock, flags);
+
+	ath_workaround_nmi_link_settimer(ehci->nmi_wa_handle, NMI_WA_TIMECOUNT_IDLE);
+
+	return;
+}
+#endif
 
 /* one-time init, only for memory state */
 static int ehci_init(struct usb_hcd *hcd)
@@ -619,6 +782,33 @@ static int ehci_init(struct usb_hcd *hcd)
 	}
 	ehci->command = temp;
 
+
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+
+	/* == AVM/BC 20110215 NMI Arbiter Workaround ==
+     *
+     * 2 States: "Idle" / "Working" (bulk urbs)
+     * 30 Sekond timer before going to idle
+	 */
+
+	ehci->nmi_wa_handle = ath_workaround_nmi_link("ehci");
+
+	init_timer(&ehci->nmi_wa_timer);
+	setup_timer(&ehci->nmi_wa_timer, nmi_wa_timer_function, (unsigned long) ehci );
+
+	spin_lock_init(&ehci->nmi_wa_lock);
+	if(ehci->nmi_wa_handle < 0) {
+        /*--- printk("%s: link failed\n", __func__); ---*/
+        ehci->nmi_wa_status = NMI_WA_STATUS_NOINIT;
+        mod_timer(&ehci->nmi_wa_timer, jiffies + msecs_to_jiffies(NMI_WA_DELAY_MS_INITFAILED) );
+    } else {
+        ehci->nmi_wa_status = NMI_WA_STATUS_WORK;
+        ath_workaround_nmi_link_settimer(ehci->nmi_wa_handle, NMI_WA_TIMECOUNT_WORK);
+        mod_timer(&ehci->nmi_wa_timer, jiffies + msecs_to_jiffies(NMI_WA_DELAY_MS) );
+    }
+
+#endif
+
 	return 0;
 }
 
@@ -633,11 +823,13 @@ static int ehci_run (struct usb_hcd *hcd)
 	hcd->uses_new_polling = 1;
 	hcd->poll_rh = 0;
 
+#ifndef CONFIG_MACH_FUSIV
 	/* EHCI spec section 4.1 */
 	if ((retval = ehci_reset(ehci)) != 0) {
 		ehci_mem_cleanup(ehci);
 		return retval;
 	}
+#endif
 	ehci_writel(ehci, ehci->periodic_dma, &ehci->regs->frame_list);
 	ehci_writel(ehci, (u32)ehci->async->qh_dma, &ehci->regs->async_next);
 
@@ -719,10 +911,15 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci (hcd);
 	u32			status, masked_status, pcd_status = 0, cmd;
+#ifdef CONFIG_MACH_QCA955x
+	u32			global_interrupt_status;
+#endif
 	int			bh;
 
 	spin_lock (&ehci->lock);
-
+#ifdef CONFIG_MACH_QCA955x
+	global_interrupt_status = ath_usb_reg_rd(ATH_GLOBAL_INT_STATUS);
+#endif
 	status = ehci_readl(ehci, &ehci->regs->status);
 
 	/* e.g. cardbus physical eject */
@@ -745,6 +942,17 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 #ifdef	VERBOSE_DEBUG
 	/* unrequested/ignored: Frame List Rollover */
 	dbg_status (ehci, "irq", status);
+#endif
+
+#ifdef CONFIG_MACH_AR934x
+	if ((status & STS_ERR) && (ehci->is_port_active)) {
+		int temp;
+		temp = ehci_readl(ehci, &ehci->regs->port_status[0]);
+		if ((temp & PORT_CONNECT) && ((temp & (PORT_PE | PORT_PEC | PORT_RESET | PORT_SUSPEND)) == 0)) {
+			printk(KERN_ERR "%s setting STS_PCD (babble error wa)\n", __FUNCTION__);
+			status |= STS_PCD;
+		}
+	}
 #endif
 
 	/* INT, ERR, and IAA interrupt rates can be throttled */
@@ -779,6 +987,32 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 
 		/* kick root hub later */
 		pcd_status = status;
+#ifdef CONFIG_MACH_AR934x
+		/*
+		 * Patch for USB Suspend/Resume in WASP
+		 */
+                if (!is_ar934x_13_or_later()) {
+                        ath_usb_phy_ctrl_sqnce_ovrde(hcd, ATH_USB_PHY_CTRL5);
+		}
+#endif /* CONFIG_MACH_AR934x */
+
+#ifdef CONFIG_MACH_QCA955x
+		/*
+		 * Patch for USB Suspend/Resume in Scorpion
+		 * HOST 1
+		 */
+		if(global_interrupt_status & RST_GLOBAL_INTERRUPT_STATUS_USB1_INT_MASK){
+			ath_usb_phy_ctrl_sqnce_ovrde(hcd, ATH_USB_PHY_CTRL5);
+		}
+
+		/*
+		 * Patch for USB Suspend/Resume in Scorpion
+		 * HOST 2
+		 */
+		if(global_interrupt_status & RST_GLOBAL_INTERRUPT_STATUS_USB2_INT_MASK){
+			ath_usb_phy_ctrl_sqnce_ovrde(hcd, ATH_USB2_PHY_CTRL5);
+		}
+#endif /* CONFIG_MACH_QCA955x */
 
 		/* resume root hub? */
 		if (!(cmd & CMD_RUN))
@@ -1056,6 +1290,7 @@ done:
 	return;
 }
 
+static void ehci_endpoint_reset(struct usb_hcd *hcd, struct usb_host_endpoint *ep) __maybe_unused__;
 static void
 ehci_endpoint_reset(struct usb_hcd *hcd, struct usb_host_endpoint *ep)
 {
@@ -1145,6 +1380,16 @@ MODULE_LICENSE ("GPL");
 #define	PLATFORM_DRIVER		ixp4xx_ehci_driver
 #endif
 
+#ifdef CONFIG_FUSIV_VX160
+#include "ehci-vox160.c"
+#define	PLATFORM_DRIVER	        ehci_hcd_vox160_driver
+#endif
+
+#ifdef CONFIG_FUSIV_VX180
+#include "ehci-ikf68xx.c"
+#define	PLATFORM_DRIVER	        ehci_hcd_ikf68xx_driver
+#endif
+
 #ifdef CONFIG_USB_W90X900_EHCI
 #include "ehci-w90x900.c"
 #define	PLATFORM_DRIVER		ehci_hcd_w90x900_driver
@@ -1153,6 +1398,29 @@ MODULE_LICENSE ("GPL");
 #ifdef CONFIG_ARCH_AT91
 #include "ehci-atmel.c"
 #define	PLATFORM_DRIVER		ehci_atmel_driver
+#endif
+
+#ifdef CONFIG_USB_EHCI_AR9130
+#include "ehci-ar9130.c"
+#define PLATFORM_DRIVER		ehci_hcd_ar9130_driver
+#endif
+
+#if defined(CONFIG_USB_EHCI_ATH) || defined(CONFIG_USB_EHCI_ATH_HOST1) \
+	|| defined(CONFIG_USB_EHCI_ATH_HOST2)
+#include "ehci-ath.c"
+#endif
+
+#if defined(CONFIG_USB_EHCI_ATH) || defined(CONFIG_USB_EHCI_ATH_HOST1)
+#define PLATFORM_DRIVER		ath_usb_ehci_hcd_driver
+#endif
+
+#ifdef CONFIG_USB_EHCI_ATH_HOST2
+#define PLATFORM_DRIVER_1	ath_usb_ehci_hcd_driver_1
+#endif
+
+#ifdef CONFIG_USB_EHCI_AR7100
+#include "ehci-ar7100.c"
+#define PLATFORM_DRIVER		ehci_hcd_ar7100_driver
 #endif
 
 #if !defined(PCI_DRIVER) && !defined(PLATFORM_DRIVER) && \
@@ -1188,9 +1456,23 @@ static int __init ehci_hcd_init(void)
 #endif
 
 #ifdef PLATFORM_DRIVER
-	retval = platform_driver_register(&PLATFORM_DRIVER);
-	if (retval < 0)
-		goto clean0;
+#if defined(CONFIG_MACH_AR934x) || defined(CONFIG_MACH_QCA955x)
+	/*
+	 * From Bootstrap Reg.
+	 * Host mode if 7th bit is off else device mode. 
+	 */
+	if (!(ath_reg_rd(RST_BOOTSTRAP_ADDRESS) & RST_BOOTSTRAP_USB_MODE_MASK)) 
+#endif
+	{
+		retval = platform_driver_register(&PLATFORM_DRIVER);
+		if (retval < 0)
+			goto clean0;
+	}
+#endif
+#ifdef PLATFORM_DRIVER_1
+		retval = platform_driver_register(&PLATFORM_DRIVER_1);
+		if (retval < 0)
+			goto clean6;
 #endif
 
 #ifdef PCI_DRIVER
@@ -1227,6 +1509,10 @@ clean1:
 #ifdef PLATFORM_DRIVER
 	platform_driver_unregister(&PLATFORM_DRIVER);
 clean0:
+#endif
+#ifdef PLATFORM_DRIVER_1
+	platform_driver_unregister(&PLATFORM_DRIVER_1);
+clean6:
 #endif
 #ifdef DEBUG
 	debugfs_remove(ehci_debug_root);

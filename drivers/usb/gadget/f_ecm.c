@@ -118,7 +118,11 @@ static struct usb_interface_descriptor ecm_control_intf __initdata = {
 
 	/* .bInterfaceNumber = DYNAMIC */
 	/* status endpoint is optional; this could be patched later */
-	.bNumEndpoints =	1,
+	#if defined(__IFX_USB_GADGET__) && defined(__ECM_NO_INTR__)
+		.bNumEndpoints   = 0,
+	#else
+		.bNumEndpoints   = 1,
+	#endif
 	.bInterfaceClass =	USB_CLASS_COMM,
 	.bInterfaceSubClass =	USB_CDC_SUBCLASS_ETHERNET,
 	.bInterfaceProtocol =	USB_CDC_PROTO_NONE,
@@ -219,7 +223,9 @@ static struct usb_descriptor_header *ecm_fs_function[] __initdata = {
 	(struct usb_descriptor_header *) &ecm_union_desc,
 	(struct usb_descriptor_header *) &ecm_desc,
 	/* NOTE: status endpoint might need to be removed */
-	(struct usb_descriptor_header *) &fs_ecm_notify_desc,
+	#if !defined(__IFX_USB_GADGET__) || !defined(__ECM_NO_INTR__)
+		(struct usb_descriptor_header *) &fs_ecm_notify_desc,
+	#endif
 	/* data interface, altsettings 0 and 1 */
 	(struct usb_descriptor_header *) &ecm_data_nop_intf,
 	(struct usb_descriptor_header *) &ecm_data_intf,
@@ -264,7 +270,9 @@ static struct usb_descriptor_header *ecm_hs_function[] __initdata = {
 	(struct usb_descriptor_header *) &ecm_union_desc,
 	(struct usb_descriptor_header *) &ecm_desc,
 	/* NOTE: status endpoint might need to be removed */
-	(struct usb_descriptor_header *) &hs_ecm_notify_desc,
+	#if !defined(__IFX_USB_GADGET__) || !defined(__IFX_USB_GADGET_ECM_NO_INTR__)
+		(struct usb_descriptor_header *) &hs_ecm_notify_desc,
+	#endif
 	/* data interface, altsettings 0 and 1 */
 	(struct usb_descriptor_header *) &ecm_data_nop_intf,
 	(struct usb_descriptor_header *) &ecm_data_intf,
@@ -391,9 +399,15 @@ static int ecm_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	struct usb_composite_dev *cdev = f->config->cdev;
 	struct usb_request	*req = cdev->req;
 	int			value = -EOPNOTSUPP;
-	u16			w_index = le16_to_cpu(ctrl->wIndex);
-	u16			w_value = le16_to_cpu(ctrl->wValue);
-	u16			w_length = le16_to_cpu(ctrl->wLength);
+	#if defined(__IFX_USB_GADGET__) && defined(__NOSWAPINCTRL__)
+		u16			w_index  =(ctrl->wIndex);
+		u16			w_value  =(ctrl->wValue);
+		u16			w_length =(ctrl->wLength);
+	#else
+		u16			w_index  =le16_to_cpu(ctrl->wIndex);
+		u16			w_value  =le16_to_cpu(ctrl->wValue);
+		u16			w_length =le16_to_cpu(ctrl->wLength);
+	#endif
 
 	/* composite driver infrastructure handles everything except
 	 * CDC class messages; interface activation uses set_alt().
@@ -597,6 +611,50 @@ static void ecm_close(struct gether *geth)
 
 /*-------------------------------------------------------------------------*/
 
+#if defined(__IFX_USB_GADGET__) && defined(__RETAIN_BUF_TX__)
+	int ecm_wrap(struct gether *port,
+					u8 *buf,
+					struct sk_buff *skb,
+					int max_len)
+	{
+		int length;
+		length = skb->len;
+		if(length > max_len)
+			return -1;
+		memcpy( buf , skb->data,skb->len);
+		return length;
+	}
+#endif
+
+#if defined(__IFX_USB_GADGET__) && defined(__RETAIN_BUF_RX__)
+	int ecm_unwrap(	struct gether *port,
+						u8 *buf, u16 len,
+						struct sk_buff_head *list)
+	{
+		struct sk_buff *skb;
+
+		#if defined(NET_IP_ALIGN) && NET_IP_ALIGN > 0
+			skb = dev_alloc_skb (len+NET_IP_ALIGN );
+		#else
+			skb = dev_alloc_skb (len);
+		#endif
+
+		if(!skb)
+		{
+			printk(KERN_INFO "%s() %d NO SKB\n",__func__,__LINE__);
+			return (-ENOMEM);
+		}
+		#if defined(NET_IP_ALIGN) && NET_IP_ALIGN > 0
+			skb_reserve(skb, NET_IP_ALIGN);
+		#endif
+		memcpy(skb->data,((void *)buf),len);
+		skb_put (skb, len);
+		skb_queue_tail(list, skb);
+		return 0;
+	}
+#endif
+
+
 /* ethernet function driver setup/binding */
 
 static int __init
@@ -656,7 +714,11 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 	ecm->notify_req = usb_ep_alloc_request(ep, GFP_KERNEL);
 	if (!ecm->notify_req)
 		goto fail;
-	ecm->notify_req->buf = kmalloc(ECM_STATUS_BYTECOUNT, GFP_KERNEL);
+	#if defined(__IFX_USB_GADGET__)
+		ecm->notify_req->buf = gadget_alloc_buffer(ECM_STATUS_BYTECOUNT);
+	#else
+		ecm->notify_req->buf = kmalloc(ECM_STATUS_BYTECOUNT, GFP_KERNEL);
+	#endif
 	if (!ecm->notify_req->buf)
 		goto fail;
 	ecm->notify_req->context = ecm;
@@ -707,6 +769,19 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 	ecm->port.open = ecm_open;
 	ecm->port.close = ecm_close;
 
+	#if defined(__IFX_USB_GADGET__) && defined(__RETAIN_BUF_TX__)
+		ecm->port.wrap = ecm_wrap;
+		alloc_size_tx = (sizeof (struct ethhdr) + ETH_FRAME_LEN);
+		alloc_size_tx += ecm->port.in_ep->maxpacket - 1;
+		alloc_size_tx -= alloc_size_tx % ecm->port.in_ep->maxpacket;
+	#endif
+	#if defined(__IFX_USB_GADGET__) && defined(__RETAIN_BUF_RX__)
+		ecm->port.unwrap = ecm_unwrap;
+		alloc_size_rx = (sizeof (struct ethhdr) + ETH_FRAME_LEN + RX_EXTRA+NET_IP_ALIGN);
+		alloc_size_rx += ecm->port.out_ep->maxpacket - 1;
+		alloc_size_rx -= alloc_size_rx % ecm->port.out_ep->maxpacket;
+	#endif
+
 	DBG(cdev, "CDC Ethernet: %s speed IN/%s OUT/%s NOTIFY/%s\n",
 			gadget_is_dualspeed(c->cdev->gadget) ? "dual" : "full",
 			ecm->port.in_ep->name, ecm->port.out_ep->name,
@@ -718,7 +793,11 @@ fail:
 		usb_free_descriptors(f->descriptors);
 
 	if (ecm->notify_req) {
-		kfree(ecm->notify_req->buf);
+		#if defined(__IFX_USB_GADGET__)
+			gadget_free_buffer(ecm->notify_req->buf);
+		#else
+			kfree(ecm->notify_req->buf);
+		#endif
 		usb_ep_free_request(ecm->notify, ecm->notify_req);
 	}
 
@@ -746,7 +825,11 @@ ecm_unbind(struct usb_configuration *c, struct usb_function *f)
 		usb_free_descriptors(f->hs_descriptors);
 	usb_free_descriptors(f->descriptors);
 
-	kfree(ecm->notify_req->buf);
+	#if defined(__IFX_USB_GADGET__)
+		gadget_free_buffer(ecm->notify_req->buf);
+	#else
+		kfree(ecm->notify_req->buf);
+	#endif
 	usb_ep_free_request(ecm->notify, ecm->notify_req);
 
 	ecm_string_defs[1].s = NULL;

@@ -1,0 +1,3 @@
+obj-$(CONFIG_IFX_ATM)	+= ifxmips_atm/
+obj-$(CONFIG_IFX_PTM)	+= ifxmips_ptm/
+obj-$(CONFIG_IFX_ADTRAN_PTM)	+= ifxmips_adtran_ptm/

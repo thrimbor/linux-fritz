@@ -78,11 +78,19 @@ limit_mt(const struct sk_buff *skb, const struct xt_match_param *par)
 		/* We're not limited. */
 		priv->credit -= r->cost;
 		spin_unlock_bh(&limit_lock);
+#ifdef CONFIG_LTQ_NF_ADDONS
+               return (true ^ r->invert);
+#else
 		return true;
+#endif
 	}
 
 	spin_unlock_bh(&limit_lock);
+#ifdef CONFIG_LTQ_NF_ADDONS
+               return (false ^ r->invert);
+#else
 	return false;
+#endif
 }
 
 /* Precision saver. */

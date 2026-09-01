@@ -298,6 +298,11 @@ static void reset_counters(void *arg)
 	}
 }
 
+static irqreturn_t mipsxx_perfcount_int(int irq, void *dev_id)
+{
+	return mipsxx_perfcount_handler();
+}
+
 static int __init mipsxx_init(void)
 {
 	int counters;
@@ -341,7 +346,16 @@ static int __init mipsxx_init(void)
 		break;
 
 	case CPU_74K:
+#ifdef CONFIG_OPROFILE_WASP
+                /*
+                 * for now wasp 74k is exposed as 24k, so
+                 * that the old oprofile tool works without
+                 * whining about the processor
+                 */
+		op_model_mipsxx_ops.cpu_type = "mips/24K";
+#else
 		op_model_mipsxx_ops.cpu_type = "mips/74K";
+#endif
 		break;
 
 	case CPU_5KC:
@@ -374,12 +388,19 @@ static int __init mipsxx_init(void)
 	save_perf_irq = perf_irq;
 	perf_irq = mipsxx_perfcount_handler;
 
+	if (cp0_perfcount_irq >= 0)
+		return request_irq(cp0_perfcount_irq, mipsxx_perfcount_int,
+			IRQF_SHARED, "Perfcounter", save_perf_irq);
+
 	return 0;
 }
 
 static void mipsxx_exit(void)
 {
 	int counters = op_model_mipsxx_ops.num_counters;
+
+	if (cp0_perfcount_irq >= 0)
+		free_irq(cp0_perfcount_irq, save_perf_irq);
 
 	counters = counters_per_cpu_to_total(counters);
 	on_each_cpu(reset_counters, (void *)(long)counters, 1);

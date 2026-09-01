@@ -36,7 +36,7 @@
 #endif
 
 #ifdef CONFIG_MMU
-void *module_alloc(unsigned long size)
+void *module_alloc(unsigned long size, char *name __attribute__ ((unused)), enum _module_alloc_type_ type __attribute__ ((unused)))
 {
 	struct vm_struct *area;
 
@@ -51,7 +51,7 @@ void *module_alloc(unsigned long size)
 	return __vmalloc_area(area, GFP_KERNEL, PAGE_KERNEL_EXEC);
 }
 #else /* CONFIG_MMU */
-void *module_alloc(unsigned long size)
+void *module_alloc(unsigned long size, char *name __attribute__ ((unused)), enum _module_alloc_type_ type __attribute__ ((unused)))
 {
 	return size == 0 ? NULL : vmalloc(size);
 }
@@ -120,6 +120,10 @@ apply_relocate(Elf32_Shdr *sechdrs, const char *strtab, unsigned int symindex,
 				dstsec->sh_size);
 			return -ENOEXEC;
 		}
+
+		if ((IS_ERR_VALUE(sym->st_value) || !sym->st_value) &&
+		    ELF_ST_BIND(sym->st_info) == STB_WEAK)
+			continue;
 
 		loc = dstsec->sh_addr + rel->r_offset;
 

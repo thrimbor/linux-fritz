@@ -247,7 +247,8 @@ extern int sysctl_min_slab_ratio;
 extern int zone_reclaim(struct zone *, gfp_t, unsigned int);
 #else
 #define zone_reclaim_mode 0
-static inline int zone_reclaim(struct zone *z, gfp_t mask, unsigned int order)
+static inline int zone_reclaim(struct zone *z __attribute__ ((unused)), 
+        gfp_t mask __attribute__ ((unused)), unsigned int order __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -340,14 +341,14 @@ extern void
 mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent, bool swapout);
 #else
 static inline void
-mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent, bool swapout)
+mem_cgroup_uncharge_swapcache(struct page *page __attribute__((unused)), swp_entry_t ent __attribute__((unused)), bool swapout __attribute__((unused)))
 {
 }
 #endif
 #ifdef CONFIG_CGROUP_MEM_RES_CTLR_SWAP
 extern void mem_cgroup_uncharge_swap(swp_entry_t ent);
 #else
-static inline void mem_cgroup_uncharge_swap(swp_entry_t ent)
+static inline void mem_cgroup_uncharge_swap(swp_entry_t ent __attribute__((unused)))
 {
 }
 #endif
@@ -374,56 +375,56 @@ static inline void show_swap_cache_info(void)
 #define free_swap_and_cache(swp)	is_migration_entry(swp)
 #define swapcache_prepare(swp)		is_migration_entry(swp)
 
-static inline void swap_duplicate(swp_entry_t swp)
+static inline void swap_duplicate(swp_entry_t swp __attribute__ ((unused)))
 {
 }
 
-static inline void swap_free(swp_entry_t swp)
+static inline void swap_free(swp_entry_t swp __attribute__ ((unused)))
 {
 }
 
-static inline void swapcache_free(swp_entry_t swp, struct page *page)
+static inline void swapcache_free(swp_entry_t swp __attribute__ ((unused)), struct page *page __attribute__ ((unused)))
 {
 }
 
-static inline struct page *swapin_readahead(swp_entry_t swp, gfp_t gfp_mask,
-			struct vm_area_struct *vma, unsigned long addr)
-{
-	return NULL;
-}
-
-static inline int swap_writepage(struct page *p, struct writeback_control *wbc)
-{
-	return 0;
-}
-
-static inline struct page *lookup_swap_cache(swp_entry_t swp)
+static inline struct page *swapin_readahead(swp_entry_t swp __attribute__ ((unused)), gfp_t gfp_mask __attribute__ ((unused)),
+			struct vm_area_struct *vma __attribute__ ((unused)), unsigned long addr __attribute__ ((unused)))
 {
 	return NULL;
 }
 
-static inline int add_to_swap(struct page *page)
+static inline int swap_writepage(struct page *p __attribute__ ((unused)), struct writeback_control *wbc __attribute__ ((unused)))
 {
 	return 0;
 }
 
-static inline int add_to_swap_cache(struct page *page, swp_entry_t entry,
-							gfp_t gfp_mask)
+static inline struct page *lookup_swap_cache(swp_entry_t swp __attribute__ ((unused)))
+{
+	return NULL;
+}
+
+static inline int add_to_swap(struct page *page __attribute__ ((unused)))
+{
+	return 0;
+}
+
+static inline int add_to_swap_cache(struct page *page __attribute__ ((unused)), swp_entry_t entry __attribute__ ((unused)),
+							gfp_t gfp_mask __attribute__ ((unused)))
 {
 	return -1;
 }
 
-static inline void __delete_from_swap_cache(struct page *page)
+static inline void __delete_from_swap_cache(struct page *page __attribute__ ((unused)))
 {
 }
 
-static inline void delete_from_swap_cache(struct page *page)
+static inline void delete_from_swap_cache(struct page *page __attribute__ ((unused)))
 {
 }
 
 #define reuse_swap_page(page)	(page_mapcount(page) == 1)
 
-static inline int try_to_free_swap(struct page *page)
+static inline int try_to_free_swap(struct page *page __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -436,15 +437,15 @@ static inline swp_entry_t get_swap_page(void)
 }
 
 /* linux/mm/thrash.c */
-static inline void put_swap_token(struct mm_struct *mm)
+static inline void put_swap_token(struct mm_struct *mm __attribute__ ((unused)))
 {
 }
 
-static inline void grab_swap_token(struct mm_struct *mm)
+static inline void grab_swap_token(struct mm_struct *mm __attribute__ ((unused)))
 {
 }
 
-static inline int has_swap_token(struct mm_struct *mm)
+static inline int has_swap_token(struct mm_struct *mm __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -454,7 +455,7 @@ static inline void disable_swap_token(void)
 }
 
 static inline void
-mem_cgroup_uncharge_swapcache(struct page *page, swp_entry_t ent)
+mem_cgroup_uncharge_swapcache(struct page *page __attribute__ ((unused)), swp_entry_t ent __attribute__ ((unused)))
 {
 }
 

@@ -503,7 +503,11 @@ conntrack_pptp_help(struct sk_buff *skb, unsigned int protoff,
 
 {
 	int dir = CTINFO2DIR(ctinfo);
+#ifdef CONFIG_PPTP_ALG_FIX
+	struct nf_ct_pptp_master *info = &nfct_help(ct)->help.ct_pptp_info;
+#else
 	const struct nf_ct_pptp_master *info = &nfct_help(ct)->help.ct_pptp_info;
+#endif
 	const struct tcphdr *tcph;
 	struct tcphdr _tcph;
 	const struct pptp_pkt_hdr *pptph;
@@ -526,6 +530,17 @@ conntrack_pptp_help(struct sk_buff *skb, unsigned int protoff,
 	BUG_ON(!tcph);
 	nexthdr_off += tcph->doff * 4;
 	datalen = tcplen - tcph->doff * 4;
+
+#ifdef CONFIG_PPTP_ALG_FIX
+	if (tcph->fin || tcph->rst) {
+		pr_debug("RST/FIN received, timeouting GRE\n");
+		/* can't do this after real newnat */
+		info->cstate = PPTP_CALL_NONE;
+		/* untrack this call id, unexpect GRE packets */
+		pptp_destroy_siblings(ct);
+	}
+#endif
+
 
 	pptph = skb_header_pointer(skb, nexthdr_off, sizeof(_pptph), &_pptph);
 	if (!pptph) {

@@ -121,7 +121,7 @@ void ipc_init_ids(struct ipc_ids *ids)
 	init_rwsem(&ids->rw_mutex);
 
 	ids->in_use = 0;
-	ids->seq = 0;
+	ids->seq = 1;
 	{
 		int seq_limit = INT_MAX/SEQ_MULTIPLIER;
 		if (seq_limit > USHORT_MAX)
@@ -279,7 +279,7 @@ int ipc_addid(struct ipc_ids* ids, struct kern_ipc_perm* new, int size)
 
 	new->seq = ids->seq++;
 	if(ids->seq > ids->seq_max)
-		ids->seq = 0;
+		ids->seq = 1;
 
 	new->id = ipc_buildid(id, new->seq);
 	return id;

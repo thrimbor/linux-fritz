@@ -439,8 +439,7 @@ static int cpio_mkfile_line(const char *line)
 	} else {
 		dname = name;
 	}
-	rc = cpio_mkfile(dname, cpio_replace_env(location),
-	                 mode, uid, gid, nlinks);
+	rc = cpio_mkfile(dname, cpio_replace_env(location), mode, uid, gid, nlinks);
  fail:
 	if (dname_len) free(dname);
 	return rc;

@@ -236,6 +236,8 @@ config LEDS_BD2802
 	  This option enables support for BD2802GU RGB LED driver chips
 	  accessed via the I2C bus.
 
+source "drivers/leds/Kconfig.ifx"
+
 comment "LED Triggers"
 
 config LEDS_TRIGGERS
@@ -303,5 +305,16 @@ config LEDS_TRIGGER_DEFAULT_ON
 
 comment "iptables trigger is under Netfilter config (LED target)"
 	depends on LEDS_TRIGGERS
+
+config LEDS_TRIGGER_MORSE
+	tristate "LED Morse Trigger"
+	depends on LEDS_TRIGGERS
+
+config LEDS_TRIGGER_NETDEV
+	tristate "LED Netdev Trigger"
+	depends on LEDS_TRIGGERS
+	help
+	  This allows LEDs to be controlled by network device activity.
+	  If unsure, say Y.
 
 endif # NEW_LEDS

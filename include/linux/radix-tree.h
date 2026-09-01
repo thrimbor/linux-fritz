@@ -62,6 +62,10 @@ struct radix_tree_root {
 	unsigned int		height;
 	gfp_t			gfp_mask;
 	struct radix_tree_node	*rnode;
+#ifdef CONFIG_FUSIV_USB_OPTIMIZATION
+        pgoff_t                 last_reclaim_index; /* to speed up reclaim */
+        unsigned int            count;
+#endif
 };
 
 #define RADIX_TREE_INIT(mask)	{					\

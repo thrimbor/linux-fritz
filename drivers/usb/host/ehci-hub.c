@@ -452,7 +452,7 @@ static DEVICE_ATTR(companion, 0644, show_companion, store_companion);
 
 static inline void create_companion_file(struct ehci_hcd *ehci)
 {
-	int	i;
+	int	i __maybe_unused__;
 
 	/* with integrated TT there is no companion! */
 	if (!ehci_is_TDI(ehci))
@@ -556,6 +556,13 @@ ehci_hub_status_data (struct usb_hcd *hcd, char *buf)
 	spin_lock_irqsave (&ehci->lock, flags);
 	for (i = 0; i < ports; i++) {
 		temp = ehci_readl(ehci, &ehci->regs->port_status [i]);
+
+#ifdef CONFIG_MACH_AR934x
+		if ((ehci->is_port_active) && (temp & PORT_CONNECT) && (!(temp & (PORT_PE | PORT_PEC | PORT_RESET | PORT_SUSPEND)))) {
+			printk(KERN_INFO "%s setting PORT_CSC (babble error wa)\n", __FUNCTION__);
+			temp |= PORT_CSC;
+		}
+#endif
 
 		/*
 		 * Return status information even for ports with OWNER set.
@@ -672,6 +679,9 @@ static int ehci_hub_control (
 		switch (wValue) {
 		case USB_PORT_FEAT_ENABLE:
 			ehci_writel(ehci, temp & ~PORT_PE, status_reg);
+#ifdef CONFIG_MACH_AR934x
+			ehci->is_port_active = 0;
+#endif
 			break;
 		case USB_PORT_FEAT_C_ENABLE:
 			ehci_writel(ehci, (temp & ~PORT_RWC_BITS) | PORT_PEC,
@@ -741,6 +751,16 @@ static int ehci_hub_control (
 		status = 0;
 		temp = ehci_readl(ehci, status_reg);
 
+#ifdef CONFIG_MACH_AR934x
+		if ((ehci->is_port_active) && (temp & PORT_CONNECT) && (!(temp & (PORT_PE | PORT_PEC | PORT_RESET | PORT_SUSPEND)))) {
+			printk(KERN_INFO "%s setting PORT_CSC (babble error wa) %x\n", __FUNCTION__, temp);
+			temp |= PORT_CSC;
+		}
+	
+		if (!(temp & PORT_PE)) {
+			ehci->is_port_active = 0;
+		}
+#endif
 		// wPortChange bits
 		if (temp & PORT_CSC)
 			status |= 1 << USB_PORT_FEAT_C_CONNECTION;
@@ -809,6 +829,22 @@ static int ehci_hub_control (
 			status |= 1 << USB_PORT_FEAT_C_RESET;
 			ehci->reset_done [wIndex] = 0;
 
+#ifdef CONFIG_FUSIV_VX180
+			/* == AVM/WK 200110601 FIX: PEC Error prevention   ==
+			**		               do PHY reinit during reset **
+			*/
+			{
+				int val = *((int *)0xb90000dc);
+
+				/* Reinit Phy Port */
+				val &= ~((wIndex == 0) ? 0x00000002: 0x00000004);
+				*((int *)0xb90000dc) = val;
+				msleep(50);
+				val |= ((wIndex == 0) ?  0x00000002: 0x00000004);
+				*((int *)0xb90000dc) = val;
+				msleep(50);
+			}
+#endif
 			/* force reset to complete */
 			ehci_writel(ehci, temp & ~(PORT_RWC_BITS | PORT_RESET),
 					status_reg);
@@ -823,6 +859,51 @@ static int ehci_hub_control (
 				goto error;
 			}
 
+#ifdef CONFIG_FUSIV_VX180
+			/* == AVM/WK 20110601 improved Workaround for Ikanos VX180 ==
+			* Phy reinit recovers from PEC error
+			* Will retry USB reset
+			*/
+			msleep(10);
+			{
+				unsigned temp2 = ehci_readl (ehci, status_reg);
+				if (temp2 & PORT_PEC) {
+					int val = *((int *)0xb90000dc);
+				
+					temp = ehci_readl (ehci, status_reg);
+					ehci_err (ehci, "AVM EHCI PEC Recovery for port %d, val %x\n", (wIndex + 1), temp);
+
+					/* Reinit Phy Port */
+					val &= ~((wIndex == 0) ? 0x00000002: 0x00000004);
+					*((int *)0xb90000dc) = val;
+					msleep(5);
+
+					val |= ((wIndex == 0) ?  0x00000010: 0x00000020);
+					*((int *)0xb90000dc) = val;
+					msleep(50);
+
+					val &= ~((wIndex == 0) ? 0x00000010: 0x00000020);
+					*((int *)0xb90000dc) = val;
+					msleep(50);
+
+					val |= ((wIndex == 0) ?  0x00000002: 0x00000004);
+					*((int *)0xb90000dc) = val;
+					msleep(5);
+
+					ehci_writel(ehci, PORT_PEC|(temp2 & ~(PORT_RWC_BITS)), status_reg);
+
+					/* let's repeat USB reset */
+					goto error;
+				}
+				/* == AVM/WK 20110601 FIX: Handle spurious disconnects ==*/
+				if ((temp2 & (PORT_CSC|PORT_CONNECT)) == (PORT_CSC|PORT_CONNECT)) {
+					ehci_err (ehci, "AVM EHCI spurious disconnect after reset port %d, val %x\n", (wIndex + 1), temp2);
+					/* let's repeat USB reset */
+					ehci_writel(ehci, PORT_CSC|(temp2 & ~(PORT_RWC_BITS)), status_reg);
+					goto error;
+				}
+			}
+#endif
 			/* see what we found out */
 			temp = check_reset_complete (ehci, wIndex, status_reg,
 					ehci_readl(ehci, status_reg));
@@ -856,8 +937,12 @@ static int ehci_hub_control (
 			} else
 				status |= ehci_port_speed(ehci, temp);
 		}
-		if (temp & PORT_PE)
+		if (temp & PORT_PE) {
 			status |= 1 << USB_PORT_FEAT_ENABLE;
+#ifdef CONFIG_MACH_AR934x
+			ehci->is_port_active = 1;
+#endif
+		}
 
 		/* maybe the port was unsuspended without our knowledge */
 		if (temp & (PORT_SUSPEND|PORT_RESUME)) {
@@ -921,6 +1006,9 @@ static int ehci_hub_control (
 			if ((temp & PORT_PE) == 0
 					|| (temp & PORT_RESET) != 0)
 				goto error;
+#ifdef CONFIG_MACH_AR934x
+			ehci->is_port_active = 0;
+#endif
 			ehci_writel(ehci, temp | PORT_SUSPEND, status_reg);
 			/* After above check the port must be connected.
 			 * Set appropriate bit thus could put phy into low power
@@ -965,6 +1053,9 @@ static int ehci_hub_control (
 				ehci_vdbg (ehci, "port %d reset\n", wIndex + 1);
 				temp |= PORT_RESET;
 				temp &= ~PORT_PE;
+#ifdef CONFIG_MACH_AR934x
+				ehci->is_port_active = 0;
+#endif
 
 				/*
 				 * caller must wait, then call GetPortStatus
@@ -1007,6 +1098,7 @@ error_exit:
 	return retval;
 }
 
+static void ehci_relinquish_port(struct usb_hcd *hcd, int portnum) __maybe_unused__;
 static void ehci_relinquish_port(struct usb_hcd *hcd, int portnum)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
@@ -1016,6 +1108,7 @@ static void ehci_relinquish_port(struct usb_hcd *hcd, int portnum)
 	set_owner(ehci, --portnum, PORT_OWNER);
 }
 
+static int ehci_port_handed_over(struct usb_hcd *hcd, int portnum) __maybe_unused__;
 static int ehci_port_handed_over(struct usb_hcd *hcd, int portnum)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);

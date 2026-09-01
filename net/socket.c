@@ -898,6 +898,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	void __user *argp = (void __user *)arg;
 	int pid, err;
 	struct net *net;
+ 	unsigned long tc_index;
 
 	sock = file->private_data;
 	sk = sock->sk;
@@ -958,6 +959,19 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 				err = dlci_ioctl_hook(cmd, argp);
 			mutex_unlock(&dlci_ioctl_mutex);
 			break;
+
+		case SIOCSET_TC_INDEX:
+			err = -EFAULT;
+			if (get_user(tc_index, (unsigned long __user *)argp))
+				break;
+			sock->sk->sk_tc_index = tc_index;
+			err = 0;
+			break;
+
+		case SIOCGET_TC_INDEX:
+			err = put_user(sock->sk->sk_tc_index, (unsigned long __user *)argp);
+			break;
+
 		default:
 			err = sock->ops->ioctl(sock, cmd, arg);
 

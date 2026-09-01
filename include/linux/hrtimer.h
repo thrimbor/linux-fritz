@@ -342,7 +342,7 @@ static inline void hrtimer_init_on_stack(struct hrtimer *timer,
 {
 	hrtimer_init(timer, which_clock, mode);
 }
-static inline void destroy_hrtimer_on_stack(struct hrtimer *timer) { }
+static inline void destroy_hrtimer_on_stack(struct hrtimer *timer __attribute__ ((unused))) { }
 #endif
 
 /* Basic timer operations: */
@@ -477,15 +477,15 @@ static inline void timer_stats_hrtimer_clear_start_info(struct hrtimer *timer)
 	timer->start_site = NULL;
 }
 #else
-static inline void timer_stats_account_hrtimer(struct hrtimer *timer)
+static inline void timer_stats_account_hrtimer(struct hrtimer *timer __attribute__ ((unused)))
 {
 }
 
-static inline void timer_stats_hrtimer_set_start_info(struct hrtimer *timer)
+static inline void timer_stats_hrtimer_set_start_info(struct hrtimer *timer __attribute__ ((unused)))
 {
 }
 
-static inline void timer_stats_hrtimer_clear_start_info(struct hrtimer *timer)
+static inline void timer_stats_hrtimer_clear_start_info(struct hrtimer *timer __attribute__ ((unused)))
 {
 }
 #endif

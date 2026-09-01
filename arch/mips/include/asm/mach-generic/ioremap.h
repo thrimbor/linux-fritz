@@ -15,18 +15,19 @@
  * Allow physical addresses to be fixed up to help peripherals located
  * outside the low 32-bit range -- generic pass-through version.
  */
-static inline phys_t fixup_bigphys_addr(phys_t phys_addr, phys_t size)
+static inline phys_t fixup_bigphys_addr(phys_t phys_addr, phys_t size __attribute__ ((unused)))
 {
 	return phys_addr;
 }
 
-static inline void __iomem *plat_ioremap(phys_t offset, unsigned long size,
-	unsigned long flags)
+static inline void __iomem *plat_ioremap(phys_t offset __attribute__ ((unused)),
+                                         unsigned long size __attribute__ ((unused)),
+                                         unsigned long flags __attribute__ ((unused)))
 {
 	return NULL;
 }
 
-static inline int plat_iounmap(const volatile void __iomem *addr)
+static inline int plat_iounmap(const volatile void __iomem *addr __attribute__ ((unused)))
 {
 	return 0;
 }

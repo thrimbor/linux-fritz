@@ -50,15 +50,15 @@ static inline void flush_dcache_page(struct page *page)
 
 #define ARCH_HAS_FLUSH_ANON_PAGE
 extern void __flush_anon_page(struct page *, unsigned long);
-static inline void flush_anon_page(struct vm_area_struct *vma,
+static inline void flush_anon_page(struct vm_area_struct *vma __attribute__((unused)),
 	struct page *page, unsigned long vmaddr)
 {
 	if (cpu_has_dc_aliases && PageAnon(page))
 		__flush_anon_page(page, vmaddr);
 }
 
-static inline void flush_icache_page(struct vm_area_struct *vma,
-	struct page *page)
+static inline void flush_icache_page(struct vm_area_struct *vma __attribute__((unused)),
+	struct page *page __attribute__((unused)))
 {
 }
 
@@ -67,7 +67,7 @@ extern void (*local_flush_icache_range)(unsigned long start, unsigned long end);
 
 extern void (*__flush_cache_vmap)(void);
 
-static inline void flush_cache_vmap(unsigned long start, unsigned long end)
+static inline void flush_cache_vmap(unsigned long start __attribute__((unused)), unsigned long end __attribute__((unused)))
 {
 	if (cpu_has_dc_aliases)
 		__flush_cache_vmap();
@@ -75,7 +75,7 @@ static inline void flush_cache_vmap(unsigned long start, unsigned long end)
 
 extern void (*__flush_cache_vunmap)(void);
 
-static inline void flush_cache_vunmap(unsigned long start, unsigned long end)
+static inline void flush_cache_vunmap(unsigned long start __attribute__((unused)), unsigned long end __attribute__((unused)))
 {
 	if (cpu_has_dc_aliases)
 		__flush_cache_vunmap();

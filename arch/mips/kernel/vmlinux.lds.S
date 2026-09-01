@@ -41,12 +41,19 @@ SECTIONS
 #endif
 	. = VMLINUX_LOAD_ADDRESS;
 	/* read-only */
+	bridge : {
+		*(bridge)
+	}
+	system : {
+		*(system)
+	}
 	_text = .;	/* Text and read-only data */
 	.text : {
 		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT
 		KPROBES_TEXT
+		IRQENTRY_TEXT
 		*(.text.*)
 		*(.fixup)
 		*(.gnu.warning)
@@ -62,12 +69,20 @@ SECTIONS
 		__stop___dbe_table = .;
 	}
 
+	/* Bug table for data bus errors */
+	__bug_debug_table : {
+		__start___bug_debug_table = .;
+		*(__bug_debug_table )
+		__stop___bug_debug_table = .;
+	}
+
 	NOTES :text :note
 	.dummy : { *(.dummy) } :text
 
 	RODATA
 
 	/* writeable */
+    __data_start = .;
 	.data : {	/* Data */
 		. = . + DATAOFFSET;		/* for CONFIG_MAPPED_KERNEL */
 
@@ -76,6 +91,10 @@ SECTIONS
 		CACHELINE_ALIGNED_DATA(1 << CONFIG_MIPS_L1_CACHE_SHIFT)
 		DATA_DATA
 		CONSTRUCTORS
+	    . = ALIGN(4 * 1024);		
+        __avm_kernel_config_start = .;
+        . += 4 * 1024;
+        __avm_kernel_config_end = .;
 	}
 	_gp = . + 0x8000;
 	.lit8 : {

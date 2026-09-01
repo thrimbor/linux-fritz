@@ -552,7 +552,7 @@ ssize_t default_file_splice_read(struct file *in, loff_t *ppos,
 	struct page *pages[PIPE_BUFFERS];
 	struct partial_page partial[PIPE_BUFFERS];
 	struct iovec vec[PIPE_BUFFERS];
-	pgoff_t index;
+	pgoff_t index __maybe_unused__;
 	ssize_t res;
 	size_t this_len;
 	int error;

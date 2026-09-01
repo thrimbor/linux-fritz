@@ -23,6 +23,12 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
+#ifdef CONFIG_VR9
+#include <linux/avm_hw_config.h>
+#include <ifx_gpio.h>
+
+static int usb_power_gpio = -1;
+#endif
 
 #include "xhci.h"
 
@@ -33,6 +39,44 @@
 static int link_quirk;
 module_param(link_quirk, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(link_quirk, "Don't clear the chain bit on a link TRB");
+
+/* 20130808 AVM/WK USB3 ports switchable */ 
+int usb3port_config=3;
+module_param(usb3port_config, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(usb3port_config, "Bitmask of allowed USB3 ports");
+
+static ssize_t sysfs_portmode_store( struct device *_dev, struct device_attribute *attr,const char *buffer, size_t count) {
+	u32 value;
+	u32 port;
+	struct usb_hcd *hcd;
+
+	value = simple_strtoul(buffer, NULL, 10);
+	hcd = bus_to_hcd(dev_get_drvdata(_dev));
+
+	for (port = 1; port <= 2; port ++) {
+		u32 mask = 1<<(port-1);
+
+		if ((usb3port_config & mask) != (value & mask)) {
+			if (value & mask) {
+				printk (KERN_INFO "activate usb3 port %u\n", port);
+				usb3port_config |= mask;
+				xhci_hub_control(hcd, SetPortFeature, USB_PORT_FEAT_POWER, port, NULL,0);   //USB 3 power on 
+				xhci_hub_control(hcd, ClearPortFeature, USB_PORT_FEAT_POWER, port+2, NULL,0); //USB 2 power off
+				xhci_hub_control(hcd, SetPortFeature, USB_PORT_FEAT_POWER, port+2, NULL,0);   //USB 2 power on (as trigger)
+			} else  {
+				printk (KERN_INFO "deactivate usb3 port %u\n", port);
+				usb3port_config &= ~mask;
+				xhci_hub_control(hcd, ClearPortFeature, USB_PORT_FEAT_ENABLE, port, NULL,0); //USB 3 disable
+				xhci_hub_control(hcd, ClearPortFeature, USB_PORT_FEAT_POWER, port, NULL,0); //USB 3 pow off
+			}
+		}
+	}
+	printk (KERN_INFO "usb3port_config set to %u\n", usb3port_config);
+	
+	return count;
+}
+DEVICE_ATTR(usb3portmode, S_IWUSR, NULL, sysfs_portmode_store);
+
 
 /* TODO: copied from ehci-hcd.c - can this be refactored? */
 /*
@@ -339,11 +383,10 @@ irqreturn_t xhci_irq(struct usb_hcd *hcd)
 	xhci_dbg(xhci, "Event ring dequeue ptr:\n");
 	xhci_dbg(xhci, "@%llx %08x %08x %08x %08x\n",
 			(unsigned long long)xhci_trb_virt_to_dma(xhci->event_ring->deq_seg, trb),
-			lower_32_bits(trb->link.segment_ptr),
-			upper_32_bits(trb->link.segment_ptr),
-			(unsigned int) trb->link.intr_target,
-			(unsigned int) trb->link.control);
-
+			lower_32_bits(SWAP64(trb->link.segment_ptr)),
+			upper_32_bits(SWAP64(trb->link.segment_ptr)),
+			(unsigned int) SWAP32(trb->link.intr_target),
+			(unsigned int) SWAP32(trb->link.control));
 	if (temp & STS_FATAL) {
 		xhci_warn(xhci, "WARNING: Host System Error\n");
 		xhci_halt(xhci);
@@ -441,6 +484,7 @@ int xhci_run(struct usb_hcd *hcd)
 	hcd->poll_rh = 0;
 
 	xhci_dbg(xhci, "xhci_run\n");
+
 #if 0	/* FIXME: MSI not setup yet */
 	/* Do this at the very last minute */
 	ret = xhci_setup_msix(xhci);
@@ -477,7 +521,7 @@ int xhci_run(struct usb_hcd *hcd)
 	xhci_dbg(xhci, "// Set the interrupt modulation register\n");
 	temp = xhci_readl(xhci, &xhci->ir_set->irq_control);
 	temp &= ~ER_IRQ_INTERVAL_MASK;
-	temp |= (u32) 160;
+	temp |= (u32) 160;	//40us
 	xhci_writel(xhci, temp, &xhci->ir_set->irq_control);
 
 	/* Set the HCD state before we enable the irqs */
@@ -508,6 +552,15 @@ int xhci_run(struct usb_hcd *hcd)
 		(*doorbell)(xhci);
 
 	xhci_dbg(xhci, "Finished xhci_run\n");
+
+#ifdef CONFIG_VR9
+	if(usb_power_gpio > 0) {
+		ifx_gpio_output_set(usb_power_gpio, IFX_GPIO_MODULE_USB);
+		xhci_dbg(xhci, "PORT POWER on");
+	}
+#endif
+	temp = device_create_file(hcd->self.controller, &dev_attr_usb3portmode);
+
 	return 0;
 }
 
@@ -553,6 +606,15 @@ void xhci_stop(struct usb_hcd *hcd)
 	xhci_mem_cleanup(xhci);
 	xhci_dbg(xhci, "xhci_stop completed - status = %x\n",
 		    xhci_readl(xhci, &xhci->op_regs->status));
+
+#ifdef CONFIG_VR9
+	if(usb_power_gpio > 0) {
+		ifx_gpio_output_clear(usb_power_gpio, IFX_GPIO_MODULE_USB);
+		xhci_dbg(xhci, "PORT POWER off");
+	}
+#endif
+	device_remove_file(hcd->self.controller, &dev_attr_usb3portmode);
+
 }
 
 /*
@@ -676,8 +738,8 @@ static int xhci_check_maxpacket(struct xhci_hcd *xhci, unsigned int slot_id,
 
 	out_ctx = xhci->devs[slot_id]->out_ctx;
 	ep_ctx = xhci_get_ep_ctx(xhci, out_ctx, ep_index);
-	hw_max_packet_size = MAX_PACKET_DECODED(ep_ctx->ep_info2);
-	max_packet_size = urb->dev->ep0.desc.wMaxPacketSize;
+	hw_max_packet_size = MAX_PACKET_DECODED(SWAP32(ep_ctx->ep_info2));
+	max_packet_size = SWAP16(urb->dev->ep0.desc.wMaxPacketSize);
 	if (hw_max_packet_size != max_packet_size) {
 		xhci_dbg(xhci, "Max Packet Size for ep 0 changed.\n");
 		xhci_dbg(xhci, "Max packet size in usb_device = %d\n",
@@ -691,15 +753,15 @@ static int xhci_check_maxpacket(struct xhci_hcd *xhci, unsigned int slot_id,
 				xhci->devs[slot_id]->out_ctx, ep_index);
 		in_ctx = xhci->devs[slot_id]->in_ctx;
 		ep_ctx = xhci_get_ep_ctx(xhci, in_ctx, ep_index);
-		ep_ctx->ep_info2 &= ~MAX_PACKET_MASK;
-		ep_ctx->ep_info2 |= MAX_PACKET(max_packet_size);
+		ep_ctx->ep_info2 &= SWAP32(~MAX_PACKET_MASK);
+		ep_ctx->ep_info2 |= SWAP32(MAX_PACKET(max_packet_size));
 
 		/* Set up the input context flags for the command */
 		/* FIXME: This won't work if a non-default control endpoint
 		 * changes max packet sizes.
 		 */
 		ctrl_ctx = xhci_get_input_control_ctx(xhci, in_ctx);
-		ctrl_ctx->add_flags = EP0_FLAG;
+		ctrl_ctx->add_flags = SWAP32(EP0_FLAG);
 		ctrl_ctx->drop_flags = 0;
 
 		xhci_dbg(xhci, "Slot %d input context\n", slot_id);
@@ -713,7 +775,7 @@ static int xhci_check_maxpacket(struct xhci_hcd *xhci, unsigned int slot_id,
 		/* Clean up the input context for later use by bandwidth
 		 * functions.
 		 */
-		ctrl_ctx->add_flags = SLOT_FLAG;
+		ctrl_ctx->add_flags = SWAP32(SLOT_FLAG);
 	}
 	return ret;
 }
@@ -921,27 +983,27 @@ int xhci_drop_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	/* If the HC already knows the endpoint is disabled,
 	 * or the HCD has noted it is disabled, ignore this request
 	 */
-	if ((ep_ctx->ep_info & EP_STATE_MASK) == EP_STATE_DISABLED ||
-			ctrl_ctx->drop_flags & xhci_get_endpoint_flag(&ep->desc)) {
+	if ((SWAP32(ep_ctx->ep_info) & EP_STATE_MASK) == EP_STATE_DISABLED ||
+			SWAP32(ctrl_ctx->drop_flags) & xhci_get_endpoint_flag(&ep->desc)) {
 		xhci_warn(xhci, "xHCI %s called with disabled ep %p\n",
 				__func__, ep);
 		return 0;
 	}
 
-	ctrl_ctx->drop_flags |= drop_flag;
-	new_drop_flags = ctrl_ctx->drop_flags;
+	ctrl_ctx->drop_flags |= SWAP32(drop_flag);
+	new_drop_flags = SWAP32(ctrl_ctx->drop_flags);
 
-	ctrl_ctx->add_flags &= ~drop_flag;
-	new_add_flags = ctrl_ctx->add_flags;
+	ctrl_ctx->add_flags &= SWAP32(~drop_flag);
+	new_add_flags = SWAP32(ctrl_ctx->add_flags);
 
-	last_ctx = xhci_last_valid_endpoint(ctrl_ctx->add_flags);
+	last_ctx = xhci_last_valid_endpoint(SWAP32(ctrl_ctx->add_flags));
 	slot_ctx = xhci_get_slot_ctx(xhci, in_ctx);
 	/* Update the last valid endpoint context, if we deleted the last one */
-	if ((slot_ctx->dev_info & LAST_CTX_MASK) > LAST_CTX(last_ctx)) {
-		slot_ctx->dev_info &= ~LAST_CTX_MASK;
-		slot_ctx->dev_info |= LAST_CTX(last_ctx);
+	if ((SWAP32(slot_ctx->dev_info) & LAST_CTX_MASK) > LAST_CTX(last_ctx)) {
+		slot_ctx->dev_info &= SWAP32(~LAST_CTX_MASK);
+		slot_ctx->dev_info |= SWAP32(LAST_CTX(last_ctx));
 	}
-	new_slot_info = slot_ctx->dev_info;
+	new_slot_info = SWAP32(slot_ctx->dev_info);
 
 	xhci_endpoint_zero(xhci, xhci->devs[udev->slot_id], ep);
 
@@ -1030,7 +1092,7 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	/* If the HCD has already noted the endpoint is enabled,
 	 * ignore this request.
 	 */
-	if (ctrl_ctx->add_flags & xhci_get_endpoint_flag(&ep->desc)) {
+	if (ctrl_ctx->add_flags & SWAP32(xhci_get_endpoint_flag(&ep->desc))) {
 		xhci_warn(xhci, "xHCI %s called with enabled ep %p\n",
 				__func__, ep);
 		return 0;
@@ -1047,8 +1109,8 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 		return -ENOMEM;
 	}
 
-	ctrl_ctx->add_flags |= added_ctxs;
-	new_add_flags = ctrl_ctx->add_flags;
+	ctrl_ctx->add_flags |= SWAP32(added_ctxs);
+	new_add_flags = SWAP32(ctrl_ctx->add_flags);
 
 	/* If xhci_endpoint_disable() was called for this endpoint, but the
 	 * xHC hasn't been notified yet through the check_bandwidth() call,
@@ -1056,15 +1118,15 @@ int xhci_add_endpoint(struct usb_hcd *hcd, struct usb_device *udev,
 	 * descriptors.  We must drop and re-add this endpoint, so we leave the
 	 * drop flags alone.
 	 */
-	new_drop_flags = ctrl_ctx->drop_flags;
+	new_drop_flags = SWAP32(ctrl_ctx->drop_flags);
 
 	slot_ctx = xhci_get_slot_ctx(xhci, in_ctx);
 	/* Update the last valid endpoint context, if we just added one past */
-	if ((slot_ctx->dev_info & LAST_CTX_MASK) < LAST_CTX(last_ctx)) {
-		slot_ctx->dev_info &= ~LAST_CTX_MASK;
-		slot_ctx->dev_info |= LAST_CTX(last_ctx);
+	if ((SWAP32(slot_ctx->dev_info) & LAST_CTX_MASK) < LAST_CTX(last_ctx)) {
+		slot_ctx->dev_info &= SWAP32(~LAST_CTX_MASK);
+		slot_ctx->dev_info |= SWAP32(LAST_CTX(last_ctx));
 	}
-	new_slot_info = slot_ctx->dev_info;
+	new_slot_info = SWAP32(slot_ctx->dev_info);
 
 	/* Store the usb_device pointer for later use */
 	ep->hcpriv = udev;
@@ -1094,9 +1156,9 @@ static void xhci_zero_in_ctx(struct xhci_hcd *xhci, struct xhci_virt_device *vir
 	ctrl_ctx->drop_flags = 0;
 	ctrl_ctx->add_flags = 0;
 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->in_ctx);
-	slot_ctx->dev_info &= ~LAST_CTX_MASK;
+	slot_ctx->dev_info &= SWAP32(~LAST_CTX_MASK);
 	/* Endpoint 0 is always valid */
-	slot_ctx->dev_info |= LAST_CTX(1);
+	slot_ctx->dev_info |= SWAP32(LAST_CTX(1));
 	for (i = 1; i < 31; ++i) {
 		ep_ctx = xhci_get_ep_ctx(xhci, virt_dev->in_ctx, i);
 		ep_ctx->ep_info = 0;
@@ -1276,14 +1338,14 @@ int xhci_check_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 
 	/* See section 4.6.6 - A0 = 1; A1 = D0 = D1 = 0 */
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, virt_dev->in_ctx);
-	ctrl_ctx->add_flags |= SLOT_FLAG;
-	ctrl_ctx->add_flags &= ~EP0_FLAG;
-	ctrl_ctx->drop_flags &= ~SLOT_FLAG;
-	ctrl_ctx->drop_flags &= ~EP0_FLAG;
+	ctrl_ctx->add_flags |= SWAP32(SLOT_FLAG);
+	ctrl_ctx->add_flags &= SWAP32(~EP0_FLAG);
+	ctrl_ctx->drop_flags &= SWAP32(~SLOT_FLAG);
+	ctrl_ctx->drop_flags &= SWAP32(~EP0_FLAG);
 	xhci_dbg(xhci, "New Input Control Context:\n");
 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->in_ctx);
 	xhci_dbg_ctx(xhci, virt_dev->in_ctx,
-			LAST_CTX_TO_EP_NUM(slot_ctx->dev_info));
+			LAST_CTX_TO_EP_NUM(SWAP32(slot_ctx->dev_info)));
 
 	ret = xhci_configure_endpoint(xhci, udev, NULL,
 			false, false);
@@ -1294,7 +1356,7 @@ int xhci_check_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 
 	xhci_dbg(xhci, "Output context after successful config ep cmd:\n");
 	xhci_dbg_ctx(xhci, virt_dev->out_ctx,
-			LAST_CTX_TO_EP_NUM(slot_ctx->dev_info));
+			LAST_CTX_TO_EP_NUM(SWAP32(slot_ctx->dev_info)));
 
 	xhci_zero_in_ctx(xhci, virt_dev);
 	/* Free any old rings */
@@ -1344,10 +1406,10 @@ static void xhci_setup_input_ctx_for_config_ep(struct xhci_hcd *xhci,
 {
 	struct xhci_input_control_ctx *ctrl_ctx;
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, in_ctx);
-	ctrl_ctx->add_flags = add_flags;
-	ctrl_ctx->drop_flags = drop_flags;
+	ctrl_ctx->add_flags = SWAP32(add_flags);
+	ctrl_ctx->drop_flags = SWAP32(drop_flags);
 	xhci_slot_copy(xhci, in_ctx, out_ctx);
-	ctrl_ctx->add_flags |= SLOT_FLAG;
+	ctrl_ctx->add_flags |= SWAP32(SLOT_FLAG);
 
 	xhci_dbg(xhci, "Input Context:\n");
 	xhci_dbg_ctx(xhci, in_ctx, xhci_last_valid_endpoint(add_flags));
@@ -1376,7 +1438,7 @@ void xhci_setup_input_ctx_for_quirk(struct xhci_hcd *xhci,
 				deq_state->new_deq_ptr);
 		return;
 	}
-	ep_ctx->deq = addr | deq_state->new_cycle_state;
+	ep_ctx->deq = SWAP64(addr | deq_state->new_cycle_state);
 
 	added_ctxs = xhci_get_endpoint_flag_from_index(ep_index);
 	xhci_setup_input_ctx_for_config_ep(xhci, xhci->devs[slot_id]->in_ctx,
@@ -1649,7 +1711,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 			udev->slot_id,
 			&xhci->dcbaa->dev_context_ptrs[udev->slot_id],
 			(unsigned long long)
-				xhci->dcbaa->dev_context_ptrs[udev->slot_id]);
+				SWAP64(xhci->dcbaa->dev_context_ptrs[udev->slot_id]));
 	xhci_dbg(xhci, "Output Context DMA address = %#08llx\n",
 			(unsigned long long)virt_dev->out_ctx->dma);
 	xhci_dbg(xhci, "Slot ID %d Input Context:\n", udev->slot_id);
@@ -1661,7 +1723,7 @@ int xhci_address_device(struct usb_hcd *hcd, struct usb_device *udev)
 	 * address given back to us by the HC.
 	 */
 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->out_ctx);
-	udev->devnum = (slot_ctx->dev_state & DEV_ADDR_MASK) + 1;
+	udev->devnum = (SWAP32(slot_ctx->dev_state) & DEV_ADDR_MASK) + 1;
 	/* Zero the input context control for later use */
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, virt_dev->in_ctx);
 	ctrl_ctx->add_flags = 0;
@@ -1707,16 +1769,16 @@ int xhci_update_hub_device(struct usb_hcd *hcd, struct usb_device *hdev,
 	spin_lock_irqsave(&xhci->lock, flags);
 	xhci_slot_copy(xhci, config_cmd->in_ctx, vdev->out_ctx);
 	ctrl_ctx = xhci_get_input_control_ctx(xhci, config_cmd->in_ctx);
-	ctrl_ctx->add_flags |= SLOT_FLAG;
+	ctrl_ctx->add_flags |= SWAP32(SLOT_FLAG);
 	slot_ctx = xhci_get_slot_ctx(xhci, config_cmd->in_ctx);
-	slot_ctx->dev_info |= DEV_HUB;
+	slot_ctx->dev_info |= SWAP32(DEV_HUB);
 	if (tt->multi)
-		slot_ctx->dev_info |= DEV_MTT;
+		slot_ctx->dev_info |= SWAP32(DEV_MTT);
 	if (xhci->hci_version > 0x95) {
 		xhci_dbg(xhci, "xHCI version %x needs hub "
 				"TT think time and number of ports\n",
 				(unsigned int) xhci->hci_version);
-		slot_ctx->dev_info2 |= XHCI_MAX_PORTS(hdev->maxchild);
+		slot_ctx->dev_info2 |= SWAP32(XHCI_MAX_PORTS(hdev->maxchild));
 		/* Set TT think time - convert from ns to FS bit times.
 		 * 0 = 8 FS bit times, 1 = 16 FS bit times,
 		 * 2 = 24 FS bit times, 3 = 32 FS bit times.
@@ -1724,7 +1786,7 @@ int xhci_update_hub_device(struct usb_hcd *hcd, struct usb_device *hdev,
 		think_time = tt->think_time;
 		if (think_time != 0)
 			think_time = (think_time / 666) - 1;
-		slot_ctx->tt_info |= TT_THINK_TIME(think_time);
+		slot_ctx->tt_info |= SWAP32(TT_THINK_TIME(think_time));
 	} else {
 		xhci_dbg(xhci, "xHCI version %x doesn't need hub "
 				"TT think time or number of ports\n",
@@ -1772,10 +1834,27 @@ static int __init xhci_hcd_init(void)
 #ifdef CONFIG_PCI
 	int retval = 0;
 
+#ifdef CONFIG_VR9
+	retval = ifx_gpio_register(IFX_GPIO_MODULE_USB);
+	if (retval < 0) {
+		printk(KERN_DEBUG "Problem registering GPIO module.");
+		return retval;
+	}	
+	retval = avm_get_hw_config(AVM_HW_CONFIG_VERSION, "gpio_usb_power_enable", &usb_power_gpio, NULL);
+	if (retval < 0) {
+		printk(KERN_DEBUG "Problem getting GPIO pin.");
+		ifx_gpio_deregister(IFX_GPIO_MODULE_USB);
+		return retval;
+	}
+
+#endif
 	retval = xhci_register_pci();
 
 	if (retval < 0) {
 		printk(KERN_DEBUG "Problem registering PCI driver.");
+#ifdef CONFIG_VR9
+		ifx_gpio_deregister(IFX_GPIO_MODULE_USB);
+#endif
 		return retval;
 	}
 #endif
@@ -1805,6 +1884,9 @@ static void __exit xhci_hcd_cleanup(void)
 {
 #ifdef CONFIG_PCI
 	xhci_unregister_pci();
+#ifdef CONFIG_VR9
+	ifx_gpio_deregister(IFX_GPIO_MODULE_USB);
+#endif
 #endif
 }
 module_exit(xhci_hcd_cleanup);

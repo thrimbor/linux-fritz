@@ -1,0 +1,11 @@
+# Makefile to build ipvoice for Linux 2.6
+EXTRA_CFLAGS += -I$(PWD)/include -DLINUX_2_6
+
+ifdef CONFIG_FUSIV_VX180
+BME_OBJ := bmedriver_vx180.o
+else
+BME_OBJ := bmedriver.o bmeapi.o
+endif
+
+obj-m :=  bmedrv.o
+bmedrv-objs := $(BME_OBJ)

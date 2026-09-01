@@ -1955,6 +1955,7 @@ uart_set_options(struct uart_port *port, struct console *co,
 	 * So we set * DTR in host uart to make them happy
 	 */
 	port->mctrl |= TIOCM_DTR;
+	/*--- port->mctrl = (unsigned int)0xF; ---*/
 
 	port->ops->set_termios(port, &termios, &dummy);
 	/*
@@ -1972,6 +1973,7 @@ EXPORT_SYMBOL_GPL(uart_set_options);
 static void uart_change_pm(struct uart_state *state, int pm_state)
 {
 	struct uart_port *port = state->uart_port;
+	return;
 
 	if (state->pm_state != pm_state) {
 		if (port->ops->pm)
@@ -2159,6 +2161,7 @@ uart_report_port(struct uart_driver *drv, struct uart_port *port)
 		break;
 	case UPIO_MEM:
 	case UPIO_MEM32:
+	case UPIO_MEM16:
 	case UPIO_AU:
 	case UPIO_TSI:
 	case UPIO_DWAPB:
@@ -2572,6 +2575,7 @@ int uart_match_port(struct uart_port *port1, struct uart_port *port2)
 		       (port1->hub6   == port2->hub6);
 	case UPIO_MEM:
 	case UPIO_MEM32:
+	case UPIO_MEM16:
 	case UPIO_AU:
 	case UPIO_TSI:
 	case UPIO_DWAPB:

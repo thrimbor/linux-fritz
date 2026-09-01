@@ -1,0 +1,1 @@
+../../drivers/isdn/capi_oslib/linux_new_capi.h

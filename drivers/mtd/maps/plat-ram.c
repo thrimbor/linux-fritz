@@ -129,6 +129,30 @@ static int platram_remove(struct platform_device *pdev)
  * called from device drive system when a device matching our
  * driver is found.
 */
+void debug_print_memmaps(struct resource *root, int level){
+	int i;
+	char prefix[30]; 
+
+	for (i = 0; i < level * 3; i++) {
+		prefix[i] = ' ';
+	}
+	prefix[i] = 0;
+
+	printk("%s   [%d]-----------\n",prefix, level);
+	printk("%s   name=%s \n",prefix, root->name );
+	printk("%s   start=0x%08x \n",prefix, (unsigned int)root->start );
+	printk("%s   end=0x%08x \n",prefix, (unsigned int)root->end );
+	printk("%s   flags=%#lx \n",prefix, (long unsigned int)root->flags );
+	printk("%s   ------------\n", prefix);
+	if (root->child) {
+		debug_print_memmaps(root->child, level + 1 );
+	}
+	if (root->sibling) {
+		debug_print_memmaps(root->sibling, level);
+	}
+	return; 
+}
+
 
 static int platram_probe(struct platform_device *pdev)
 {
@@ -137,6 +161,7 @@ static int platram_probe(struct platform_device *pdev)
 	struct resource *res;
 	int err = 0;
 
+	printk("[%s] %d\n ", __FUNCTION__, __LINE__);
 	dev_dbg(&pdev->dev, "probe entered\n");
 
 	if (pdev->dev.platform_data == NULL) {
@@ -182,9 +207,12 @@ static int platram_probe(struct platform_device *pdev)
 
 	/* register our usage of the memory area */
 
+	debug_print_memmaps( &iomem_resource, 0);
+
 	info->area = request_mem_region(res->start, info->map.size, pdev->name);
 	if (info->area == NULL) {
 		dev_err(&pdev->dev, "failed to request memory region\n");
+		debug_print_memmaps( &iomem_resource, 0);
 		err = -EIO;
 		goto exit_free;
 	}
@@ -192,6 +220,7 @@ static int platram_probe(struct platform_device *pdev)
 	/* remap the memory area */
 
 	info->map.virt = ioremap(res->start, info->map.size);
+	printk("[%s] ioremap start=%#x, virt=%#x \n", __FUNCTION__, (unsigned int)res->start, (unsigned int)info->map.virt);
 	dev_dbg(&pdev->dev, "virt %p, %lu bytes\n", info->map.virt, info->map.size);
 
 	if (info->map.virt == NULL) {

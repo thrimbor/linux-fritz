@@ -21,6 +21,7 @@
 #include <linux/console.h>
 #include <linux/pfn.h>
 #include <linux/debugfs.h>
+#include <linux/avm_kernel_config.h>
 
 #include <asm/addrspace.h>
 #include <asm/bootinfo.h>
@@ -31,6 +32,11 @@
 #include <asm/setup.h>
 #include <asm/smp-ops.h>
 #include <asm/system.h>
+#include <asm/prom.h>
+
+#if defined(CONFIG_LANTIQ)
+    #include "../mach-infineon/common/ifxmips_core.h"
+#endif /*--- #if defined(CONFIG_LANTIQ) ---*/
 
 struct cpuinfo_mips cpu_data[NR_CPUS] __read_mostly;
 
@@ -102,6 +108,7 @@ void __init add_memory_region(phys_t start, phys_t size, long type)
 	boot_mem_map.nr_map++;
 }
 
+#if 0
 static void __init print_memory_map(void)
 {
 	int i;
@@ -119,6 +126,9 @@ static void __init print_memory_map(void)
 		case BOOT_MEM_ROM_DATA:
 			printk(KERN_CONT "(ROM data)\n");
 			break;
+		case BOOT_MEM_BOOTLOADER:
+			printk(KERN_CONT "(bootloader)\n");
+			break;
 		case BOOT_MEM_RESERVED:
 			printk(KERN_CONT "(reserved)\n");
 			break;
@@ -128,6 +138,7 @@ static void __init print_memory_map(void)
 		}
 	}
 }
+#endif
 
 /*
  * Manage initrd
@@ -474,7 +485,7 @@ static void __init arch_mem_init(char **cmdline_p)
 	plat_mem_setup();
 
 	pr_info("Determined physical RAM map:\n");
-	print_memory_map();
+	/*--- print_memory_map(); ---*/
 
 	strlcpy(command_line, arcs_cmdline, sizeof(command_line));
 	strlcpy(boot_command_line, command_line, COMMAND_LINE_SIZE);
@@ -485,7 +496,7 @@ static void __init arch_mem_init(char **cmdline_p)
 
 	if (usermem) {
 		pr_info("User-defined physical RAM map:\n");
-		print_memory_map();
+		/*--- print_memory_map(); ---*/
 	}
 
 	bootmem_init();
@@ -514,8 +525,19 @@ static void __init resource_init(void)
 
 		start = boot_mem_map.map[i].addr;
 		end = boot_mem_map.map[i].addr + boot_mem_map.map[i].size - 1;
-		if (start >= HIGHMEM_START)
+
+        /*--- printk("[%s] boot_mem_map.map[%d].addr = 0x%lx\n", __FUNCTION__, i, start); ---*/
+        /*--- printk("[%s] boot_mem_map.map[%d].end  = 0x%lx\n", __FUNCTION__, i, end); ---*/
+        /*--- printk("[%s] boot_mem_map.map[%d].type = %s\n", __FUNCTION__, i, ---*/ 
+            /*--- boot_mem_map.map[i].type == BOOT_MEM_RAM ?  "BOOT_MEM_RAM" : ---*/
+            /*--- boot_mem_map.map[i].type == BOOT_MEM_ROM_DATA ?  "BOOT_MEM_ROM_DATA" : ---*/
+            /*--- boot_mem_map.map[i].type == BOOT_MEM_BOOTLOADER ?  "BOOT_MEM_BOOTLOADER" : ---*/
+            /*--- boot_mem_map.map[i].type == BOOT_MEM_RESERVED ?  "BOOT_MEM_RESERVED" : "BOOT_MEM_UNKNWON"); ---*/
+
+		if (start >= HIGHMEM_START) {
+            /*--- printk("[%s] start >= HIGHMEM_START (0x%lx)\n", __FUNCTION__, HIGHMEM_START); ---*/
 			continue;
+        }
 		if (end >= HIGHMEM_START)
 			end = HIGHMEM_START - 1;
 
@@ -525,6 +547,9 @@ static void __init resource_init(void)
 		case BOOT_MEM_ROM_DATA:
 			res->name = "System RAM";
 			break;
+        case BOOT_MEM_BOOTLOADER:
+			res->name = "bootloader";
+			break;
 		case BOOT_MEM_RESERVED:
 		default:
 			res->name = "reserved";
@@ -533,23 +558,88 @@ static void __init resource_init(void)
 		res->start = start;
 		res->end = end;
 
+
+        /*--- printk("[%s] reserve '%s'\n", __FUNCTION__, res->name); ---*/
 		res->flags = IORESOURCE_MEM | IORESOURCE_BUSY;
 		request_resource(&iomem_resource, res);
 
-		/*
-		 *  We don't know which RAM region contains kernel data,
-		 *  so we try it repeatedly and let the resource manager
-		 *  test it.
-		 */
-		request_resource(res, &code_resource);
-		request_resource(res, &data_resource);
-	}
+        /*
+         *  We don't know which RAM region contains kernel data,
+         *  so we try it repeatedly and let the resource manager
+         *  test it.
+         */
+        request_resource(res, &code_resource);
+        request_resource(res, &data_resource);
+
+        {
+            static char run_once = 0;
+
+            if(!run_once) {
+#if defined(CONFIG_MIPS_VPE_LOADER)
+                extern struct resource *ar9vr9_alloc_c55_code(unsigned long start, unsigned long end);
+                struct resource *pc55req;
+                /*--- struct resource *pmodulereq; ---*/
+                pc55req = ar9vr9_alloc_c55_code(res->start, res->end);
+                if(pc55req) {
+                    request_resource(res, pc55req);
+                    /*--- reserved memory for all time: ---*/
+                    if(reserve_bootmem(pc55req->start, pc55req->end - pc55req->start + 1, BOOTMEM_DEFAULT)) {
+                        printk(KERN_ERR "[c55-alloc] reserve memory for module-load failed (start 0x%x end 0x%x)\n",
+                                pc55req->start, pc55req->end);
+                    }
+                }
+#endif/*--- #if defined(CONFIG_MIPS_VPE_LOADER) ---*/
+
+
+                {
+                    extern unsigned long module_alloc_size_list_base;
+                    extern unsigned int module_alloc_size_list_size;
+                    static struct resource module_param;
+                    char *arg;
+                    if(kernel_modulmemory_config) {
+                        struct _kernel_modulmemory_config *C = kernel_modulmemory_config;
+                        module_alloc_size_list_size = 0;
+                        while(C->name) {
+                            module_alloc_size_list_size += (C->size + 4096) & ~(4096 - 1);
+                            C++;
+                        }
+                        printk("[module-alloc-by-name] 'modulemem' not in use, use AVM Kernel Config (%d bytes, reserved for module mem)\n", module_alloc_size_list_size );
+                    } else if((arg = prom_getenv("modulemem")) != NULL) {
+                        module_alloc_size_list_size = simple_strtoul(arg, NULL, 0);
+                    }
+                    if(module_alloc_size_list_size == 0UL) {
+                        printk("[module-alloc-by-name] 'modulemem' not set, function disabled\n");
+                    } else {
+                        module_alloc_size_list_base = (unsigned long)alloc_bootmem_pages((module_alloc_size_list_size >> PAGE_SHIFT) + 1);
+                        module_param.start = CPHYSADDR(module_alloc_size_list_base);
+                        module_param.end = CPHYSADDR(module_alloc_size_list_base + module_alloc_size_list_size);
+                        module_param.name  = "module memory";
+                        module_param.flags = IORESOURCE_MEM | IORESOURCE_BUSY;
+                        if(request_resource(res, &module_param)) {
+                            printk(KERN_ERR "[module-alloc] failed 0x%x bytes at 0x%lx\n", module_alloc_size_list_size, module_alloc_size_list_base);
+                        } else {
+                            printk(KERN_ERR "[module-alloc] use 0x%x bytes at 0x%lx\n", module_alloc_size_list_size, module_alloc_size_list_base);
+                        }
+                        if(reserve_bootmem(module_param.start, module_param.end - module_param.start + 1, BOOTMEM_DEFAULT)) {
+                            printk(KERN_ERR "[module-alloc] reserve memory for module-load failed (start 0x%x end 0x%x)\n",
+                                    module_param.start, module_param.end);
+                        }
+                    }
+
+                }
+                run_once = 1;
+            }
+        }
+    }
 }
 
 void __init setup_arch(char **cmdline_p)
 {
 	cpu_probe();
 	prom_init();
+
+
+    init_avm_kernel_config();  /* init avm kernel config */
 
 #ifdef CONFIG_EARLY_PRINTK
 	setup_early_printk();
@@ -594,6 +684,9 @@ __setup("nodsp", dsp_disable);
 
 unsigned long kernelsp[NR_CPUS];
 unsigned long fw_arg0, fw_arg1, fw_arg2, fw_arg3;
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+EXPORT_SYMBOL(kernelsp);
+#endif/*--- #if defined(CONFIG_NMI_ARBITER_WORKAROUND) ---*/
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *mips_debugfs_dir;

@@ -216,7 +216,11 @@ extern void inet_twsk_purge(struct net *net, struct inet_hashinfo *hashinfo,
 			    struct inet_timewait_death_row *twdr, int family);
 
 static inline
-struct net *twsk_net(const struct inet_timewait_sock *twsk)
+struct net *twsk_net(const struct inet_timewait_sock *twsk
+#ifndef CONFIG_NET_NS
+        __attribute__((unused))
+#endif
+        )
 {
 #ifdef CONFIG_NET_NS
 	return twsk->tw_net;
@@ -226,7 +230,15 @@ struct net *twsk_net(const struct inet_timewait_sock *twsk)
 }
 
 static inline
-void twsk_net_set(struct inet_timewait_sock *twsk, struct net *net)
+void twsk_net_set(struct inet_timewait_sock *twsk
+#ifndef CONFIG_NET_NS
+        __attribute__((unused))
+#endif
+        , struct net *net
+#ifndef CONFIG_NET_NS
+        __attribute__((unused))
+#endif
+    )
 {
 #ifdef CONFIG_NET_NS
 	twsk->tw_net = net;

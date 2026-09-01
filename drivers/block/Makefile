@@ -35,6 +35,9 @@ obj-$(CONFIG_BLK_DEV_SX8)	+= sx8.o
 obj-$(CONFIG_BLK_DEV_UB)	+= ub.o
 obj-$(CONFIG_BLK_DEV_HD)	+= hd.o
 
+obj-$(CONFIG_COMPCACHE)		+= compcache/
+# obj-$(CONFIG_BLK_DEV_VIRTUAL_FAT) += virtual_fat/
+
 obj-$(CONFIG_XEN_BLKDEV_FRONTEND)	+= xen-blkfront.o
 
 swim_mod-objs	:= swim.o swim_asm.o

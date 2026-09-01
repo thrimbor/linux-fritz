@@ -124,4 +124,26 @@ config HAVE_DMA_API_DEBUG
 config HAVE_DEFAULT_NO_SPIN_MUTEXES
 	bool
 
+config AVM_ARCH_STATIC_WLAN_MEMORY
+	bool "Use static memory for WLAN subsystem"
+	depends on MACH_FUSIV || (LANTIQ && (AR9 || (AR10 || VR9)))
+	default n
+	help
+	  Reserve a fixed memory region for DMA descriptors in AVM WLAN
+	  subsystem besides the kernel memory management.
+
+config AVM_ARCH_STATIC_WLAN_MEMORY_SIZE
+	int "Static WLAN memory size (in kilobytes)"
+	depends on AVM_ARCH_STATIC_WLAN_MEMORY
+	default "1024" if MACH_FUSIV
+	default "512"
+	help
+	  Fixed/static memory region size in kilobytes.
+
+#
+# Whether Atheros AoW is supported for a given platform.
+#
+config HAVE_AOW_PLATFORM_SUPPORT
+	bool
+
 source "kernel/gcov/Kconfig"

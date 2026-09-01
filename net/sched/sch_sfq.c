@@ -358,6 +358,8 @@ sfq_dequeue(struct Qdisc *sch)
 
 	/* Grab packet */
 	skb = __skb_dequeue(&q->qs[a]);
+    if (!skb)
+       return NULL;
 	sfq_dec(q, a);
 	sch->q.qlen--;
 	sch->qstats.backlog -= qdisc_pkt_len(skb);

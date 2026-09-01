@@ -40,68 +40,74 @@ bool kmemcheck_is_obj_initialized(unsigned long addr, size_t size);
 #define kmemcheck_enabled 0
 
 static inline void
-kmemcheck_alloc_shadow(struct page *page, int order, gfp_t flags, int node)
+kmemcheck_alloc_shadow(struct page *page __attribute__ ((unused)),
+                       int order __attribute__ ((unused)), 
+                       gfp_t flags __attribute__ ((unused)),
+                       int node __attribute__ ((unused)))
 {
 }
 
 static inline void
-kmemcheck_free_shadow(struct page *page, int order)
+kmemcheck_free_shadow(struct page *page __attribute__ ((unused)), int order __attribute__ ((unused)))
 {
 }
 
 static inline void
-kmemcheck_slab_alloc(struct kmem_cache *s, gfp_t gfpflags, void *object,
-		     size_t size)
+kmemcheck_slab_alloc(struct kmem_cache *s __attribute__ ((unused)),
+                     gfp_t gfpflags __attribute__ ((unused)),
+                     void *object __attribute__ ((unused)),
+                     size_t size __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_slab_free(struct kmem_cache *s, void *object,
-				       size_t size)
+static inline void kmemcheck_slab_free(struct kmem_cache *s __attribute__ ((unused)),
+                                       void *object __attribute__ ((unused)),
+                                       size_t size __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_pagealloc_alloc(struct page *p,
-	unsigned int order, gfp_t gfpflags)
+static inline void kmemcheck_pagealloc_alloc(struct page *p __attribute__ ((unused)),
+	unsigned int order __attribute__ ((unused)), gfp_t gfpflags __attribute__ ((unused)))
 {
 }
 
-static inline bool kmemcheck_page_is_tracked(struct page *p)
+static inline bool kmemcheck_page_is_tracked(struct page *p __attribute__ ((unused)))
 {
 	return false;
 }
 
-static inline void kmemcheck_mark_unallocated(void *address, unsigned int n)
+static inline void kmemcheck_mark_unallocated(void *address __attribute__ ((unused)), unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_mark_uninitialized(void *address, unsigned int n)
+static inline void kmemcheck_mark_uninitialized(void *address __attribute__ ((unused)), unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_mark_initialized(void *address, unsigned int n)
+static inline void kmemcheck_mark_initialized(void *address __attribute__ ((unused)), unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_mark_freed(void *address, unsigned int n)
+static inline void kmemcheck_mark_freed(void *address __attribute__ ((unused)), unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_mark_unallocated_pages(struct page *p,
-						    unsigned int n)
+static inline void kmemcheck_mark_unallocated_pages(struct page *p __attribute__ ((unused)),
+						    unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_mark_uninitialized_pages(struct page *p,
-						      unsigned int n)
+static inline void kmemcheck_mark_uninitialized_pages(struct page *p __attribute__ ((unused)),
+						      unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline void kmemcheck_mark_initialized_pages(struct page *p,
-						    unsigned int n)
+static inline void kmemcheck_mark_initialized_pages(struct page *p __attribute__ ((unused)),
+						    unsigned int n __attribute__ ((unused)))
 {
 }
 
-static inline bool kmemcheck_is_obj_initialized(unsigned long addr, size_t size)
+static inline bool kmemcheck_is_obj_initialized(unsigned long addr __attribute__ ((unused)), size_t size __attribute__ ((unused)))
 {
 	return true;
 }

@@ -143,6 +143,15 @@ static char __log_buf[__LOG_BUF_LEN];
 static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
+#ifdef CONFIG_TFFS_PANIC_LOG
+unsigned long printk_get_buffer(char **p_log_buf, unsigned long *p_log_end, unsigned long *p_anzahl) {
+    *p_log_buf = log_buf;
+    *p_log_end = log_end & LOG_BUF_MASK;
+    *p_anzahl  = log_end;
+    /*--- printk("[printk_get_buffer] log_buf 0x%p len %d write_pos %ld anzahl %ld\n", log_buf, log_buf_len, log_end & LOG_BUF_MASK, log_end); ---*/
+    return log_buf_len;
+}
+#endif /*--- #ifdef CONFIG_TFFS_PANIC_LOG ---*/
 
 #ifdef CONFIG_KEXEC
 /*
@@ -585,7 +594,31 @@ static int have_callable_console(void)
  *
  * See the vsnprintf() documentation for format string extensions over C99.
  */
+#if 0
+#define EARLY_SERIAL_DEBUG  1
 
+extern void serial_print(char *fmt, ...);
+extern void writeserial(char *str,int count);
+static char sprint_buf[1024];
+asmlinkage int printk(const char *fmt, ...)
+{
+        va_list args;
+        int n;
+
+        va_start(args, fmt);
+        n = vsprintf(sprint_buf, fmt, args);
+        va_end(args);
+        writeserial(sprint_buf,n);
+        return n;
+}
+#endif
+#undef vprintk
+asmlinkage int vprintk(const char *fmt, va_list args);
+asmlinkage int (*__vprintk)(const char * fmt, va_list args) = vprintk;
+asmlinkage int (*_vprintk)(const char * fmt, va_list args)  = vprintk;
+
+#undef printk
+#if 1
 asmlinkage int printk(const char *fmt, ...)
 {
 	va_list args;
@@ -597,7 +630,48 @@ asmlinkage int printk(const char *fmt, ...)
 
 	return r;
 }
+#endif
+asmlinkage int (*__printk)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2))) = printk;
+asmlinkage int (*_printk)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2)))  = printk;
 
+EXPORT_SYMBOL(__printk);  /* zeigt immer auf printk */
+EXPORT_SYMBOL(_printk);   /* wird umgesetzt */
+EXPORT_SYMBOL(__vprintk);  /* zeigt immer auf vprintk */
+EXPORT_SYMBOL(_vprintk);   /* wird umgesetzt */
+
+/*--------------------------------------------------------------------------------*\
+\*--------------------------------------------------------------------------------*/
+void set_printk(int (*__print)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2)))) {
+    _printk = __print;
+} 
+EXPORT_SYMBOL(set_printk);
+
+/*--------------------------------------------------------------------------------*\
+\*--------------------------------------------------------------------------------*/
+void set_vprintk(int (*__vprint)(const char * fmt, va_list args)) {
+    _vprintk = __vprint;
+} 
+EXPORT_SYMBOL(set_vprintk);
+
+#if defined(CONFIG_AVM_SAMMEL)
+void (*debug_sync)(void);
+EXPORT_SYMBOL(debug_sync);
+#endif/*--- #if defined(CONFIG_AVM_SAMMEL) ---*/
+
+/*--------------------------------------------------------------------------------*\
+\*--------------------------------------------------------------------------------*/
+void restore_printk(void) {
+    if(_printk != printk) {
+#if defined(CONFIG_AVM_SAMMEL)
+        if(debug_sync) {
+            debug_sync();    /*--- avm_debug -> printk ---*/
+        }
+#endif/*--- #if defined(CONFIG_AVM_SAMMEL) ---*/
+        _vprintk = vprintk;
+        _printk  = printk;
+    }
+}
+EXPORT_SYMBOL(restore_printk);
 /* cpu currently holding logbuf_lock */
 static volatile unsigned int printk_cpu = UINT_MAX;
 
@@ -802,6 +876,26 @@ EXPORT_SYMBOL(printk);
 EXPORT_SYMBOL(vprintk);
 
 #else
+
+#ifdef CONFIG_TFFS_PANIC_LOG
+unsigned long printk_get_buffer(char **p_log_buf, unsigned long *p_log_end, unsigned long *p_anzahl) {
+    static char Buffer[] = "[no debugs available]\n";
+    *p_log_buf = Buffer;
+    *p_log_end = Buffer + sizeof(Buffer) - 1;
+    *p_anzahl  = sizeof(Buffer) - 1;
+    return *p_anzahl;
+}
+#endif /*--- #ifdef CONFIG_TFFS_PANIC_LOG ---*/
+
+int dummy_printf (const char * fmt __attribute__ ((unused)), ...) {
+    return 0;
+}
+
+asmlinkage int (*__printk)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2))) = dummy_printf;
+asmlinkage int (*_printk)(const char * fmt, ...) __attribute__ ((format (printf, 1, 2)))  = dummy_printf;
+
+EXPORT_SYMBOL(__printk);  /* zeigt immer auf printk */
+EXPORT_SYMBOL(_printk);   /* wird umgesetzt */
 
 static void call_console_drivers(unsigned start, unsigned end)
 {

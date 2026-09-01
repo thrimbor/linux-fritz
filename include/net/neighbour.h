@@ -218,7 +218,7 @@ extern struct neigh_parms	*neigh_parms_alloc(struct net_device *dev, struct neig
 extern void			neigh_parms_release(struct neigh_table *tbl, struct neigh_parms *parms);
 
 static inline
-struct net			*neigh_parms_net(const struct neigh_parms *parms)
+struct net			*neigh_parms_net(const struct neigh_parms *parms __attribute__ ((unused)))
 {
 	return read_pnet(&parms->net);
 }
@@ -235,7 +235,7 @@ extern struct pneigh_entry	*__pneigh_lookup(struct neigh_table *tbl,
 extern int			pneigh_delete(struct neigh_table *tbl, struct net *net, const void *key, struct net_device *dev);
 
 static inline
-struct net			*pneigh_net(const struct pneigh_entry *pneigh)
+struct net			*pneigh_net(const struct pneigh_entry *pneigh __attribute__ ((unused)))
 {
 	return read_pnet(&pneigh->net);
 }

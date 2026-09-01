@@ -4,6 +4,7 @@
 
 obj-$(CONFIG_SERIAL_CORE) += serial_core.o
 obj-$(CONFIG_SERIAL_21285) += 21285.o
+obj-$(CONFIG_ATH_HS_UART) += ath_hs-uart.o
 
 # These Sparc drivers have to appear before others such as 8250
 # which share ttySx minor node space.  Otherwise console device
@@ -81,3 +82,10 @@ obj-$(CONFIG_SERIAL_KS8695) += serial_ks8695.o
 obj-$(CONFIG_KGDB_SERIAL_CONSOLE) += kgdboc.o
 obj-$(CONFIG_SERIAL_QE) += ucc_uart.o
 obj-$(CONFIG_SERIAL_TIMBERDALE)	+= timbuart.o
+obj-$(CONFIG_SERIAL_AVM) += serial_avm.o
+
+obj-$(CONFIG_SERIAL_HORNET) += hornet_serial.o
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/serial/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

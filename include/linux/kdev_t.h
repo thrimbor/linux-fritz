@@ -33,7 +33,7 @@ static inline dev_t old_decode_dev(u16 val)
 	return MKDEV((val >> 8) & 255, val & 255);
 }
 
-static inline int new_valid_dev(dev_t dev)
+static inline int new_valid_dev(dev_t dev __attribute__ ((unused)))
 {
 	return 1;
 }
@@ -52,7 +52,7 @@ static inline dev_t new_decode_dev(u32 dev)
 	return MKDEV(major, minor);
 }
 
-static inline int huge_valid_dev(dev_t dev)
+static inline int huge_valid_dev(dev_t dev __attribute__ ((unused)))
 {
 	return 1;
 }

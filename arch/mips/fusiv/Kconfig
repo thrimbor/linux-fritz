@@ -1,0 +1,53 @@
+choice
+	prompt "Fusiv Processor Type"
+	depends on MACH_FUSIV
+	default MACH_FUSIV_MIPS32
+
+config MACH_FUSIV_MIPS1
+	bool "Fusiv MIPS-1 based Lexra Core"
+	select BOOT_ELF32
+	select IRQ_CPU
+	select HW_HAS_PCI
+	select DMA_NONCOHERENT
+	select CPU_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select SYS_HAS_CPU_R3000
+
+config MACH_FUSIV_MIPS32
+	bool "Fusiv MIPS32 Core"
+	select BOOT_ELF32
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select HW_HAS_PCI
+	select CPU_HAS_LLSC
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+
+endchoice
+
+choice
+	prompt "Fusiv Platform Type"
+	depends on MACH_FUSIV
+        default FUSIV_VX180
+
+config FUSIV_VX200
+	bool "Fusiv vox 200 / vox 150"
+	depends on MACH_FUSIV_MIPS1
+
+config FUSIV_VX160
+	bool "Fusiv vox 160"
+	depends on MACH_FUSIV_MIPS1
+
+config FUSIV_AT300
+	bool "Fusiv AT 100/200/300"
+	depends on MACH_FUSIV_MIPS1
+
+config FUSIV_VX180
+	bool "Fusiv vox 180"
+	depends on MACH_FUSIV_MIPS32
+
+endchoice
+

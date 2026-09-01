@@ -8,6 +8,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
@@ -36,6 +37,89 @@ struct resource iomem_resource = {
 	.flags	= IORESOURCE_MEM,
 };
 EXPORT_SYMBOL(iomem_resource);
+
+#ifdef CONFIG_MIPS_UR8
+struct resource nwss_tx_queue_resource = {
+    .name   = "NWSS Tx Queue",
+    .start  = 0,
+    .end    = 17,
+	.flags	= IORESOURCE_DMA
+};
+EXPORT_SYMBOL(nwss_tx_queue_resource);
+
+struct resource nwss_tx_completion_queue_resource = {
+    .name   = "NWSS Tx Completion Queue",
+    .start  = 0,
+    .end    = 3,
+	.flags	= IORESOURCE_DMA
+};
+EXPORT_SYMBOL(nwss_tx_completion_queue_resource);
+
+struct resource nwss_rx_queue_resource = {
+    .name   = "NWSS Rx Queue",
+    .start  = 0,
+    .end    = 7,
+	.flags	= IORESOURCE_DMA
+};
+EXPORT_SYMBOL(nwss_rx_queue_resource);
+
+struct resource nwss_free_buffer_queue_resource = {
+    .name   = "NWSS Free Buffer Descriptor Queue",
+    .start  = 0,
+    .end    = 3,
+	.flags	= IORESOURCE_DMA
+};
+EXPORT_SYMBOL(nwss_free_buffer_queue_resource);
+
+struct resource nwss_free_packet_queue_resource = {
+    .name   = "NWSS Free Packet Descriptor Queue",
+    .start  = 0,
+    .end    = 1,
+	.flags	= IORESOURCE_DMA
+};
+EXPORT_SYMBOL(nwss_free_packet_queue_resource);
+
+struct resource timer_resource = {
+    .name   = "timer",
+    .start  = 0,
+    .end    = 3,
+	.flags	= IORESOURCE_IO
+};
+EXPORT_SYMBOL(timer_resource);
+#endif /*--- #ifdef CONFIG_MIPS_UR8 ---*/
+
+struct resource sflash_resource = {
+	.name	= "SFLASH",
+	.start	= 0,
+	.end	= 1024*1024,
+	.flags	= IORESOURCE_MEM,
+};
+EXPORT_SYMBOL(sflash_resource);
+
+struct resource nand_flash_resource = {
+	.name	= "NAND",
+	.start	= 0,
+	.end	= 1024*1024, /*--- Angaben in MByte ---*/ 
+	.flags	= IORESOURCE_MEM,
+};
+EXPORT_SYMBOL(nand_flash_resource);
+
+struct resource gpio_resource = {
+    .name   = "gpio",
+    .start  = 0,
+#   if defined(CONFIG_MIPS_FUSIV)
+    .end    = 31,
+#   elif defined (CONFIG_MIPS_UR8)
+    .end    = 43,
+#   elif defined (CONFIG_MACH_AR934x) || defined(CONFIG_MACH_QCA955x)
+    .end    = 116, /*--- 0..22, Shiftregister: 101..116 ---*/
+#   else /*--- #if defined(CONFIG_MIPS_FUSIV) ---*/
+    .end    = 64,
+#   endif /*--- #else ---*/ /*--- #if defined(CONFIG_MIPS_FUSIV) ---*/
+	.flags	= IORESOURCE_IO
+};
+EXPORT_SYMBOL(gpio_resource);
+
 
 static DEFINE_RWLOCK(resource_lock);
 
@@ -130,15 +214,62 @@ static const struct file_operations proc_iomem_operations = {
 	.release	= seq_release,
 };
 
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+static int iogpio_open(struct inode *inode, struct file *file)
+{
+	int res = seq_open(file, &resource_op);
+	if (!res) {
+		struct seq_file *m = file->private_data;
+		m->private = &gpio_resource;
+	}
+	return res;
+}
+
+static struct file_operations proc_gpio_operations = {
+    .open		= iogpio_open,
+    .read		= seq_read,
+    .llseek		= seq_lseek,
+    .release	= seq_release,
+};
+
 static int __init ioresources_init(void)
 {
 	proc_create("ioports", 0, NULL, &proc_ioports_operations);
 	proc_create("iomem", 0, NULL, &proc_iomem_operations);
+	proc_create("gpio", 0, NULL, &proc_gpio_operations);
 	return 0;
 }
 __initcall(ioresources_init);
 
 #endif /* CONFIG_PROC_FS */
+/*--- #define DEBUG_RESOURCE ---*/
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+void print_resource_tree(struct resource *root __attribute__ ((unused)), unsigned int level __attribute__ ((unused))) {
+#if defined(DEBUG_RESOURCE)
+    static const char *indent[] = {
+        "  ",
+        "    ",
+        "      ",
+        "        ",
+        "          ",
+        "            ",
+        "              ",
+        "                "
+    };
+    if(level == 0)
+        printk(KERN_ERR "[resource-tree] ");
+    while(root) {
+        printk(KERN_ERR "%d:%s[%s] (0x%x - 0x%x)\n", level, indent[level], root->name, root->start, root->end);
+        if(root->child) {
+            print_resource_tree(root->child, level + 1);
+        }
+        root = root->sibling;
+    }
+#endif /*--- #if defined(DEBUG_RESOURCE) ---*/
+}
+
 
 /* Return the conflict entry if you can't request it */
 static struct resource * __request_resource(struct resource *root, struct resource *new)
@@ -147,24 +278,44 @@ static struct resource * __request_resource(struct resource *root, struct resour
 	resource_size_t end = new->end;
 	struct resource *tmp, **p;
 
-	if (end < start)
+	if (end < start) {
+#if defined(DEBUG_RESOURCE)
+        printk(KERN_ERR "[request_resource] %s: end 0x%x < start 0x%x\n", new->name, end, start);
+#endif /*--- #if defined(DEBUG_RESOURCE) ---*/
 		return root;
-	if (start < root->start)
+    }
+	if (start < root->start) {
+#if defined(DEBUG_RESOURCE)
+        printk(KERN_ERR "[request_resource] %s: start 0x%x < root->start 0x%x\n", new->name, start, root->start);
+#endif /*--- #if defined(DEBUG_RESOURCE) ---*/
 		return root;
-	if (end > root->end)
+    }
+	if (end > root->end) {
+#if defined(DEBUG_RESOURCE)
+        printk(KERN_ERR "[request_resource] %s: end 0x%x > root->end 0x%x\n", new->name, end, root->end);
+#endif /*--- #if defined(DEBUG_RESOURCE) ---*/
 		return root;
+    }
 	p = &root->child;
 	for (;;) {
 		tmp = *p;
+        /*--- printk(KERN_ERR "[request_resource]: \"%s\": start(0x%x) - end(0x%x)\n", root && root->name ? root->name : "NULL", start, end); ---*/
 		if (!tmp || tmp->start > end) {
 			new->sibling = tmp;
 			*p = new;
 			new->parent = root;
+            /*--- printk("\n[request_resource] success (new child \"%s\")\n", new->name); ---*/
+            /*--- print_resource_tree(root, 0); ---*/
 			return NULL;
 		}
+        /*--- printk(KERN_ERR " tmp->start(0x%x) - tmp->end(0x%x) ", tmp->start, tmp->end); ---*/
 		p = &tmp->sibling;
-		if (tmp->end < start)
+		if (tmp->end < start) {
+            /*--- printk(KERN_ERR "tmp->start(0x%x) - tmp->end(0x%x): continue\n", tmp->start, tmp->end); ---*/
 			continue;
+        }
+        /*--- printk("\n[request_resource] %s (tmp->end(0x%x) < start(0x%x)\n", tmp ? "conflict" : "success", start); ---*/
+        /*--- if(tmp == NULL) print_resource_tree(root, 0); ---*/
 		return tmp;
 	}
 }

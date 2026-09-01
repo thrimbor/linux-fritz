@@ -68,13 +68,13 @@ void selinux_secmark_refcount_dec(void);
 bool selinux_is_enabled(void);
 #else
 
-static inline int selinux_string_to_sid(const char *str, u32 *sid)
+static inline int selinux_string_to_sid(const char *str __attribute__ ((unused)), u32 *sid)
 {
        *sid = 0;
        return 0;
 }
 
-static inline int selinux_secmark_relabel_packet_permission(u32 sid)
+static inline int selinux_secmark_relabel_packet_permission(u32 sid __attribute__ ((unused)))
 {
 	return 0;
 }

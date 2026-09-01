@@ -5,9 +5,15 @@ config MIPS
 	select HAVE_IDE
 	select HAVE_OPROFILE
 	select HAVE_ARCH_KGDB
+	select HAVE_FUNCTION_TRACER
+	select HAVE_FUNCTION_TRACE_MCOUNT_TEST
+	select HAVE_DYNAMIC_FTRACE
+	select HAVE_FTRACE_MCOUNT_RECORD
+	select HAVE_FUNCTION_GRAPH_TRACER
 	# Horrible source of confusion.  Die, die, die ...
 	select EMBEDDED
 	select RTC_LIB if !LEMOTE_FULOONG2E
+	select HAVE_OPROFILE
 
 mainmenu "Linux/MIPS Kernel Configuration"
 
@@ -42,6 +48,29 @@ config AR7
 	help
 	  Support for the Texas Instruments AR7 System-on-a-Chip
 	  family: TNETD7100, 7200 and 7300.
+
+config MIPS_UR8
+	bool "Texas Instruments UR8"
+	select HW_HAS_PCI
+	select BOOT_ELF32
+	select DMA_NONCOHERENT
+	select CEVT_R4K
+	select CSRC_R4K
+	select IRQ_CPU
+	select NO_EXCEPT_FILL
+	select SWAP_IO_SPACE
+	select MIPS_BOARDS_GEN
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_HAS_EARLY_PRINTK
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_LITTLE_ENDIAN
+	select GENERIC_GPIO
+	select GCD
+	select VLYNQ
+	select GENERIC_HARDIRQS_NO__DO_IRQ
+	help
+	  Support for the Texas Instruments UR8 System-on-a-Chip
 
 config BASLER_EXCITE
 	bool "Basler eXcite smart camera"
@@ -114,6 +143,14 @@ config MIPS_COBALT
 	select SYS_SUPPORTS_32BIT_KERNEL
 	select SYS_SUPPORTS_64BIT_KERNEL
 	select SYS_SUPPORTS_LITTLE_ENDIAN
+
+config MACH_FUSIV
+	bool "Fusiv processor based boards"
+    select MIPS_FUSIV
+
+config LANTIQ
+	bool "Support for Lantiq chips"
+	select SYS_HAS_EARLY_PRINTK
 
 config MACH_DECSTATION
 	bool "DECstations"
@@ -671,7 +708,217 @@ config CAVIUM_OCTEON_REFERENCE_BOARD
 		Hikari
 	  Say Y here for most Octeon reference boards.
 
+config  MACH_AR7100
+	bool "Support for Atheros ar7100 based boards"
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select HW_HAS_PCI
+
+config  MACH_AR7240
+	bool "Support for Atheros ar7240 based board"
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select HW_HAS_PCI
+	select HAVE_KERNEL_LZMA
+    select MACH_ATHEROS
+	select HAVE_OPROFILE
+
+config AR7240_EMULATION
+	bool "build system for AR7240 emulation board?"
+	depends on MACH_AR7240
+
+config WASP_SUPPORT
+	bool "build system for WASP based board"
+	depends on MACH_AR7240
+ 
+config  MACH_AR724x
+	bool "Support for Atheros ar724x based board"
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select HW_HAS_PCI
+	select HAVE_KERNEL_LZMA
+	select ATH_BSP
+    select MACH_ATHEROS
+	select GENERIC_HARDIRQS_NO__DO_IRQ
+
+config  MACH_AR933x
+	bool "Support for Atheros ar933x based board"
+	select HAVE_KERNEL_LZMA
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select HAVE_KERNEL_LZMA
+	select ATH_BSP
+    select MACH_ATHEROS
+
+config  MACH_AR934x
+	bool "Support for Atheros ar934x based board"
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select HW_HAS_PCI
+	select HAVE_KERNEL_LZMA
+	select ATH_BSP
+    select MACH_ATHEROS
+	select GENERIC_HARDIRQS_NO__DO_IRQ
+
+config  MACH_QCA955x
+	bool "Support for Atheros ar955x based board"
+	select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+	select HW_HAS_PCI
+	select HAVE_KERNEL_LZMA
+	select ATH_BSP
+    select MACH_ATHEROS
+	select GENERIC_HARDIRQS_NO__DO_IRQ
+
+config  MACH_AR7100
+    bool "Support for Atheros ar7100 based boards"
+    select DMA_NONCOHERENT
+    select IRQ_CPU
+    select CEVT_R4K
+    select CSRC_R4K
+    select SYS_HAS_CPU_MIPS32_R2
+    select SYS_SUPPORTS_32BIT_KERNEL
+    select SYS_SUPPORTS_BIG_ENDIAN
+    select HW_HAS_PCI
+
 endchoice
+
+config  NMI_ARBITER_WORKAROUND
+	bool "Workaround for Atheros ar934x based board"
+	default y
+    depends on MACH_AR934x
+
+
+config ATH_DDR_RELEASE_TIMER
+	int "Use RST Timer 2 to prevent CPU hogging the DDR"
+	depends on MACH_AR934x || MACH_QCA955x
+	default 0 if MACH_AR934x || MACH_QCA955x
+	help
+	  Use the second RST Timer to prevent CPU from hogging the DDR
+	  Set this to zero to turn off this feature
+
+config ATH_TURN_ON_DDR_HOG
+	bool "DDR Hog code [Debug helpers]"
+	depends on MACH_AR934x || MACH_QCA955x
+	default n
+	help
+	  DDR Hogging code snippets. This is used while testing
+	  to re-create USB Babble (or) SLIC/I2S failures.
+
+config ATH_TEST_TIMER
+	bool "Validate WDT and other timers"
+	depends on MACH_QCA955x
+	default n
+
+
+config ATH_EMULATION
+	bool "Build for Atheros emulation boards"
+	depends on MACH_AR724x || MACH_AR933x || MACH_AR934x || MACH_QCA955x
+
+config INSMOD_KSEG0
+	bool "Allocation of code segment when inserting module from KSEG0"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR934x || MACH_QCA955x
+
+config PERICOM
+	bool "Pericom Switch support"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR934x || MACH_QCA955x
+
+config I2S
+	bool "I2s support"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR933x || MACH_AR934x || MACH_QCA955x
+	default n
+
+config KMALLOC_MINALIGN_64BYTE
+	bool "64 byte min alignment for kmalloc"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR933x || MACH_AR934x || MACH_QCA955x
+	default n
+
+config PRIV_SKB_MEM
+	bool "Use contiguous fixed memory pool for SKBs of size less than 4KB"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR933x || MACH_AR934x || MACH_QCA955x
+	default n
+
+config PRIV_SKB_MEM_2K
+	int "Size of memory pool in MB for SKBs of size 2KB - default 5MB"
+	depends on PRIV_SKB_MEM
+    default 5
+
+config PRIV_SKB_MEM_4K
+	int "Size of memory pool in MB for SKBs of size 4KB - default 9MB"
+	depends on PRIV_SKB_MEM
+    default 9
+
+config WLAN_4K_SKB_OPT
+	bool "Allocate 4K-SKB with separate SKB shinfo to save memory"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR934x || MACH_QCA955x
+	default n
+
+config ATH_PERF
+	bool "Try to improve Performance"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR934x || MACH_QCA955x
+	default n
+
+config ATH_HWCS
+	bool "Enable Atheros H/W Checksum Engine"
+	depends on MACH_AR934x || MACH_QCA955x
+	default n
+
+config MACH_HORNET
+    bool "Support for Atheros HORNET based board"
+    select DMA_NONCOHERENT
+	select IRQ_CPU
+	select CEVT_R4K
+	select CSRC_R4K
+	select SYS_HAS_CPU_MIPS32_R1
+	select SYS_HAS_CPU_MIPS32_R2
+	select SYS_SUPPORTS_32BIT_KERNEL
+	select SYS_SUPPORTS_BIG_ENDIAN
+    select HAVE_KERNEL_LZMA
+
+config HORNET_EMULATION
+    bool "build system for Hornet emulation board?"
+    depends on MACH_HORNET
+
+
+if LANTIQ
+#IFX platform specific
+source "arch/mips/Kconfig.ifx"
+endif
 
 source "arch/mips/alchemy/Kconfig"
 source "arch/mips/basler/excite/Kconfig"
@@ -688,6 +935,30 @@ source "arch/mips/loongson/Kconfig"
 
 endmenu
 
+config ATH_BSP
+	bool
+
+config WATCHDOG_RESET_TIMER
+	bool "Support crash recovery depeding on watch dog"
+	depends on MACH_AR7240 || MACH_AR724x || MACH_AR933x || MACH_AR934x || MACH_HORNET
+	default n
+
+config ATH_SYS_TYPE
+	string "Atheros system type"
+	depends on ATH_BSP
+	default "Atheros AR724x" if MACH_AR724x
+	default "Atheros AR9330 (Hornet)" if MACH_AR933x
+	default "Atheros AR934x" if MACH_AR934x
+	default "QCA955x" if MACH_QCA955x
+
+config ATH_MACH_TYPE
+	int "Atheros MIPS Mach type"
+	depends on ATH_BSP
+	default 1 if MACH_AR724x
+	default 2 if MACH_AR933x
+	default 3 if MACH_AR934x
+	default 4 if MACH_QCA955x
+
 config RWSEM_GENERIC_SPINLOCK
 	bool
 	default y
@@ -700,6 +971,14 @@ config ARCH_HAS_ILOG2_U32
 	default n
 
 config ARCH_HAS_ILOG2_U64
+	bool
+	default n
+
+config MIPS_FUSIV
+    bool
+	default n
+
+config MACH_ATHEROS
 	bool
 	default n
 
@@ -719,6 +998,174 @@ config GENERIC_CALIBRATE_DELAY
 	bool
 	default y
 
+menu "*** AVM Board PCI Configuration ***"
+
+if !LANTIQ
+
+config AVM_PCI_DEVICE_COUNT
+	int 'Number of PCI devices [0..3] wired to AVM Board'
+	depends on MIPS_UR8
+	range 0 3
+	default 1
+
+config AVM_PCI_INT_A
+	bool "PCI INT_A pin is used as PCI function"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	default y if MIPS_UR8
+	default n
+
+config AVM_PCI_INT_B
+	bool "PCI INT_B pin is used as PCI function"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	default n
+
+config AVM_PCI_INT_C
+	bool "PCI INT_C pin is used as PCI function"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	default n
+
+config AVM_PCI_REQ_AND_GNT_0
+	bool "PREQ_0 and PGRANT_0 are used as PCI functions"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	default y if MIPS_UR8
+	default n
+
+config AVM_PCI_REQ_AND_GNT_1
+	bool "PREQ_1 and PGRANT_1 are used as PCI functions"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	default n
+
+config AVM_PCI_REQ_AND_GNT_2
+	bool "PREQ_2 and PGRANT_2 are used as PCI functions"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	default n
+
+config AVM_PCI_DEV1_SLOT
+	int "Device#1 uses PCI Slot [0..15]"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	range 0 15
+	default 14
+
+config AVM_PCI_DEV1_INT
+	int "Device#1 uses INT Line [A..C] (type 0..2)"
+	depends on (AVM_PCI_DEVICE_COUNT != 0)
+	range 0 2
+	default 0
+
+config AVM_PCI_DEV2_SLOT
+	int "Device#2 uses PCI Slot [0..15]"
+	depends on (AVM_PCI_DEVICE_COUNT = 2) || (AVM_PCI_DEVICE_COUNT = 3)
+	range 0 15
+	default 15
+
+config AVM_PCI_DEV2_INT
+	int "Device#2 uses INT Line [A..C] (type 0..2)"
+	depends on (AVM_PCI_DEVICE_COUNT = 2) || (AVM_PCI_DEVICE_COUNT = 3)
+	range 0 2
+	default 1
+
+config AVM_PCI_DEV3_SLOT
+	int "Device#3 uses PCI Slot [0..15]"
+	depends on (AVM_PCI_DEVICE_COUNT = 3)
+	range 0 15
+
+config AVM_PCI_DEV3_INT
+	int "Device#3 uses INT Line [A..C] (type 0..2)"
+	depends on (AVM_PCI_DEVICE_COUNT = 3)
+	range 0 2
+	default 2
+
+endif
+
+endmenu
+
+config MIPS_UR8_C55_MEMORY
+    hex "UR8 c55 Memory allocation in KBytes (0 disabled)"
+    depends on MIPS_UR8
+    default 0
+
+config MIPS_UR8_WLAN_MEMORY
+    hex "UR8 WLAN Memory allocation in KBytes (0 disabled)"
+    depends on MIPS_UR8
+    default 0
+
+config MIPS_OHIO_PHY_MEMSTART
+	hex "Ohio physical ram start"
+	depends on MIPS_OHIO
+	default "0x14000000"
+
+config MIPS_AR7_PHY_MEMSTART
+	hex "AR7 physical ram start"
+	depends on MIPS_AR7
+	default "0x14000000"
+
+config MIPS_UR8_PHY_MEMSTART
+	hex "UR8 physical ram start"
+	depends on MIPS_UR8
+	default "0x14000000"
+
+config OHIO_CLOCK_SWITCH
+	bool "Support Clock switching for OHIO"
+	depends on MIPS_OHIO
+	default y
+
+config AR7_CLOCK_SWITCH
+	bool "Support Clock switching for AR7"
+	depends on MIPS_AR7
+	default y
+
+config DISABLE_OOM_KILLER
+	depends on MIPS_OHIO || MIPS_UR8 || MIPS_AR7
+	bool "disable out of memory killer"
+	default y
+
+config UR8_CLOCK_SWITCH
+	bool "Support Clock switching for UR8"
+	depends on MIPS_UR8
+	default y
+
+config VLYNQ_SUPPORT
+	bool "Support for the Texas Instruments Vlynq"
+	depends on MIPS_OHIO || MIPS_UR8 || MIPS_AR7
+	default y
+
+config VLYNQ_SUPPORT_CLK
+	int "Clock speed for the Texas Instruments Vlynq"
+	depends on VLYNQ_SUPPORT
+	default 62500000
+
+config GPIO_SSI
+	bool "Support for SSI emulation using GPIO pins"
+	depends on MIPS_OHIO || MIPS_UR8 || MIPS_AR7
+	default n
+
+config GPIO_SSI_CS
+	int "GPIO used for CS0"
+	depends on GPIO_SSI
+	default 8
+
+config GPIO_SSI_CS2
+	int "GPIO used for CS2"
+	depends on GPIO_SSI
+	default 11
+
+config GPIO_SSI_CS3
+	int "GPIO used for CS3"
+	depends on GPIO_SSI
+	default 3
+
+config GPIO_SSI_CLK
+	int "GPIO used for CLK"
+	depends on GPIO_SSI
+	default 4
+
+config GPIO_SSI_DATA
+	int "GPIO used for DATA"
+	depends on GPIO_SSI
+	default 5
+
+
+
 config GENERIC_CLOCKEVENTS
 	bool
 	default y
@@ -729,14 +1176,14 @@ config GENERIC_TIME
 
 config GENERIC_CMOS_UPDATE
 	bool
-	default y
+	default n
 
 config SCHED_OMIT_FRAME_POINTER
 	bool
 	default y
 
 config GENERIC_HARDIRQS_NO__DO_IRQ
-	def_bool y
+	def_bool n
 
 #
 # Select some configuration options automatically based on user selections.
@@ -842,6 +1289,17 @@ config I8259
 config MIPS_BONITO64
 	bool
 
+config MIPS_FPU_EMU
+	bool "Enable FPU emulation"
+	default y
+	help
+	   This option allows building a kernel with or without the Algorithmics
+	   FPU emulator enabled. Turning off this option results in a kernel which
+	   does not catch floating operations exceptions. Make sure that your toolchain
+	   is configured to enable software floating point emulation in that case.
+		
+	   If unsure say Y here.
+
 config MIPS_MSC
 	bool
 
@@ -853,6 +1311,13 @@ config MIPS_DISABLE_OBSOLETE_IDE
 
 config SYNC_R4K
 	bool
+
+config MIPS_MACHINE
+	def_bool n
+
+config IMAGE_CMDLINE_HACK
+	bool "OpenWrt specific image command line hack"
+	default n
 
 config NO_IOPORT
 	def_bool n
@@ -867,6 +1332,13 @@ config GENERIC_ISA_DMA_SUPPORT_BROKEN
 
 config GENERIC_GPIO
 	bool
+
+config CPU_HAS_DSP_ASE
+	bool "MIPS DSP Extension"
+	default n
+	help
+	  Enable this option for the mips dsp application specific extension 
+	  support in the cpu
 
 #
 # Endianess selection.  Sufficiently obscure so many users don't know what to
@@ -1091,13 +1563,43 @@ config CPU_MIPS32_R2
 	depends on SYS_HAS_CPU_MIPS32_R2
 	select CPU_HAS_PREFETCH
 	select CPU_SUPPORTS_32BIT_KERNEL
-	select CPU_SUPPORTS_HIGHMEM
+#	select CPU_SUPPORTS_HIGHMEM
 	help
 	  Choose this option to build a kernel for release 2 or later of the
 	  MIPS32 architecture.  Most modern embedded systems with a 32-bit
 	  MIPS processor are based on a MIPS32 processor.  If you know the
 	  specific type of processor in your system, choose those that one
 	  otherwise CPU_MIPS32_R1 is a safe bet for any MIPS32 system.
+
+config CPU_MIPS_24K
+	bool "MIPS24Kc"
+	depends on SYS_HAS_CPU_MIPS32_R2
+	select CPU_HAS_PREFETCH
+	select CPU_SUPPORTS_32BIT_KERNEL
+#	select CPU_SUPPORTS_HIGHMEM
+	help
+	  Choose this option to build a kernel for release 2 or later of the
+	  MIPS32 architecture. Special Version 24kc 
+
+config CPU_MIPS_34K
+	bool "MIPS34Kc"
+	depends on SYS_HAS_CPU_MIPS32_R2
+	select CPU_HAS_PREFETCH
+	select CPU_SUPPORTS_32BIT_KERNEL
+#	select CPU_SUPPORTS_HIGHMEM
+	help
+	  Choose this option to build a kernel for release 2 or later of the
+	  MIPS32 architecture. Special Version 34kc 
+
+config CPU_MIPS_74K
+	bool "MIPS74Kc"
+	depends on SYS_HAS_CPU_MIPS32_R2
+	select CPU_HAS_PREFETCH
+	select CPU_SUPPORTS_32BIT_KERNEL
+#	select CPU_SUPPORTS_HIGHMEM
+	help
+	  Choose this option to build a kernel for release 2 or later of the
+	  MIPS32 architecture. Special Version 74kc 
 
 config CPU_MIPS64_R1
 	bool "MIPS64 Release 1"
@@ -1381,12 +1883,32 @@ config WEAK_REORDERING_BEYOND_LLSC
 	bool
 endmenu
 
+choice
+    depends on MACH_ADI_FUSIV || MACH_IKAN_MIPS
+	prompt "Fusiv platform selection"
+
+config FUSIV_VX200
+	bool "Fusiv vox 200 / vox 150"
+	depends on MACH_ADI_FUSIV
+
+config FUSIV_VX160
+	bool "Fusiv vox 160"
+	depends on MACH_ADI_FUSIV
+
+config FUSIV_AT300
+	bool "Fusiv AT 100/200/300"
+	depends on MACH_ADI_FUSIV
+config FUSIV_VX180
+	bool "Fusiv vox 180"
+	depends on MACH_IKAN_MIPS
+endchoice
+
 #
 # These two indicate any level of the MIPS32 and MIPS64 architecture
 #
 config CPU_MIPS32
 	bool
-	default y if CPU_MIPS32_R1 || CPU_MIPS32_R2
+	default y if CPU_MIPS32_R1 || CPU_MIPS32_R2 || CPU_MIPS_24K || CPU_MIPS_34K || CPU_MIPS_74K 
 
 config CPU_MIPS64
 	bool
@@ -1401,7 +1923,7 @@ config CPU_MIPSR1
 
 config CPU_MIPSR2
 	bool
-	default y if CPU_MIPS32_R2 || CPU_MIPS64_R2 || CPU_CAVIUM_OCTEON
+	default y if CPU_MIPS32_R2 || CPU_MIPS64_R2 || CPU_CAVIUM_OCTEON || CPU_MIPS_24K || CPU_MIPS_34K || CPU_MIPS_74K 
 
 config SYS_SUPPORTS_32BIT_KERNEL
 	bool
@@ -1422,6 +1944,24 @@ config HARDWARE_WATCHPOINTS
        default y if CPU_MIPSR1 || CPU_MIPSR2
 
 menu "Kernel type"
+
+config LTQ 
+	bool "Enable LTQ enhancements"
+	default y
+	help
+	Enables all config options and features added by LTQ.
+
+config LTQ_SYS_OPT
+	bool "LTQ sys optimization"
+	depends on LTQ 
+	help
+	Enbaling this feature improves the networking performance
+	due to LTQ enhancements to IRQ scheduling.
+
+config LTQ_OPTIMIZATION
+	bool "Kernel LTQ optimizations"
+	help
+	Kernel LTQ optimizations
 
 choice
 
@@ -1498,6 +2038,15 @@ config PAGE_SIZE_64KB
 
 endchoice
 
+config THREAD_SIZE_ORDER 
+	int "Kernel stack size order (2^n)"
+	default 1
+    help 
+        Kernel stack size order (normaly 1)
+        On 4K page size:  1 ==>  8K stack
+                          2 ==> 16K stack
+                          3 ==> 32K stack
+
 config BOARD_SCACHE
 	bool
 
@@ -1531,6 +2080,18 @@ config SIBYTE_DMA_PAGEOPS
 config CPU_HAS_PREFETCH
 	bool
 
+config AVM_WP
+    bool "AVM Watchpoint Handler for MIPS 34Kc"
+    depends on CPU_MIPS_34K
+
+config AVM_WP_PROC
+    bool "AVM Watchpoint Handler Proc-Interface"
+    depends on AVM_WP
+
+config DUMP_CP0
+    bool "Debug Dump of CP0 Registers"
+    depends on AVM_WP_PROC
+
 choice
 	prompt "MIPS MT options"
 
@@ -1545,6 +2106,7 @@ config MIPS_MT_DISABLED
 config MIPS_MT_SMP
 	bool "Use 1 TC on each available VPE for SMP"
 	depends on SYS_SUPPORTS_MULTITHREADING
+	depends on CPU_MIPS32_R2 || CPU_MIPS64_R2 || CPU_CAVIUM_OCTEON || CPU_MIPS_24K || CPU_MIPS_34K || CPU_MIPS_74K 
 	select CPU_MIPSR2_IRQ_VI
 	select CPU_MIPSR2_IRQ_EI
 	select MIPS_MT
@@ -1559,8 +2121,7 @@ config MIPS_MT_SMP
 
 config MIPS_MT_SMTC
 	bool "SMTC: Use all TCs on all VPEs for SMP"
-	depends on CPU_MIPS32_R2
-	#depends on CPU_MIPS64_R2		# once there is hardware ...
+	depends on CPU_MIPS32_R2 || CPU_MIPS64_R2 || CPU_CAVIUM_OCTEON || CPU_MIPS_24K || CPU_MIPS_34K || CPU_MIPS_74K 
 	depends on SYS_SUPPORTS_MULTITHREADING
 	select CPU_MIPSR2_IRQ_VI
 	select CPU_MIPSR2_IRQ_EI
@@ -1609,6 +2170,49 @@ config MIPS_VPE_LOADER
 	  Includes a loader for loading an elf relocatable object
 	  onto another VPE and running it.
 
+config IFX_VPE_EXT
+	bool "IFX APRP Extensions"
+	depends on MIPS_VPE_LOADER
+	default y
+	help
+	  IFX included extensions in APRP
+
+config IFX_VPE_CACHE_SPLIT
+	bool "IFX Cache Split Ways"
+	depends on IFX_VPE_EXT
+	help
+	  IFX extension for reserving (splitting) cache ways among VPEs. You must
+	  give kernel command line arguments vpe_icache_shared=0 or
+	  vpe_dcache_shared=0 to enable splitting of icache or dcache
+	  respectively. Then you can specify which cache ways should be
+	  assigned to which VPE. There are total 8 cache ways, 4 each
+	  for dcache and icache: dcache_way0, dcache_way1,dcache_way2,
+	  dcache_way3 and icache_way0,icache_way1, icache_way2,icache_way3.
+	  
+	  For example, if you specify vpe_icache_shared=0 and icache_way2=1,
+	  then the 3rd icache way will be assigned to VPE0 and denied in VPE1.
+
+	  For icache, software is required to make atleast one cache way available
+	  for a VPE at all times i.e., one can't assign all the icache ways to one VPE.
+	  
+	  By default, vpe_dcache_shared and vpe_icache_shared are set to 1
+	  (i.e., both icache and dcache are shared among VPEs)
+
+config PERFCTRS
+	bool "34K Performance counters"
+	depends on MIPS_MT && PROC_FS
+	default n
+	help
+	  34K Performance counter through /proc
+
+config MTSCHED
+	bool "Support mtsched priority configuration for TCs"
+	depends on MIPS_MT && PROC_FS
+	default y
+	help
+	  Support for mtsched priority configuration for TCs through
+	  /proc/mips/mtsched
+ 
 config MIPS_MT_SMTC_IM_BACKSTOP
 	bool "Use per-TC register bits as backstop for inhibited IM bits"
 	depends on MIPS_MT_SMTC
@@ -2042,10 +2646,21 @@ config HW_HAS_EISA
 config HW_HAS_PCI
 	bool
 
+config ATH_HAS_PCI_RC2
+	bool "Support for PCI controller RC2"
+	depends on HW_HAS_PCI
+	select PCI_DOMAINS
+	help
+	  Find out whether you have a RC2 in the system. RC2 is the name of a
+	  2nd PCIe Root Complex.Other default Root Complex is RC1.
+	  If you have RC2,say Y, otherwise N.
+
+
 config PCI
 	bool "Support for PCI controller"
 	depends on HW_HAS_PCI
 	select PCI_DOMAINS
+	select ARCH_SUPPORTS_MSI if ((VR9 || AR10) && IFX_PCIE)
 	help
 	  Find out whether you have a PCI motherboard. PCI is the name of a
 	  bus system, i.e. the way the CPU talks to the other stuff inside
@@ -2055,6 +2670,12 @@ config PCI
 config PCI_DOMAINS
 	bool
 
+config ATH_LOW_POWER_ENABLE
+    bool "Enable Low-Power-Support for Atheros PCIe"
+    depends on MACH_934x
+    default n
+
+source "drivers/pci/pcie/Kconfig"
 source "drivers/pci/Kconfig"
 
 #
@@ -2173,10 +2794,26 @@ config ARCH_HIBERNATION_POSSIBLE
 	depends on SYS_SUPPORTS_HOTPLUG_CPU || !SMP
 
 config ARCH_SUSPEND_POSSIBLE
-	def_bool y
+	def_bool n
 	depends on SYS_SUPPORTS_HOTPLUG_CPU || !SMP
 
 source "kernel/power/Kconfig"
+source "drivers/cpufreq/Kconfig"
+source "drivers/cpuidle/Kconfig"
+
+config AVM_CPUFREQ
+    bool "AVM CPUFREQ interface support"
+    depends on PM && (LANTIQ || MIPS_UR8)
+    default no
+	help
+	  This option will enable CPUFREQ interface support on LANTIQ/UR8
+
+config AVM_CPUIDLE
+    bool "AVM CPUIDLE interface support"
+    depends on PM && (LANTIQ || MIPS_UR8)
+    default no
+	help
+	  This option will enable CPUIDLE interface support on LANTIQ/UR8
 
 endmenu
 
@@ -2193,3 +2830,8 @@ source "security/Kconfig"
 source "crypto/Kconfig"
 
 source "lib/Kconfig"
+
+if MACH_FUSIV
+source "fusiv_src/kernel/Kconfig"
+endif # MACH_FUSIV
+

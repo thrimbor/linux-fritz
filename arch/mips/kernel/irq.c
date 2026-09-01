@@ -111,10 +111,17 @@ int show_interrupts(struct seq_file *p, void *v)
 			seq_printf(p, "%10u ", kstat_irqs_cpu(i, j));
 #endif
 		seq_printf(p, " %14s", irq_desc[i].chip->name);
-		seq_printf(p, "  %s", action->name);
+
+#if 0
+        seq_printf(p, " depth: %d", irq_desc[i].depth);
+        seq_printf(p, " status: %#x", irq_desc[i].status);
+#endif
+
+        seq_printf(p, "  %s", action->name);
 
 		for (action=action->next; action; action = action->next)
 			seq_printf(p, ", %s", action->name);
+
 
 		seq_putc(p, '\n');
 skip:

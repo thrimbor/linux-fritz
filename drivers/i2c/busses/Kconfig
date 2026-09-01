@@ -565,6 +565,17 @@ config I2C_VERSATILE
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-versatile.
 
+config I2C_ATH
+	tristate "Atheros I2C bus support"
+	depends on MACH_ATHEROS || MACH_QCA955x
+	help
+	help
+	  Say yes if you want to support the I2C serial bus on ATHEROS
+	  Scorpion platforms.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called ath-i2c.
+
 comment "External I2C/SMBus adapter drivers"
 
 config I2C_PARPORT

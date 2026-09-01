@@ -242,8 +242,8 @@ void xhci_print_trb_offsets(struct xhci_hcd *xhci, union xhci_trb *trb)
 {
 	int i;
 	for (i = 0; i < 4; ++i)
-		xhci_dbg(xhci, "Offset 0x%x = 0x%x\n",
-				i*4, trb->generic.field[i]);
+		xhci_dbg(xhci, "Offset 0x%x = 0x%08x[U:0x%08x]\n",
+				i*4, SWAP32(trb->generic.field[i]),trb->generic.field[i]);
 }
 
 /**
@@ -252,27 +252,27 @@ void xhci_print_trb_offsets(struct xhci_hcd *xhci, union xhci_trb *trb)
 void xhci_debug_trb(struct xhci_hcd *xhci, union xhci_trb *trb)
 {
 	u64	address;
-	u32	type = xhci_readl(xhci, &trb->link.control) & TRB_TYPE_BITMASK;
+	u32	type = SWAP32(trb->link.control) & TRB_TYPE_BITMASK;
 
 	switch (type) {
 	case TRB_TYPE(TRB_LINK):
 		xhci_dbg(xhci, "Link TRB:\n");
 		xhci_print_trb_offsets(xhci, trb);
 
-		address = trb->link.segment_ptr;
+		address = SWAP64(trb->link.segment_ptr);
 		xhci_dbg(xhci, "Next ring segment DMA address = 0x%llx\n", address);
 
 		xhci_dbg(xhci, "Interrupter target = 0x%x\n",
-				GET_INTR_TARGET(trb->link.intr_target));
+				GET_INTR_TARGET(SWAP32(trb->link.intr_target)));
 		xhci_dbg(xhci, "Cycle bit = %u\n",
-				(unsigned int) (trb->link.control & TRB_CYCLE));
+				(unsigned int) (SWAP32(trb->link.control) & TRB_CYCLE));
 		xhci_dbg(xhci, "Toggle cycle bit = %u\n",
-				(unsigned int) (trb->link.control & LINK_TOGGLE));
+				(unsigned int) (SWAP32(trb->link.control) & LINK_TOGGLE));
 		xhci_dbg(xhci, "No Snoop bit = %u\n",
-				(unsigned int) (trb->link.control & TRB_NO_SNOOP));
+				(unsigned int) (SWAP32(trb->link.control) & TRB_NO_SNOOP));
 		break;
 	case TRB_TYPE(TRB_TRANSFER):
-		address = trb->trans_event.buffer;
+		address = SWAP64(trb->trans_event.buffer);
 		/*
 		 * FIXME: look at flags to figure out if it's an address or if
 		 * the data is directly in the buffer field.
@@ -280,11 +280,11 @@ void xhci_debug_trb(struct xhci_hcd *xhci, union xhci_trb *trb)
 		xhci_dbg(xhci, "DMA address or buffer contents= %llu\n", address);
 		break;
 	case TRB_TYPE(TRB_COMPLETION):
-		address = trb->event_cmd.cmd_trb;
+		address = SWAP64(trb->event_cmd.cmd_trb);
 		xhci_dbg(xhci, "Command TRB pointer = %llu\n", address);
 		xhci_dbg(xhci, "Completion status = %u\n",
-				(unsigned int) GET_COMP_CODE(trb->event_cmd.status));
-		xhci_dbg(xhci, "Flags = 0x%x\n", (unsigned int) trb->event_cmd.flags);
+				(unsigned int) GET_COMP_CODE(SWAP32(trb->event_cmd.status)));
+		xhci_dbg(xhci, "Flags = 0x%x\n", (unsigned int) SWAP32(trb->event_cmd.flags));
 		break;
 	default:
 		xhci_dbg(xhci, "Unknown TRB with TRB type ID %u\n",
@@ -315,12 +315,85 @@ void xhci_debug_segment(struct xhci_hcd *xhci, struct xhci_segment *seg)
 
 	for (i = 0; i < TRBS_PER_SEGMENT; ++i) {
 		trb = &seg->trbs[i];
-		xhci_dbg(xhci, "@%08x %08x %08x %08x %08x\n", addr,
-				lower_32_bits(trb->link.segment_ptr),
-				upper_32_bits(trb->link.segment_ptr),
-				(unsigned int) trb->link.intr_target,
-				(unsigned int) trb->link.control);
+		xhci_dbg(xhci, "@%08x   %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
 		addr += sizeof(*trb);
+	}
+}
+
+
+void decode_trb(u32 addr,union xhci_trb *trb){
+	if(!trb->link.segment_ptr && !trb->link.intr_target && !trb->link.control)
+		return;
+	switch((SWAP32(trb->link.control) & 0x0000FC00) >>10)
+	{
+		case 32:
+			printk(KERN_INFO "      @%08x TransferEvent %08llx", addr, SWAP64(trb->link.segment_ptr));
+			printk(KERN_INFO " CompletionCode:%02x Length:%06x",
+					(SWAP32(trb->link.intr_target) & 0xFF000000) >>24,
+					(SWAP32(trb->link.intr_target) & 0x00FFFFFF));
+			printk(KERN_INFO " Slot:%02x EPId:%02x ED:%d C:%d\n",
+					(SWAP32(trb->link.control) & 0xFF000000) >>24,
+					(SWAP32(trb->link.control) & 0x001F0000) >>16,
+					(SWAP32(trb->link.control) & 0x00000004) >>2 ,
+					(SWAP32(trb->link.control) & 0x00000001) >>0 );
+			break;
+		case 33:
+			printk(KERN_INFO "      @%08x CommandCompleteEvent %08llx", addr, SWAP64(trb->link.segment_ptr));
+			printk(KERN_INFO " CompletionCode:%02x",
+					(SWAP32(trb->link.intr_target) & 0xFF000000) >>24);
+			printk(KERN_INFO " Slot:%02x VFId:%02x C:%d\n",
+					(SWAP32(trb->link.control) & 0xFF000000) >>24,
+					(SWAP32(trb->link.control) & 0x00FF0000) >>16,
+					(SWAP32(trb->link.control) & 0x00000001) >>0 );
+			break;
+		case 34:
+			printk(KERN_INFO "      @%08x PortStatusChgEvent %08llx", addr, SWAP64(trb->link.segment_ptr));
+			printk(KERN_INFO " CompletionCode:%02x",
+					(SWAP32(trb->link.intr_target) & 0xFF000000) >>24);
+			printk(KERN_INFO " C:%d\n",
+					(SWAP32(trb->link.control) & 0x00000001) >>0 );
+			break;
+		case 35:
+			printk(KERN_INFO "      @%08x BandwidthReqEvent %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
+			break;
+		case 36:
+			printk(KERN_INFO "      @%08x DoorBellEvent %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
+		case 37:
+			printk(KERN_INFO "      @%08x HostControllerEvent %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
+		case 38:
+			printk(KERN_INFO "      @%08x DeviceNotifyEvent %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
+		case 39:
+			printk(KERN_INFO "      @%08x MFIndexEvent %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
+		default:
+			printk(KERN_INFO "      @%08x UNKNOWN %08llx %08x %08x\n", addr,
+				SWAP64(trb->link.segment_ptr),
+				(unsigned int) SWAP32(trb->link.intr_target),
+				(unsigned int) SWAP32(trb->link.control)
+				);
 	}
 }
 
@@ -374,10 +447,10 @@ void xhci_dbg_erst(struct xhci_hcd *xhci, struct xhci_erst *erst)
 		entry = &erst->entries[i];
 		xhci_dbg(xhci, "@%08x %08x %08x %08x %08x\n",
 				(unsigned int) addr,
-				lower_32_bits(entry->seg_addr),
-				upper_32_bits(entry->seg_addr),
-				(unsigned int) entry->seg_size,
-				(unsigned int) entry->rsvd);
+				(unsigned int) SWAP32(lower_32_bits(entry->seg_addr)),
+				(unsigned int) SWAP32(upper_32_bits(entry->seg_addr)),
+				(unsigned int) SWAP32(entry->seg_size),
+				(unsigned int) SWAP32(entry->rsvd));
 		addr += sizeof(*entry);
 	}
 }
@@ -399,9 +472,9 @@ static void dbg_rsvd64(struct xhci_hcd *xhci, u64 *ctx, dma_addr_t dma)
 	int i;
 	for (i = 0; i < 4; ++i) {
 		xhci_dbg(xhci, "@%p (virt) @%08llx "
-			 "(dma) %#08llx - rsvd64[%d]\n",
+			 "(dma) %#08llx[U:%#08llx] - rsvd64[%d]\n",
 			 &ctx[4 + i], (unsigned long long)dma,
-			 ctx[4 + i], i);
+			 SWAP32(ctx[4 + i]),ctx[4 + i], i);
 		dma += 8;
 	}
 }
@@ -416,29 +489,42 @@ void xhci_dbg_slot_ctx(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx)
 	dma_addr_t dma = ctx->dma +
 		((unsigned long)slot_ctx - (unsigned long)ctx->bytes);
 	int csz = HCC_64BYTE_CONTEXT(xhci->hcc_params);
+	xhci_dbg(xhci, "Slot Context @%p (virt) @%08llx (dma)\n",
+			&slot_ctx->dev_info,(unsigned long long)dma
+		);
+	xhci_dbg(xhci, "   [%08x %08x %08x %08x %08x %08x %08x %08x]\n"
+		,(slot_ctx->dev_info)
+		,(slot_ctx->dev_info2)
+		,(slot_ctx->tt_info)
+		,(slot_ctx->dev_state)
+		,(slot_ctx->reserved[0])
+		,(slot_ctx->reserved[1])
+		,(slot_ctx->reserved[2])
+		,(slot_ctx->reserved[3])
+	);
+	xhci_dbg(xhci, "   Route String:%05X\n",(SWAP32(slot_ctx->dev_info)&0x000FFFFF)>>0);
+	xhci_dbg(xhci, "   Speed ID:%d\n",(SWAP32(slot_ctx->dev_info)&0x00F00000)>>20);
+	xhci_dbg(xhci, "   Multi TT:%d\n",(SWAP32(slot_ctx->dev_info)&0x02000000)>>25);
+	xhci_dbg(xhci, "   Hub:%d\n",(SWAP32(slot_ctx->dev_info)&0x04000000)>>26);
+	xhci_dbg(xhci, "   Context Entries:%d\n",(SWAP32(slot_ctx->dev_info)&0xF8000000)>>27);
 
-	xhci_dbg(xhci, "Slot Context:\n");
-	xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - dev_info\n",
-			&slot_ctx->dev_info,
-			(unsigned long long)dma, slot_ctx->dev_info);
-	dma += field_size;
-	xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - dev_info2\n",
-			&slot_ctx->dev_info2,
-			(unsigned long long)dma, slot_ctx->dev_info2);
-	dma += field_size;
-	xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - tt_info\n",
-			&slot_ctx->tt_info,
-			(unsigned long long)dma, slot_ctx->tt_info);
-	dma += field_size;
-	xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - dev_state\n",
-			&slot_ctx->dev_state,
-			(unsigned long long)dma, slot_ctx->dev_state);
-	dma += field_size;
-	for (i = 0; i < 4; ++i) {
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - rsvd[%d]\n",
-				&slot_ctx->reserved[i], (unsigned long long)dma,
-				slot_ctx->reserved[i], i);
-		dma += field_size;
+	xhci_dbg(xhci, "   Max Exit Latency:%04X\n",(SWAP32(slot_ctx->dev_info2)&0x0000FFFF)>>0);
+	xhci_dbg(xhci, "   RootHub Port Number:%02X\n",(SWAP32(slot_ctx->dev_info2)&0x00FF0000)>>16);
+	xhci_dbg(xhci, "   Number of Ports:%02X\n",(SWAP32(slot_ctx->dev_info2)&0xFF000000)>>24);
+
+	xhci_dbg(xhci, "   TT Hub Slot ID:%02X\n",(SWAP32(slot_ctx->tt_info)&0x000000FF)>>0);
+	xhci_dbg(xhci, "   TT Port Number:%0X\n",(SWAP32(slot_ctx->tt_info)&0x0000FF00)>>8);
+	xhci_dbg(xhci, "   TT Think Time:%d\n",(SWAP32(slot_ctx->tt_info)&0x00030000)>>16);
+	xhci_dbg(xhci, "   Interrupt Target:%03X\n",(SWAP32(slot_ctx->tt_info)&0xFFC00000)>>22);
+
+	xhci_dbg(xhci, "   Device Addr:%02X\n",(SWAP32(slot_ctx->dev_state)&0x000000FF)>>0);
+	switch((SWAP32(slot_ctx->dev_state)&0xF8000000)>>27)
+	{
+		case 0: xhci_dbg(xhci, "   Slot State:  Disable/Enabled\n"); break;
+		case 1: xhci_dbg(xhci, "   Slot State:  Default\n"); break;
+		case 2: xhci_dbg(xhci, "   Slot State:  Addressed\n"); break;
+		case 3: xhci_dbg(xhci, "   Slot State:  Configured\n"); break;
+		default: xhci_dbg(xhci, "   Slot State:  Rsv %d\n",(SWAP32(slot_ctx->dev_state)&0xF8000000)>>27); break;
 	}
 
 	if (csz)
@@ -455,37 +541,70 @@ void xhci_dbg_ep_ctx(struct xhci_hcd *xhci,
 	int field_size = 32 / 8;
 	int csz = HCC_64BYTE_CONTEXT(xhci->hcc_params);
 
+	xhci_dbg(xhci, "EP Context\n");
+
 	if (last_ep < 31)
 		last_ep_ctx = last_ep + 1;
-	for (i = 0; i < last_ep_ctx; ++i) {
+	for (i = 0; i <=last_ep_ctx; ++i) {
 		struct xhci_ep_ctx *ep_ctx = xhci_get_ep_ctx(xhci, ctx, i);
 		dma_addr_t dma = ctx->dma +
 			((unsigned long)ep_ctx - (unsigned long)ctx->bytes);
 
-		xhci_dbg(xhci, "Endpoint %02d Context:\n", i);
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - ep_info\n",
-				&ep_ctx->ep_info,
-				(unsigned long long)dma, ep_ctx->ep_info);
-		dma += field_size;
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - ep_info2\n",
-				&ep_ctx->ep_info2,
-				(unsigned long long)dma, ep_ctx->ep_info2);
-		dma += field_size;
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08llx - deq\n",
-				&ep_ctx->deq,
-				(unsigned long long)dma, ep_ctx->deq);
-		dma += 2*field_size;
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - tx_info\n",
-				&ep_ctx->tx_info,
-				(unsigned long long)dma, ep_ctx->tx_info);
-		dma += field_size;
-		for (j = 0; j < 3; ++j) {
-			xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - rsvd[%d]\n",
-					&ep_ctx->reserved[j],
-					(unsigned long long)dma,
-					ep_ctx->reserved[j], j);
-			dma += field_size;
+		xhci_dbg(xhci, "Endpoint %02d Context: @%p (virt) @%08llx (dma)\n", i,
+			&ep_ctx->ep_info,(unsigned long long)dma
+		);
+		xhci_dbg(xhci, "   [%08x %08x %08llx %08x %08x %08x %08x]\n"
+			,(ep_ctx->ep_info)
+			,(ep_ctx->ep_info2)
+			,(ep_ctx->deq)
+			,(ep_ctx->tx_info)
+			,(ep_ctx->reserved[0])
+			,(ep_ctx->reserved[1])
+			,(ep_ctx->reserved[2])
+		);
+		switch(SWAP32(ep_ctx->ep_info)&0x00000007)
+		{
+			case 0: xhci_dbg(xhci, "   EP State:  Disable\n"); break;
+			case 1: xhci_dbg(xhci, "   EP State:  Running\n"); break;
+			case 2: xhci_dbg(xhci, "   EP State:  Halt\n"); break;
+			case 3: xhci_dbg(xhci, "   EP State:  Error\n"); break;
+			case 4: xhci_dbg(xhci, "   EP State:  Rsv 4\n"); break;
+			case 5: xhci_dbg(xhci, "   EP State:  Rsv 5\n"); break;
+			case 6: xhci_dbg(xhci, "   EP State:  Rsv 6\n"); break;
+			case 7: xhci_dbg(xhci, "   EP State:  Rsv 7\n"); break;
 		}
+		switch((SWAP32(ep_ctx->ep_info)&0x00000300)>>8)
+		{
+			case 0:
+			case 1:
+			case 2:
+				xhci_dbg(xhci, "   Multi (Burst) :%d\n",(SWAP32(ep_ctx->ep_info)&0x00000300)>>8); break;
+			case 3:
+				xhci_dbg(xhci, "   Multi (Burst) :%d (Unsupported)\n",(SWAP32(ep_ctx->ep_info)&0x00000300)>>8); break;
+		}
+		xhci_dbg(xhci, "   MaxPStream :%d\n",(SWAP32(ep_ctx->ep_info)&0x00007C00)>>10);
+		xhci_dbg(xhci, "   LinearStreamArray :%d\n",(SWAP32(ep_ctx->ep_info)&0x00008000)>>15);
+		xhci_dbg(xhci, "   Interval :%d\n",(SWAP32(ep_ctx->ep_info)&0x00FF0000)>>16);
+
+		xhci_dbg(xhci, "   ErrorCount :%d\n",(SWAP32(ep_ctx->ep_info2)&0x00000006)>>1);
+		switch((SWAP32(ep_ctx->ep_info2)&0x00000038)>>3)
+		{
+			case 0: xhci_dbg(xhci, "   EP Type:  Invalid\n"); break;
+			case 1: xhci_dbg(xhci, "   EP Type:  IsocOut\n"); break;
+			case 2: xhci_dbg(xhci, "   EP Type:  BulkOut\n"); break;
+			case 3: xhci_dbg(xhci, "   EP Type:  IntrOut\n"); break;
+			case 4: xhci_dbg(xhci, "   EP Type:  Ctrl\n"); break;
+			case 5: xhci_dbg(xhci, "   EP Type:  IsocIn\n"); break;
+			case 6: xhci_dbg(xhci, "   EP Type:  BulkIn\n"); break;
+			case 7: xhci_dbg(xhci, "   EP Type:  IntrIn\n"); break;
+		}
+		xhci_dbg(xhci, "   Host Init Disable:%d\n",(SWAP32(ep_ctx->ep_info2)&0x00000080)>>7);
+		xhci_dbg(xhci, "   Max Burst Size:%d\n",(SWAP32(ep_ctx->ep_info2)&0x0000FF00)>>8);
+		xhci_dbg(xhci, "   Max Packet Sizer:%d\n",(SWAP32(ep_ctx->ep_info2)&0xFFFF0000)>>16);
+
+		xhci_dbg(xhci, "   Deq Func Pointer:%08llx\n",SWAP64(ep_ctx->deq));
+		xhci_dbg(xhci, "   Averate TRB Length:%08x\n",(SWAP32(ep_ctx->tx_info)&0x0000FFFF));
+		xhci_dbg(xhci, "   Max ESIT Payload:%08x\n",(SWAP32(ep_ctx->tx_info)&0xFFFF0000)>>16);
 
 		if (csz)
 			dbg_rsvd64(xhci, (u64 *)ep_ctx, dma);
@@ -503,21 +622,21 @@ void xhci_dbg_ctx(struct xhci_hcd *xhci,
 	dma_addr_t dma = ctx->dma;
 	int csz = HCC_64BYTE_CONTEXT(xhci->hcc_params);
 
-	if (ctx->type == XHCI_CTX_TYPE_INPUT) {
+	if (ctx->type == (XHCI_CTX_TYPE_INPUT)) {
 		struct xhci_input_control_ctx *ctrl_ctx =
 			xhci_get_input_control_ctx(xhci, ctx);
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - drop flags\n",
+		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %08x - drop flags\n",
 			 &ctrl_ctx->drop_flags, (unsigned long long)dma,
-			 ctrl_ctx->drop_flags);
+			 SWAP32(ctrl_ctx->drop_flags));
 		dma += field_size;
-		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - add flags\n",
+		xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %08x - add flags\n",
 			 &ctrl_ctx->add_flags, (unsigned long long)dma,
-			 ctrl_ctx->add_flags);
+			 SWAP32(ctrl_ctx->add_flags));
 		dma += field_size;
 		for (i = 0; i < 6; ++i) {
-			xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %#08x - rsvd2[%d]\n",
+			xhci_dbg(xhci, "@%p (virt) @%08llx (dma) %08x - rsvd2[%d]\n",
 				 &ctrl_ctx->rsvd2[i], (unsigned long long)dma,
-				 ctrl_ctx->rsvd2[i], i);
+				 SWAP32(ctrl_ctx->rsvd2[i]), i);
 			dma += field_size;
 		}
 

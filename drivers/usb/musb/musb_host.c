@@ -42,6 +42,10 @@
 #include <linux/init.h>
 #include <linux/list.h>
 
+#ifdef CONFIG_AVM_POWER
+#include <linux/avm_power.h>
+#endif /*--- #ifdef CONFIG_AVM_POWER ---*/
+
 #include "musb_core.h"
 #include "musb_host.h"
 
@@ -95,10 +99,145 @@
  * of transfers between endpoints, or anything clever.
  */
 
+/*------------------------------------------------------------------*/
+/* 20110520 AVM/WK : Enh Trigger NAK Timeout for TT devices,
+						Hardware NAK Timeout doesn't work    */
+#define AVM_MUX_HELPER
+
+/*------------------------------------------------------------------*/
+
+
 
 static void musb_ep_program(struct musb *musb, u8 epnum,
 			struct urb *urb, int is_out,
 			u8 *buf, u32 offset, u32 len);
+static void musb_bulk_rx_nak_timeout(struct musb *musb, struct musb_hw_ep *ep);
+
+/*------------------------------------------------------------------*/
+#ifdef CONFIG_AVM_POWER
+static struct tasklet_struct musb_giveback_tasklet;
+static struct timer_list musb_giveback_timer;
+static unsigned long defer_value = 0;
+static void* load_handle = NULL;
+                 
+static void musb_load_control_callback (int load_reduce, void *context) {
+	if (context) {
+		spin_lock(&((struct musb *)context)->lock);
+
+		defer_value = load_reduce;
+		
+		spin_unlock(&((struct musb *)context)->lock);
+	}
+}
+
+/* call locked */
+static void defer_musb_hcd_giveback_urb (struct musb *musb, struct urb *urb) {
+
+		if (!list_empty(&urb->urb_list)) {
+			list_del_init (&urb->urb_list);
+		}
+		//Insert the urbd in the complete list
+		list_add_tail(&urb->urb_list, &musb->urb_giveback_list);
+
+		if (defer_value > 0) {
+			if (timer_pending (&musb_giveback_timer)) {
+				return;
+			} else {
+				unsigned now = musb_readw(musb->mregs, MUSB_FRAME);
+				static unsigned last = 0;
+				static unsigned count = 0;
+				if ((now - last) < 8) {
+					/* less than 1 ms difference */
+					count ++;
+				}
+				last = now;
+				if (count > 50) {
+					count = 0;
+					mod_timer(&musb_giveback_timer, jiffies + defer_value);
+					return;
+				}
+			}
+		}
+
+		tasklet_schedule(&musb_giveback_tasklet);
+}
+
+static void musb_deferred_giveback_func(unsigned long _musb) {
+	unsigned long flags;
+	struct musb *musb = (void *) _musb;
+	struct urb *urb;
+
+	spin_lock_irqsave(&musb->lock, flags);
+	while (!list_empty(&musb->urb_giveback_list)) {
+		urb = list_entry(musb->urb_giveback_list.next, struct urb, urb_list);
+		list_del_init(&urb->urb_list);
+		spin_unlock_irqrestore(&musb->lock, flags);
+		usb_hcd_giveback_urb(musb_to_hcd(musb), urb, urb->status);
+		
+		spin_lock_irqsave(&musb->lock, flags);
+	}
+	spin_unlock_irqrestore(&musb->lock, flags);
+}
+#endif //CONFIG_AVM_POWER
+/*------------------------------------------------------------------*/
+
+/*------------------------------------------------------------------*/
+#ifdef AVM_MUX_HELPER
+static struct timer_list musb_mux_helper_timer;
+static void musb_mux_helper_func(unsigned long _musb) {
+	unsigned long flags;
+	struct musb *musb = (void *) _musb;
+
+	spin_lock_irqsave(&musb->lock, flags);
+	{
+		struct musb_hw_ep	*hw_ep = musb->endpoints + 1;
+		struct musb_qh		*qh = hw_ep->in_qh;
+		void __iomem		*epio = hw_ep->regs;
+		void __iomem		*mbase = musb->mregs;
+		struct urb			*urb;
+		u16				rx_csr;
+
+		urb = next_urb(qh);
+
+		del_timer(&musb_mux_helper_timer);
+
+		musb_ep_select(mbase, 1);
+		rx_csr = musb_readw(epio, MUSB_RXCSR);
+
+		DBG (4,"urb %p qh %p csr %x\n",urb,qh,rx_csr);
+
+		if (urb && usb_pipebulk(urb->pipe) && (qh->mux == 1) && qh->h_port_reg) {
+			if (list_is_singular(&musb->in_bulk)) {
+				mod_timer(&musb_mux_helper_timer, jiffies + 1);
+			} else {
+				if (rx_csr & MUSB_RXCSR_H_REQPKT) {
+					rx_csr |= MUSB_RXCSR_H_WZC_BITS;
+					rx_csr &= ~MUSB_RXCSR_H_REQPKT;
+					musb_writew(epio, MUSB_RXCSR, rx_csr);
+					rx_csr = musb_readw(epio, MUSB_RXCSR);
+				} else {
+					WARNING ("BOGUS NAK Timeout#1 urb %p qh %p csr %x\n", urb, qh, rx_csr);
+				}
+				if ((rx_csr & (MUSB_RXCSR_H_WZC_BITS|MUSB_RXCSR_H_REQPKT)) == 0) {
+					musb_bulk_rx_nak_timeout(musb, hw_ep);
+				} else {
+					if (rx_csr & MUSB_RXCSR_H_REQPKT) {
+						mod_timer(&musb_mux_helper_timer, jiffies + 1);
+						WARNING ("BOGUS NAK Timeout#2 urb %p qh %p csr %x\n", urb, qh, rx_csr);
+					} else {
+						WARNING ("BOGUS NAK Timeout#3 urb %p qh %p csr %x\n", urb, qh, rx_csr);
+					}
+				}
+			}
+		} else {
+			WARNING ("BOGUS NAK Timeout#4 urb %p qh %p csr %x\n", urb, qh, rx_csr);
+		}
+	}
+	spin_unlock_irqrestore(&musb->lock, flags);
+}
+#endif
+
+/*------------------------------------------------------------------*/
 
 /*
  * Clear TX fifo. Needed to avoid BABBLE errors.
@@ -110,19 +249,30 @@ static void musb_h_tx_flush_fifo(struct musb_hw_ep *ep)
 	u16		lastcsr = 0;
 	int		retries = 1000;
 
+/* == 20110615 AVM/WK Fix: flush did not work ==*/
 	csr = musb_readw(epio, MUSB_TXCSR);
 	while (csr & MUSB_TXCSR_FIFONOTEMPTY) {
+		int i;
 		if (csr != lastcsr)
 			DBG(3, "Host TX FIFONOTEMPTY csr: %02x\n", csr);
 		lastcsr = csr;
 		csr |= MUSB_TXCSR_FLUSHFIFO;
+		csr &= ~MUSB_TXCSR_FIFONOTEMPTY;
+		csr &= ~MUSB_TXCSR_TXPKTRDY;
 		musb_writew(epio, MUSB_TXCSR, csr);
-		csr = musb_readw(epio, MUSB_TXCSR);
+		for (i = 0; i < 1000; i++) {
+			csr = musb_readw(epio, MUSB_TXCSR);
+			if (!(csr & MUSB_TXCSR_FLUSHFIFO)) {
+				DBG(4, "Host TX FIFO flushed after %d us; %d retries left; csr: %02x\n", i, retries, csr);
+				break;
+			}
+			udelay (1);
+		}
+		
 		if (WARN(retries-- < 1,
 				"Could not flush host TX%d fifo: csr: %04x\n",
 				ep->epnum, csr))
 			return;
-		mdelay(1);
 	}
 }
 
@@ -207,11 +357,18 @@ musb_start_urb(struct musb *musb, int is_in, struct musb_qh *qh)
 	u32			len;
 	void __iomem		*mbase =  musb->mregs;
 	struct urb		*urb = next_urb(qh);
-	void			*buf = urb->transfer_buffer;
+/* == AVM/WK 20101105 FIX: use uncached dma address, if possible == */
+#ifndef CONFIG_MUSB_PIO_ONLY
+	void		*buf = urb->transfer_dma ? (void *)UNCAC_ADDR(urb->transfer_dma) : urb->transfer_buffer;
+#else
+	void		*buf = urb->transfer_buffer;
+#endif
 	u32			offset = 0;
 	struct musb_hw_ep	*hw_ep = qh->hw_ep;
-	unsigned		pipe = urb->pipe;
+#ifdef CONFIG_USB_MUSB_DEBUG
+	unsigned	pipe = urb->pipe;
 	u8			address = usb_pipedevice(pipe);
+#endif	
 	int			epnum = hw_ep->epnum;
 
 	/* initialize software qh state */
@@ -235,7 +392,7 @@ musb_start_urb(struct musb *musb, int is_in, struct musb_qh *qh)
 		break;
 	default:		/* bulk, interrupt */
 		/* actual_length may be nonzero on retry paths */
-		buf = urb->transfer_buffer + urb->actual_length;
+		buf += urb->actual_length;
 		len = urb->transfer_buffer_length - urb->actual_length;
 	}
 
@@ -324,9 +481,15 @@ __acquires(musb->lock)
 			);
 
 	usb_hcd_unlink_urb_from_ep(musb_to_hcd(musb), urb);
+
+#ifdef CONFIG_AVM_POWER
+	urb->status = status;
+	defer_musb_hcd_giveback_urb (musb, urb);
+#else	
 	spin_unlock(&musb->lock);
 	usb_hcd_giveback_urb(musb_to_hcd(musb), urb, status);
 	spin_lock(&musb->lock);
+#endif    
 }
 
 /* For bulk/interrupt endpoints only */
@@ -466,12 +629,17 @@ musb_host_packet_rx(struct musb *musb, struct urb *urb, u8 epnum, u8 iso_err)
 	void __iomem		*epio = hw_ep->regs;
 	struct musb_qh		*qh = hw_ep->in_qh;
 	int			pipe = urb->pipe;
-	void			*buffer = urb->transfer_buffer;
+/* == AVM/WK 20101105 FIX: use uncached dma address for reads, if possible == */
+#ifndef CONFIG_MUSB_PIO_ONLY
+	void		*buffer = urb->transfer_dma ? (void *)UNCAC_ADDR(urb->transfer_dma) : urb->transfer_buffer;
+#else
+	void		*buffer = urb->transfer_buffer;
+#endif
 
 	/* musb_ep_select(mbase, epnum); */
 	rx_count = musb_readw(epio, MUSB_RXCOUNT);
-	DBG(3, "RX%d count %d, buffer %p len %d/%d\n", epnum, rx_count,
-			urb->transfer_buffer, qh->offset,
+	DBG(3, "RX%d count %d, buffer %p dma %p len %d/%d\n", epnum, rx_count,
+			urb->transfer_buffer, (void*)urb->transfer_dma, qh->offset,
 			urb->transfer_buffer_length);
 
 	/* unload FIFO */
@@ -583,7 +751,10 @@ musb_rx_reinit(struct musb *musb, struct musb_qh *qh, struct musb_hw_ep *ep)
 		musb_writew(ep->regs, MUSB_TXCSR, 0);
 
 	/* scrub all previous state, clearing toggle */
-	} else {
+	}
+	/* == 20110510 AVM/WK Toggle Error Fix : do 'else' path anyway == */
+	// else
+	{
 		csr = musb_readw(ep->regs, MUSB_RXCSR);
 		if (csr & MUSB_RXCSR_RXPKTRDY)
 			WARNING("rx%d, packet/%d ready?\n", ep->epnum,
@@ -871,6 +1042,11 @@ static void musb_ep_program(struct musb *musb, u8 epnum,
 		DBG(7, "RXCSR%d := %04x\n", epnum, csr);
 		musb_writew(hw_ep->regs, MUSB_RXCSR, csr);
 		csr = musb_readw(hw_ep->regs, MUSB_RXCSR);
+		
+		if ((epnum == 1) && (qh->h_port_reg != 0)) {
+			mod_timer(&musb_mux_helper_timer, jiffies + 1);
+		}
+		
 	}
 }
 
@@ -890,7 +1066,13 @@ static bool musb_h_ep0_continue(struct musb *musb, u16 len, struct urb *urb)
 
 	switch (musb->ep0_stage) {
 	case MUSB_EP0_IN:
+/* == AVM/WK 20101105 FIX: use uncached dma address for reads, if possible == */
+#ifndef CONFIG_MUSB_PIO_ONLY
+		fifo_dest = urb->transfer_dma ? (void *)UNCAC_ADDR(urb->transfer_dma) : urb->transfer_buffer;
+		fifo_dest += urb->actual_length;
+#else
 		fifo_dest = urb->transfer_buffer + urb->actual_length;
+#endif
 		fifo_count = min_t(size_t, len, urb->transfer_buffer_length -
 				   urb->actual_length);
 		if (fifo_count < len)
@@ -1056,6 +1238,9 @@ irqreturn_t musb_h_ep0_irq(struct musb *musb)
 			else
 				csr = MUSB_CSR0_H_STATUSPKT
 					| MUSB_CSR0_TXPKTRDY;
+			/* 20110201 AVM/WK Patch from 2.6.28 gets buggy devices enumerated */
+			/* disable the ping token in status phase */
+			csr |= MUSB_CSR0_H_DIS_PING;
 
 			/* flag status stage */
 			musb->ep0_stage = MUSB_EP0_STATUS;
@@ -1387,9 +1572,13 @@ static void musb_bulk_rx_nak_timeout(struct musb *musb, struct musb_hw_ep *ep)
 	rx_csr = musb_readw(epio, MUSB_RXCSR);
 	rx_csr |= MUSB_RXCSR_H_WZC_BITS;
 	rx_csr &= ~MUSB_RXCSR_DATAERROR;
+	/* 20110517 AVM/WK Fix: Stop INs */	
+	rx_csr &= ~MUSB_RXCSR_H_REQPKT;
 	musb_writew(epio, MUSB_RXCSR, rx_csr);
+	rx_csr = musb_readw(epio, MUSB_RXCSR);
 
 	cur_qh = first_qh(&musb->in_bulk);
+	DBG (4," csr %x cur_qh %p\n",rx_csr,cur_qh);
 	if (cur_qh) {
 		urb = next_urb(cur_qh);
 		if (dma_channel_status(dma) == MUSB_DMA_STATUS_BUSY) {
@@ -1430,7 +1619,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 	bool			done = false;
 	u32			status;
 	struct dma_channel	*dma;
-
+	
 	musb_ep_select(mbase, epnum);
 
 	urb = next_urb(qh);
@@ -1495,7 +1684,12 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 			rx_csr |= MUSB_RXCSR_H_WZC_BITS;
 			rx_csr &= ~MUSB_RXCSR_DATAERROR;
 			musb_writew(epio, MUSB_RXCSR, rx_csr);
-
+#ifdef AVM_MUX_HELPER
+			/* AVM/WK restart timer for TT device */
+			if ((epnum == 1) && (qh->h_port_reg != 0)) {
+				mod_timer(&musb_mux_helper_timer, jiffies + 1);
+			}
+#endif
 			goto finish;
 		} else {
 			DBG(4, "RX end %d ISO data error\n", epnum);
@@ -1524,7 +1718,8 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 
 	if (unlikely(dma_channel_status(dma) == MUSB_DMA_STATUS_BUSY)) {
 		/* SHOULD NEVER HAPPEN ... but at least DaVinci has done it */
-		ERR("RX%d dma busy, csr %04x\n", epnum, rx_csr);
+		/* AVM/WK yes it happens */
+		DBG(3,"RX%d dma busy, csr %04x\n", epnum, rx_csr);
 		goto finish;
 	}
 
@@ -1536,7 +1731,8 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 	/* FIXME this is _way_ too much in-line logic for Mentor DMA */
 
 #ifndef CONFIG_USB_INVENTRA_DMA
-	if (rx_csr & MUSB_RXCSR_H_REQPKT)  {
+/* 20110615 AVM/WK FIX: also check for RXPKTRDY */
+	if (rx_csr & (MUSB_RXCSR_H_REQPKT|MUSB_RXCSR_RXPKTRDY))  {
 		/* REVISIT this happened for a while on some short reads...
 		 * the cleanup still needs investigation... looks bad...
 		 * and also duplicates dma cleanup code above ... plus,
@@ -1552,6 +1748,7 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 		DBG(2, "RXCSR%d %04x, reqpkt, len %zu%s\n", epnum, rx_csr,
 				xfer_len, dma ? ", dma" : "");
 		rx_csr &= ~MUSB_RXCSR_H_REQPKT;
+		rx_csr |= MUSB_RXCSR_FLUSHFIFO;
 
 		musb_ep_select(mbase, epnum);
 		musb_writew(epio, MUSB_RXCSR,
@@ -1560,8 +1757,9 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 #endif
 	if (dma && (rx_csr & MUSB_RXCSR_DMAENAB)) {
 		xfer_len = dma->actual_len;
-
+/* 20110615 AVM/WK FIX: don't set REQPKT again */
 		val &= ~(MUSB_RXCSR_DMAENAB
+			| MUSB_RXCSR_H_REQPKT
 			| MUSB_RXCSR_H_AUTOREQ
 			| MUSB_RXCSR_AUTOCLEAR
 			| MUSB_RXCSR_RXPKTRDY);
@@ -1752,6 +1950,12 @@ finish:
 	if (done) {
 		if (urb->status == -EINPROGRESS)
 			urb->status = status;
+#ifdef AVM_MUX_HELPER
+			/* AVM/WK stop timer for TT device */
+			if (epnum == 1) {
+				del_timer(&musb_mux_helper_timer);
+			}
+#endif			
 		musb_advance_schedule(musb, urb, hw_ep, USB_DIR_IN);
 	}
 }
@@ -1791,49 +1995,61 @@ static int musb_schedule(
 	best_diff = 4096;
 	best_end = -1;
 
-	for (epnum = 1, hw_ep = musb->endpoints + 1;
-			epnum < musb->nr_endpoints;
-			epnum++, hw_ep++) {
-		int	diff;
+	/* 20110523 AVM/WK Change: Choose free EP only for Mass Storage Bulk or Interrupt EPs
+				Use muxed EP for always IN devices like a modem */
+	if ((qh->type != USB_ENDPOINT_XFER_BULK) 
+		|| (!is_in) 
+		|| (next_urb(qh)->transfer_flags & URB_SHORT_NOT_OK) 
+		|| (next_urb(qh)->transfer_buffer_length == 13)) {
 
-		if (musb_ep_get_qh(hw_ep, is_in) != NULL)
-			continue;
+		for (epnum = 1, hw_ep = musb->endpoints + 1;
+				epnum < musb->nr_endpoints;
+				epnum++, hw_ep++) {
+			int	diff;
 
-		if (hw_ep == musb->bulk_ep)
-			continue;
+			if (musb_ep_get_qh(hw_ep, is_in) != NULL)
+				continue;
 
-		if (is_in)
-			diff = hw_ep->max_packet_sz_rx;
-		else
-			diff = hw_ep->max_packet_sz_tx;
-		diff -= (qh->maxpacket * qh->hb_mult);
+			if (hw_ep == musb->bulk_ep)
+				continue;
 
-		if (diff >= 0 && best_diff > diff) {
-			best_diff = diff;
-			best_end = epnum;
+			if (is_in)
+				diff = hw_ep->max_packet_sz_rx;
+			else
+				diff = hw_ep->max_packet_sz_tx;
+			diff -= (qh->maxpacket * qh->hb_mult);
+
+			if (diff >= 0 && best_diff > diff) {
+				best_diff = diff;
+				best_end = epnum;
+			}
 		}
 	}
-	/* use bulk reserved ep1 if no other ep is free */
-	if (best_end < 0 && qh->type == USB_ENDPOINT_XFER_BULK) {
-		hw_ep = musb->bulk_ep;
-		if (is_in)
-			head = &musb->in_bulk;
-		else
-			head = &musb->out_bulk;
 
-		/* Enable bulk RX NAK timeout scheme when bulk requests are
-		 * multiplexed.  This scheme doen't work in high speed to full
-		 * speed scenario as NAK interrupts are not coming from a
-		 * full speed device connected to a high speed device.
-		 * NAK timeout interval is 8 (128 uframe or 16ms) for HS and
-		 * 4 (8 frame or 8ms) for FS device.
-		 */
-		if (is_in && qh->dev)
-			qh->intv_reg =
-				(USB_SPEED_HIGH == qh->dev->speed) ? 8 : 4;
-		goto success;
-	} else if (best_end < 0) {
-		return -ENOSPC;
+	/* use bulk reserved ep1 if no other ep is free */
+	if (best_end < 0) {
+		if (qh->type == USB_ENDPOINT_XFER_BULK) {
+			hw_ep = musb->bulk_ep;
+			if (is_in)
+				head = &musb->in_bulk;
+			else
+				head = &musb->out_bulk;
+
+			/* Enable bulk RX NAK timeout scheme when bulk requests are
+			 * multiplexed.  This scheme doen't work in high speed to full
+			 * speed scenario as NAK interrupts are not coming from a
+			 * full speed device connected to a high speed device.
+			 * NAK timeout interval is 8 (128 uframe or 16ms) for HS and
+			 * 4 (8 frame or 8ms) for FS device.
+			 */
+			if (is_in && qh->dev)
+				qh->intv_reg =
+					(USB_SPEED_HIGH == qh->dev->speed) ? 8 : 4;
+			goto success;
+		} else {
+			ERR ("no EP Resource for dev%u EP%u%s\n", qh->addr_reg, qh->epnum, is_in?"in":"out");
+			return -ENOSPC;
+		}
 	}
 
 	idle = 1;
@@ -2224,6 +2440,19 @@ static int musb_h_start(struct usb_hcd *hcd)
 	/* NOTE: musb_start() is called when the hub driver turns
 	 * on port power, or when (OTG) peripheral starts.
 	 */
+#ifdef CONFIG_AVM_POWER
+    setup_timer (&musb_giveback_timer, musb_deferred_giveback_func, (unsigned long)musb);
+    tasklet_init(&musb_giveback_tasklet, musb_deferred_giveback_func, (unsigned long)musb);
+    INIT_LIST_HEAD (&musb->urb_giveback_list);
+
+	if(!IS_ERR(&avm_powermanager_load_control_register) && &avm_powermanager_load_control_register) {
+		load_handle = avm_powermanager_load_control_register ("musb_hdrc", musb_load_control_callback, musb);
+	}
+#endif // CONFIG_AVM_POWER
+#ifdef AVM_MUX_HELPER
+    setup_timer (&musb_mux_helper_timer, musb_mux_helper_func, (unsigned long)musb);
+#endif    
+	 
 	hcd->state = HC_STATE_RUNNING;
 	musb->port1_status = 0;
 	return 0;
@@ -2231,6 +2460,16 @@ static int musb_h_start(struct usb_hcd *hcd)
 
 static void musb_h_stop(struct usb_hcd *hcd)
 {
+
+#ifdef CONFIG_AVM_POWER
+	if (load_handle != NULL) {
+		avm_powermanager_load_control_release (load_handle);
+		load_handle = NULL;
+	}
+	/* complete all in list */
+	tasklet_schedule(&musb_giveback_tasklet);
+#endif // CONFIG_AVM_POWER
+
 	musb_stop(hcd_to_musb(hcd));
 	hcd->state = HC_STATE_HALT;
 }

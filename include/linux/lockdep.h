@@ -431,7 +431,7 @@ static inline void early_boot_irqs_off(void)
 static inline void early_boot_irqs_on(void)
 {
 }
-static inline void print_irqtrace_events(struct task_struct *curr)
+static inline void print_irqtrace_events(struct task_struct *curr __attribute__ ((unused)))
 {
 }
 #endif

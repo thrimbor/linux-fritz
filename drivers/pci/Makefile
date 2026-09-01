@@ -4,7 +4,8 @@
 
 obj-y		+= access.o bus.o probe.o remove.o pci.o quirks.o \
 			pci-driver.o search.o pci-sysfs.o rom.o setup-res.o \
-			irq.o
+			irq.o pci-sysfs.o quirks.o rom.o
+
 obj-$(CONFIG_PROC_FS) += proc.o
 obj-$(CONFIG_SYSFS) += slot.o
 
@@ -63,3 +64,7 @@ obj-$(CONFIG_PCI_STUB) += pci-stub.o
 ifeq ($(CONFIG_PCI_DEBUG),y)
 EXTRA_CFLAGS += -DDEBUG
 endif
+
+ifeq ($(CONFIG_LANTIQ),y)
+-include $(srctree)/drivers/pci/Makefile.ifx
+endif #ifeq ($(CONFIG_LANTIQ),y)

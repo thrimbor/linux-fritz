@@ -54,6 +54,12 @@
 #include <net/xfrm.h>
 #include <net/checksum.h>
 #include <linux/mroute6.h>
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && ( defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+  #include <net/ifx_ppa_api.h>
+#endif
+#ifdef	CONFIG_MAPPING
+#include "proto_trans.h"
+#endif
 
 static int ip6_fragment(struct sk_buff *skb, int (*output)(struct sk_buff *));
 
@@ -85,6 +91,19 @@ EXPORT_SYMBOL_GPL(ip6_local_out);
 static int ip6_output_finish(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
+
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && ( defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+	if ( ppa_hook_session_add_fn != NULL )
+	{
+		struct nf_conn *ct;
+		enum ip_conntrack_info ctinfo;
+		uint32_t flags;
+		ct = nf_ct_get(skb, &ctinfo);
+		flags = 0; //  post routing
+		flags |= CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL ? PPA_F_SESSION_ORG_DIR : PPA_F_SESSION_REPLY_DIR;  
+		ppa_hook_session_add_fn(skb, ct, flags);
+	}
+#endif
 
 	if (dst->hh)
 		return neigh_hh_output(dst->hh, skb);
@@ -165,6 +184,16 @@ static inline int ip6_skb_dst_mtu(struct sk_buff *skb)
 
 int ip6_output(struct sk_buff *skb)
 {
+#ifdef CONFIG_MAPPING
+       struct dst_entry *rt = skb_dst(skb);
+       if (rt->mapping) {
+               if (!ip6_mapping(skb))
+                       printk("Mapping6 Failed!\n");
+               kfree_skb(skb);
+               return 0;
+       }
+#endif
+
 	struct inet6_dev *idev = ip6_dst_idev(skb_dst(skb));
 	if (unlikely(idev->cnf.disable_ipv6)) {
 		IP6_INC_STATS(dev_net(skb_dst(skb)->dev), idev,
@@ -289,12 +318,12 @@ int ip6_nd_hdr(struct sock *sk, struct sk_buff *skb, struct net_device *dev,
 {
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct ipv6hdr *hdr;
-	int totlen;
+	/*--- int totlen; ---*/
 
 	skb->protocol = htons(ETH_P_IPV6);
 	skb->dev = dev;
 
-	totlen = len + sizeof(struct ipv6hdr);
+	/*--- totlen = len + sizeof(struct ipv6hdr); ---*/
 
 	skb_reset_network_header(skb);
 	skb_put(skb, sizeof(struct ipv6hdr));
@@ -394,6 +423,9 @@ static int ip6_forward_proxy_check(struct sk_buff *skb)
 
 static inline int ip6_forward_finish(struct sk_buff *skb)
 {
+#ifdef CONFIG_AVM_PA
+    avm_pa_mark_routed(skb);
+#endif
 	return dst_output(skb);
 }
 
@@ -556,6 +588,10 @@ static void ip6_copy_metadata(struct sk_buff *to, struct sk_buff *from)
 
 #ifdef CONFIG_NET_SCHED
 	to->tc_index = from->tc_index;
+#endif
+#ifdef CONFIG_AVM_PA
+	memcpy(&to->avm_pa.pktinfo, &from->avm_pa.pktinfo,
+								sizeof(from->avm_pa.pktinfo));
 #endif
 	nf_copy(to, from);
 #if defined(CONFIG_NETFILTER_XT_TARGET_TRACE) || \

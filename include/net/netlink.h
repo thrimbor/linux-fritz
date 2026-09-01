@@ -335,7 +335,7 @@ static inline int nlmsg_ok(const struct nlmsghdr *nlh, int remaining)
 {
 	return (remaining >= (int) sizeof(struct nlmsghdr) &&
 		nlh->nlmsg_len >= sizeof(struct nlmsghdr) &&
-		nlh->nlmsg_len <= remaining);
+		nlh->nlmsg_len <= (__u32) remaining);
 }
 
 /**
@@ -369,7 +369,9 @@ static inline int nlmsg_parse(const struct nlmsghdr *nlh, int hdrlen,
 			      struct nlattr *tb[], int maxtype,
 			      const struct nla_policy *policy)
 {
-	if (nlh->nlmsg_len < nlmsg_msg_size(hdrlen))
+	int size = nlmsg_msg_size(hdrlen);
+
+	if ((size >= 0) && (nlh->nlmsg_len < (__u32) size))
 		return -EINVAL;
 
 	return nla_parse(tb, maxtype, nlmsg_attrdata(nlh, hdrlen),
@@ -384,7 +386,7 @@ static inline int nlmsg_parse(const struct nlmsghdr *nlh, int hdrlen,
  *
  * Returns the first attribute which matches the specified type.
  */
-static inline struct nlattr *nlmsg_find_attr(const struct nlmsghdr *nlh,
+static inline struct nlattr *nlmsg_find_attr(struct nlmsghdr *nlh,
 					     int hdrlen, int attrtype)
 {
 	return nla_find(nlmsg_attrdata(nlh, hdrlen),
@@ -401,7 +403,9 @@ static inline struct nlattr *nlmsg_find_attr(const struct nlmsghdr *nlh,
 static inline int nlmsg_validate(struct nlmsghdr *nlh, int hdrlen, int maxtype,
 				 const struct nla_policy *policy)
 {
-	if (nlh->nlmsg_len < nlmsg_msg_size(hdrlen))
+	int size = nlmsg_msg_size(hdrlen);
+
+	if ((size >= 0) && (nlh->nlmsg_len < (__u32) size))
 		return -EINVAL;
 
 	return nla_validate(nlmsg_attrdata(nlh, hdrlen),
@@ -780,6 +784,18 @@ static inline int nla_put_u32(struct sk_buff *skb, int attrtype, u32 value)
 {
 	return nla_put(skb, attrtype, sizeof(u32), &value);
 }
+
+/**
+ * nla_put_be32 - Add a __be32 netlink attribute to a socket buffer
+ * @skb: socket buffer to add attribute to
+ * @attrtype: attribute type
+ * @value: numeric value
+ */
+static inline int nla_put_be32(struct sk_buff *skb, int attrtype, __be32 value)
+{
+	return nla_put(skb, attrtype, sizeof(__be32), &value);
+}
+
 
 /**
  * nla_put_64 - Add a u64 netlink attribute to a socket buffer

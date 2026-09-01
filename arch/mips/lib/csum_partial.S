@@ -13,6 +13,257 @@
 #include <asm/asm.h>
 #include <asm/asm-offsets.h>
 #include <asm/regdef.h>
+#include <linux/autoconf.h>
+
+
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+#define ADDC(sum,reg)			\
+	addu	sum, reg;		\
+	sltu	v1, sum, reg;		\
+	addu	sum, v1
+
+#define ADDC32 ADDC
+#define UNIT(unit)  ((unit)*NBYTES)
+
+#define CSUM_BIGCHUNK(src, offset, sum, t0, t1, t2, t3) \
+	lw	t0, (offset + 0x00)(src); \
+	lw	t1, (offset + 0x04)(src); \
+	lw	t2, (offset + 0x08)(src); \
+	lw	t3, (offset + 0x0c)(src); \
+	ADDC(sum, t0);                    \
+	ADDC(sum, t1);                    \
+	ADDC(sum, t2);                    \
+	ADDC(sum, t3);                    \
+	lw	t0, (offset + 0x10)(src); \
+	lw	t1, (offset + 0x14)(src); \
+	lw	t2, (offset + 0x18)(src); \
+	lw	t3, (offset + 0x1c)(src); \
+	ADDC(sum, t0);                    \
+	ADDC(sum, t1);                    \
+	ADDC(sum, t2);                    \
+	ADDC(sum, t3);                    \
+
+/*
+ * a0: source address
+ * a1: length of the area to checksum
+ * a2: partial checksum
+ */
+
+#define src a0
+#define dest a1
+#define sum v0
+
+	.text
+	.set	noreorder
+
+/* unknown src alignment and < 8 bytes to go  */
+small_csumcpy:
+	move	a1, t2
+
+	andi	t0, a1, 4
+	beqz	t0, 1f
+	 andi	t0, a1, 2
+
+	/* Still a full word to go  */
+/*	ulw	t1, (src) */
+	lbu     t5, 0(src)
+	lbu     t6, 1(src)
+	sll     t5, t5, 24
+	sll     t6, t6, 16
+	or      t5, t5, t6
+	move    t1, t5
+	lbu     t5, 2(src)
+	lbu     t6, 3(src)
+	sll     t5, t5, 8
+	or      t5, t5, t6
+	or      t1, t1, t5
+	addiu	src, 4
+	ADDC(sum, t1)
+
+1:	move	t1, zero
+	beqz	t0, 1f
+	 andi	t0, a1, 1
+
+	/* Still a halfword to go  */
+	ulhu	t1, (src)
+	addiu	src, 2
+
+1:	beqz	t0, 1f
+	 sll	t1, t1, 16
+
+	lbu	t2, (src)
+	 nop
+
+#ifdef __MIPSEB__
+	sll	t2, t2, 8
+#endif
+	or	t1, t2
+
+1:	ADDC(sum, t1)
+
+	/* fold checksum */
+	sll	v1, sum, 16
+	addu	sum, v1
+	sltu	v1, sum, v1
+	srl	sum, sum, 16
+	addu	sum, v1
+
+	/* odd buffer alignment? */
+	beqz	t7, 1f
+	 nop
+	sll	v1, sum, 8
+	srl	sum, sum, 8
+	or	sum, v1
+	andi	sum, 0xffff
+1:
+	.set	reorder
+	/* Add the passed partial csum.  */
+	ADDC(sum, a2)
+	jr	ra
+	.set	noreorder
+
+/* ------------------------------------------------------------------------- */
+
+    .section .text.hot
+	.align	5
+LEAF(csum_partial)
+	move	sum, zero
+	move	t7, zero
+
+	sltiu	t8, a1, 0x8
+	bnez	t8, small_csumcpy		/* < 8 bytes to copy */
+	 move	t2, a1
+
+	beqz	a1, out
+	 andi	t7, src, 0x1			/* odd buffer? */
+
+hword_align:
+	beqz	t7, word_align
+	 andi	t8, src, 0x2
+
+	lbu	t0, (src)
+	subu	a1, a1, 0x1
+#ifdef __MIPSEL__
+	sll	t0, t0, 8
+#endif
+	ADDC(sum, t0)
+	addu	src, src, 0x1
+	andi	t8, src, 0x2
+
+word_align:
+	beqz	t8, dword_align
+	 sltiu	t8, a1, 56
+
+	lhu	t0, (src)
+	subu	a1, a1, 0x2
+	ADDC(sum, t0)
+	sltiu	t8, a1, 56
+	addu	src, src, 0x2
+
+dword_align:
+	bnez	t8, do_end_words
+	 move	t8, a1
+
+	andi	t8, src, 0x4
+	beqz	t8, qword_align
+	 andi	t8, src, 0x8
+
+	lw	t0, 0x00(src)
+	subu	a1, a1, 0x4
+	ADDC(sum, t0)
+	addu	src, src, 0x4
+	andi	t8, src, 0x8
+
+qword_align:
+	beqz	t8, oword_align
+	 andi	t8, src, 0x10
+
+	lw	t0, 0x00(src)
+	lw	t1, 0x04(src)
+	subu	a1, a1, 0x8
+	ADDC(sum, t0)
+	ADDC(sum, t1)
+	addu	src, src, 0x8
+	andi	t8, src, 0x10
+
+oword_align:
+	beqz	t8, begin_movement
+	 srl	t8, a1, 0x7
+
+	lw	t3, 0x08(src)
+	lw	t4, 0x0c(src)
+	lw	t0, 0x00(src)
+	lw	t1, 0x04(src)
+	ADDC(sum, t3)
+	ADDC(sum, t4)
+	ADDC(sum, t0)
+	ADDC(sum, t1)
+	subu	a1, a1, 0x10
+	addu	src, src, 0x10
+	srl	t8, a1, 0x7
+
+begin_movement:
+	beqz	t8, 1f
+	 andi	t2, a1, 0x40
+
+move_128bytes:
+	CSUM_BIGCHUNK(src, 0x00, sum, t0, t1, t3, t4)
+	CSUM_BIGCHUNK(src, 0x20, sum, t0, t1, t3, t4)
+	CSUM_BIGCHUNK(src, 0x40, sum, t0, t1, t3, t4)
+	CSUM_BIGCHUNK(src, 0x60, sum, t0, t1, t3, t4)
+	subu	t8, t8, 0x01
+	bnez	t8, move_128bytes
+	 addu	src, src, 0x80
+
+1:
+	beqz	t2, 1f
+	 andi	t2, a1, 0x20
+
+move_64bytes:
+	CSUM_BIGCHUNK(src, 0x00, sum, t0, t1, t3, t4)
+	CSUM_BIGCHUNK(src, 0x20, sum, t0, t1, t3, t4)
+	addu	src, src, 0x40
+
+1:
+	beqz	t2, do_end_words
+	 andi	t8, a1, 0x1c
+
+move_32bytes:
+	CSUM_BIGCHUNK(src, 0x00, sum, t0, t1, t3, t4)
+	andi	t8, a1, 0x1c
+	addu	src, src, 0x20
+
+do_end_words:
+	beqz	t8, maybe_end_cruft
+	 srl	t8, t8, 0x2
+
+end_words:
+	lw	t0, (src)
+	subu	t8, t8, 0x1
+	ADDC(sum, t0)
+	bnez	t8, end_words
+	 addu	src, src, 0x4
+
+maybe_end_cruft:
+	andi	t2, a1, 0x3
+
+small_memcpy:
+ j small_csumcpy; move a1, t2
+	beqz	t2, out
+	 move	a1, t2
+
+end_bytes:
+	lb	t0, (src)
+	subu	a1, a1, 0x1
+	bnez	a2, end_bytes
+	 addu	src, src, 0x1
+
+out:
+	jr	ra
+	 move	v0, sum
+	END(csum_partial)
+
+#else /* VX200 */
 
 #ifdef CONFIG_64BIT
 /*
@@ -92,7 +343,7 @@
 #define src a0
 #define sum v0
 
-	.text
+    .section .text.hot
 	.set	noreorder
 	.align	5
 LEAF(csum_partial)
@@ -290,7 +541,7 @@ LEAF(csum_partial)
 	jr	ra
 	.set	noreorder
 	END(csum_partial)
-
+#endif /* VX200 */
 
 /*
  * checksum and copy routines based on memcpy.S
@@ -396,6 +647,7 @@ LEAF(csum_partial)
 	.set	at=v1
 #endif
 
+    .section .text.hot
 LEAF(__csum_partial_copy_user)
 	PTR_ADDU	AT, src, len	/* See (1) above. */
 #ifdef CONFIG_64BIT
@@ -527,6 +779,12 @@ EXC(	STORE	t0, 0(dst),		.Ls_exc)
 	 * more instruction-level parallelism.
 	 */
 #define bits t2
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+	beqz	len, .Ldone
+	nop
+	j	.Lcopy_bytes
+	nop
+#else
 	beqz	len, .Ldone
 	 ADD	t1, dst, len	# t1 is just past last byte of dst
 	li	bits, 8*NBYTES
@@ -535,6 +793,7 @@ EXC(	LOAD	t0, 0(src),		.Ll_exc)
 	SUB	bits, bits, rem	# bits = number of bits to discard
 	SHIFT_DISCARD t0, t0, bits
 EXC(	STREST	t0, -1(t1),		.Ls_exc)
+#endif
 	SHIFT_DISCARD_REVERT t0, t0, bits
 	.set reorder
 	ADDC(sum, t0)
@@ -551,6 +810,32 @@ EXC(	STREST	t0, -1(t1),		.Ls_exc)
 	 * Set match = (src and dst have same alignment)
 	 */
 #define match rem
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+#define COPY_BYTE1(src,dst)		\
+EXC(	lbu	t4, 0(src), .Ll_exc);	\
+	SUB	len, len, 1;		\
+EXC(	 sb	t4, 0(dst), .Ls_exc_p1) \
+	ADD src, src, 1;		\
+	SLL	t5, t3, 3;		\
+	ADD 	t5, t5, -8;		\
+	SLL 	t4, t4, t5;		\
+	ADDC(sum, t4);			\
+	beqz	len, .Ldone;		\
+	ADD dst, dst,1;		\
+
+	ADD t2, zero,NBYTES
+	SUB t3, t2, t1			
+	ADD	t6, zero, zero
+.Lcopy1:
+	COPY_BYTE1(src,dst)
+	SUB t3, t3 , 1
+	bne t3, zero, .Lcopy1
+	nop
+
+	xor match, t0, t1
+	beqz	match, .Lboth_aligned
+	nop
+#else
 EXC(	LDFIRST	t3, FIRST(0)(src),	.Ll_exc)
 	ADD	t2, zero, NBYTES
 EXC(	LDREST	t3, REST(0)(src),	.Ll_exc_copy)
@@ -566,7 +851,7 @@ EXC(	STFIRST t3, FIRST(0)(dst),	.Ls_exc)
 	ADD	dst, dst, t2
 	beqz	match, .Lboth_aligned
 	 ADD	src, src, t2
-
+#endif
 .Lsrc_unaligned_dst_aligned:
 	SRL	t0, len, LOG_NBYTES+2    # +2 for 4 units/iter
 	beqz	t0, .Lcleanup_src_unaligned
@@ -578,6 +863,54 @@ EXC(	STFIRST t3, FIRST(0)(dst),	.Ls_exc)
  * It's OK to load FIRST(N+1) before REST(N) because the two addresses
  * are to the same unit (unless src is aligned, but it's not).
  */
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+EXC( lbu 	t0, 0(src), .Ll_exc)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t0 , 8
+	or	t0, t4
+	sll 	t0, 8
+	or	t0, t5
+	sll 	t0, 8
+	or	t0, t6
+	ADD src, src, 4
+EXC( lbu 	t1, 0(src), .Ll_exc_copy)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t1 , 8
+	or	t1, t4
+	sll 	t1, 8
+	or	t1, t5
+	sll 	t1, 8
+	or	t1, t6
+	ADD src, src, 4
+EXC( lbu 	t2, 0(src), .Ll_exc_copy)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t2 , 8
+	or	t2, t4
+	sll 	t2, 8
+	or	t2, t5
+	sll 	t2, 8
+	or	t2, t6
+	ADD src, src, 4
+EXC( lbu 	t3, 0(src), .Ll_exc_copy)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t3 , 8
+	or	t3, t4
+	sll 	t3, 8
+	or	t3, t5
+	sll 	t3, 8
+	or	t3, t6
+	ADD src, src, 4
+	
+	SUB     len, len, 4*NBYTES
+#else	/* FUSIV MIPS1 */
 EXC(	LDFIRST	t0, FIRST(0)(src),	.Ll_exc)
 EXC(	LDFIRST	t1, FIRST(1)(src),	.Ll_exc_copy)
 	SUB     len, len, 4*NBYTES
@@ -590,6 +923,7 @@ EXC(	LDREST	t3, REST(3)(src),	.Ll_exc_copy)
 	ADD	src, src, 4*NBYTES
 #ifdef CONFIG_CPU_SB1
 	nop				# improves slotting
+#endif
 #endif
 EXC(	STORE	t0, UNIT(0)(dst),	.Ls_exc)
 	ADDC(sum, t0)
@@ -610,8 +944,21 @@ EXC(	STORE	t3, UNIT(3)(dst),	.Ls_exc)
 	beq	rem, len, .Lcopy_bytes
 	 nop
 1:
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+EXC( lbu 	t0, 0(src), .Ll_exc)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t0 , 8
+	or	t0, t4
+	sll 	t0, 8
+	or	t0, t5
+	sll 	t0, 8
+	or	t0, t6
+#else	/* FUSIV MIPS1 */
 EXC(	LDFIRST t0, FIRST(0)(src),	.Ll_exc)
 EXC(	LDREST	t0, REST(0)(src),	.Ll_exc_copy)
+#endif
 	ADD	src, src, NBYTES
 	SUB	len, len, NBYTES
 EXC(	STORE	t0, 0(dst),		.Ls_exc)
@@ -714,6 +1061,13 @@ EXC(	lbu	t1, 0(src),	.Ll_exc)
 	ADD	dst, dst, 1
 	bne	src, t0, 1b
 	.set	noreorder
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+.Ls_exc_p1:
+	.set	reorder				/* DADDI_WAR */
+	ADD	len, len, 1
+	jr	ra
+	.set	noreorder
+#endif
 .Ll_exc:
 	LOAD	t0, TI_TASK($28)
 	 nop

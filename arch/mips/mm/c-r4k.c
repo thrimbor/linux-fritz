@@ -1076,7 +1076,6 @@ static int __cpuinit probe_scache(void)
 	unsigned long flags, addr, begin, end, pow2;
 	unsigned int config = read_c0_config();
 	struct cpuinfo_mips *c = &current_cpu_data;
-	int tmp;
 
 	if (config & CONF_SC)
 		return 0;
@@ -1109,7 +1108,6 @@ static int __cpuinit probe_scache(void)
 
 	/* Now search for the wrap around point. */
 	pow2 = (128 * 1024);
-	tmp = 0;
 	for (addr = begin + (128 * 1024); addr < end; addr = begin + pow2) {
 		cache_op(Index_Load_Tag_SD, addr);
 		__asm__ __volatile__("nop; nop; nop; nop;"); /* hazard... */
@@ -1348,6 +1346,125 @@ static int __init setcoherentio(char *str)
 __setup("coherentio", setcoherentio);
 #endif
 
+#ifdef CONFIG_IFX_VPE_CACHE_SPLIT /* Code for splitting the cache ways among VPEs. */
+
+#include <asm/mipsmtregs.h>
+#include <asm/setup.h>
+
+/*
+ * By default, vpe_icache_shared and vpe_dcache_shared
+ * values are 1 i.e., both icache and dcache are shared
+ * among the VPEs.
+ */
+
+int vpe_icache_shared = 1;
+static int __init vpe_icache_shared_val(char *str)
+{
+       get_option(&str, &vpe_icache_shared);
+       return 1;
+}
+__setup("vpe_icache_shared=", vpe_icache_shared_val);
+EXPORT_SYMBOL(vpe_icache_shared);
+int vpe_dcache_shared = 1;
+static int __init vpe_dcache_shared_val(char *str)
+{
+       get_option(&str, &vpe_dcache_shared);
+       return 1;
+}
+__setup("vpe_dcache_shared=", vpe_dcache_shared_val);
+EXPORT_SYMBOL(vpe_dcache_shared);
+
+/*
+ * Software is required to make atleast one icache
+ * way available for a VPE at all times i.e., one
+ * can't assign all the icache ways to one VPE.
+ */
+
+int icache_way0 = 0;
+static int __init icache_way0_val(char *str)
+{
+       get_option(&str, &icache_way0);
+       return 1;
+}
+__setup("icache_way0=", icache_way0_val);
+
+int icache_way1 = 0;
+static int __init icache_way1_val(char *str)
+{
+       get_option(&str, &icache_way1);
+       return 1;
+}
+__setup("icache_way1=", icache_way1_val);
+
+int icache_way2 = 0;
+static int __init icache_way2_val(char *str)
+{
+       get_option(&str, &icache_way2);
+       return 1;
+}
+__setup("icache_way2=", icache_way2_val);
+
+int icache_way3 = 0;
+static int __init icache_way3_val(char *str)
+{
+       get_option(&str, &icache_way3);
+       return 1;
+}
+__setup("icache_way3=", icache_way3_val);
+
+int dcache_way0 = 0;
+static int __init dcache_way0_val(char *str)
+{
+       get_option(&str, &dcache_way0);
+       return 1;
+}
+__setup("dcache_way0=", dcache_way0_val);
+
+int dcache_way1 = 0;
+static int __init dcache_way1_val(char *str)
+{
+       get_option(&str, &dcache_way1);
+       return 1;
+}
+__setup("dcache_way1=", dcache_way1_val);
+ 
+int dcache_way2 = 0;
+static int __init dcache_way2_val(char *str)
+{
+       get_option(&str, &dcache_way2);
+       return 1;
+}
+__setup("dcache_way2=", dcache_way2_val);
+
+int dcache_way3 = 0;
+static int __init dcache_way3_val(char *str)
+{
+	get_option(&str, &dcache_way3);
+	return 1;
+}
+__setup("dcache_way3=", dcache_way3_val);
+
+#endif /* endif CONFIG_IFX_VPE_CACHE_SPLIT */
+
+/*--- #define DISPLAY_CACHE_ENTRIES ---*/
+#if defined(DISPLAY_CACHE_ENTRIES)
+#define CACHE_DISPLAY(a) printk("%s waysize: %d, sets: %d, ways: %d, linesz: %d, waybit: %d, flags: %d\n", #a, \
+                                                                    current_cpu_data.a.waysize, \
+                                                                    current_cpu_data.a.sets, \
+                                                                    current_cpu_data.a.ways, \
+                                                                    current_cpu_data.a.linesz, \
+                                                                    current_cpu_data.a.waybit, \
+                                                                    current_cpu_data.a.flags \
+                            );
+/*--------------------------------------------------------------------------------*\
+\*--------------------------------------------------------------------------------*/
+static void display_cache_value(void) {
+    CACHE_DISPLAY(scache);
+    CACHE_DISPLAY(icache);
+    CACHE_DISPLAY(dcache);
+    CACHE_DISPLAY(tcache);
+}
+#endif/*--- #if defined(DISPLAY_CACHE_ENTRIES) ---*/
 void __cpuinit r4k_cache_init(void)
 {
 	extern void build_clear_page(void);
@@ -1355,6 +1472,14 @@ void __cpuinit r4k_cache_init(void)
 	extern char __weak except_vec2_generic;
 	extern char __weak except_vec2_sb1;
 	struct cpuinfo_mips *c = &current_cpu_data;
+
+    /*--------------------------------------------------------------------------------------*\
+     * ENABLE for write back allocate
+    \*--------------------------------------------------------------------------------------*/
+#if defined(CONFIG_VR9) || defined(CONFIG_AR10)
+	_page_cachable_default = _CACHE_CACHABLE_NONCOHERENT;
+	change_c0_config(CONF_CM_CMASK, _page_cachable_default >> _CACHE_SHIFT);
+#endif/*--- #if defined(CONFIG_VR9) || defined(CONFIG_AR10) ---*/
 
 	switch (c->cputype) {
 	case CPU_SB1:
@@ -1366,6 +1491,76 @@ void __cpuinit r4k_cache_init(void)
 		set_uncached_handler(0x100, &except_vec2_generic, 0x80);
 		break;
 	}
+
+#ifdef CONFIG_IFX_VPE_CACHE_SPLIT
+       /*
+        * We split the cache ways appropriately among the VPEs
+        * based on cache ways values we received as command line
+        * arguments
+        */
+       if ( (!vpe_icache_shared) || (!vpe_dcache_shared) ){
+
+               /* PCP bit must be 1 to split the cache */
+              if(read_c0_mvpconf0() & MVPCONF0_PCP) {
+
+                       /* Set CPA bit which enables us to modify VPEOpt register */
+                       write_c0_mvpcontrol((read_c0_mvpcontrol()) | MVPCONTROL_CPA);
+
+                       if ( !vpe_icache_shared ){
+                               write_c0_vpeconf0((read_c0_vpeconf0()) & ~VPECONF0_ICS);
+                               /*
+                                * If any cache way is 1, then that way is denied
+                                * in VPE0. Otherwise assign that way to VPE0.
+                                */
+                               printk(KERN_DEBUG "icache is split\n");
+                               printk(KERN_DEBUG "icache_way0=%d icache_way1=%d icache_way2=%d icache_way3=%d\n",
+                                       icache_way0, icache_way1,icache_way2, icache_way3);
+                               if (icache_way0)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_IWX0 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_IWX0 );
+                               if (icache_way1)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_IWX1 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_IWX1 );
+                               if (icache_way2)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_IWX2 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_IWX2 );
+                               if (icache_way3)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_IWX3 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_IWX3 );
+                       }
+                       if ( !vpe_dcache_shared ) {
+                               /*
+                                * If any cache way is 1, then that way is denied
+                                * in VPE0. Otherwise assign that way to VPE0.
+                                */
+                               printk(KERN_DEBUG "dcache is split\n");
+                               printk(KERN_DEBUG "dcache_way0=%d dcache_way1=%d dcache_way2=%d dcache_way3=%d\n",
+                                       dcache_way0, dcache_way1, dcache_way2, dcache_way3);
+                               write_c0_vpeconf0((read_c0_vpeconf0()) & ~VPECONF0_DCS);
+                               if (dcache_way0)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_DWX0 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_DWX0 );
+                               if (dcache_way1)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_DWX1 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_DWX1 );
+                               if (dcache_way2)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_DWX2 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_DWX2 );
+                               if (dcache_way3)
+                                       write_c0_vpeopt(read_c0_vpeopt() | VPEOPT_DWX3 );
+                               else
+                                       write_c0_vpeopt(read_c0_vpeopt() & ~VPEOPT_DWX3 );
+                       }
+               }
+       }
+#endif /* endif CONFIG_IFX_VPE_CACHE_SPLIT */
 
 	probe_pcache();
 	setup_scache();
@@ -1426,4 +1621,7 @@ void __cpuinit r4k_cache_init(void)
 	local_r4k___flush_cache_all(NULL);
 #endif
 	coherency_setup();
+#if defined(DISPLAY_CACHE_ENTRIES)
+    display_cache_value();
+#endif/*--- #if defined(DISPLAY_CACHE_ENTRIES) ---*/
 }

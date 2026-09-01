@@ -76,7 +76,7 @@ extern int ddebug_remove_module(char *mod_name);
 
 #else
 
-static inline int ddebug_remove_module(char *mod)
+static inline int ddebug_remove_module(char *mod __attribute__ ((unused)))
 {
 	return 0;
 }

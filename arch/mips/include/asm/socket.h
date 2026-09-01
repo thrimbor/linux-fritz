@@ -76,6 +76,7 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 #define SCM_TIMESTAMPNS		SO_TIMESTAMPNS
 
 #define SO_MARK			36
+#define SO_MARKTASK     37  /* AVM calle */
 
 #define SO_TIMESTAMPING		37
 #define SCM_TIMESTAMPING	SO_TIMESTAMPING

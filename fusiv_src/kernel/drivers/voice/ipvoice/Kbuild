@@ -1,0 +1,96 @@
+#!/bin/sh
+
+temp1 = $(PWD)
+space :=
+remove := /fusiv_src/kernel/drivers/voice/ipvoice
+temp2  := $(subst $(remove),$(space),$(temp1))
+remove :=  linux-2.6.18
+temp2  := $(subst $(remove),$(space),$(temp2))
+ifeq "$(FUSIV_SRCDIR)" ""
+VOICE_LINUX_KERNEL_PATH := $(temp2)/fusiv_src/kernel/drivers/voice/ipvoice/include
+else
+VOICE_LINUX_KERNEL_PATH := $(FUSIV_SRCDIR)/kernel/drivers/voice/ipvoice/include
+endif
+
+EXTRA_CFLAGS += -I$(VOICE_LINUX_KERNEL_PATH)
+
+DSPLIB_OBJ :=\
+	dsplib/JitMain.o\
+	dsplib/AJBCli.o\
+	dsplib/AJBDelayEst.o\
+	dsplib/AJBStat.o\
+	dsplib/CidGeneration.o\
+	dsplib/ToneGen.o\
+	dsplib/ToneGenApi.o\
+	dsplib/SinGen.o\
+	dsplib/HDtmfrxDet.o\
+	dsplib/HDtmfrxVar.o\
+	dsplib/G711PLCMain.o\
+	dsplib/G711PLC_AddHist.o\
+	dsplib/G711PLC_Pitch.o\
+	dsplib/G711PlcLib.o\
+	dsplib/G711Table.o\
+	dsplib/G711plc.o\
+	dsplib/ToneFourCad.o\
+	dsplib/CidRxMain.o\
+	dsplib/rc8096.o\
+	dsplib/clprgDet.o\
+	dsplib/G711PLCBasic_op.o\
+	dsplib/rxvaddspFunc.o\
+	dsplib/rxvadMain.o\
+	dsplib/rxvadVar.o\
+	dsplib/rxvadFunc.o\
+        dsplib/v21/v21agc.o\
+        dsplib/v21/v21data.o\
+        dsplib/v21/v21det.o\
+        dsplib/v21/v21detmem.o\
+        dsplib/v21/v21filter.o\
+        dsplib/v21/v21rtcnv.o\
+        dsplib/v21/v21main.o\
+        dsplib/v21/PtrInit.o\
+        dsplib/v21/v21signal.o
+
+
+CONF_OBJ := conf/voicelib.o
+
+DSPIPC_OBJ :=\
+	dspipc/dspinit.o\
+	dspipc/dspnw.o\
+	dspipc/dspdect.o\
+	dspipc/dectsample.o\
+	dspipc/dspipc.o
+        
+OSDEP_OBJ :=\
+	osdep/oswrapper.o\
+	osdep/dspdrv.o
+
+SLIC_OBJ :=\
+	slic/slicapi.o\
+	slic/voicespi.o\
+	slic/silabs/si3216.o\
+	slic/silabs/si3050.o\
+	slic/legerity/legerityrw.o\
+	slic/legerity/legeritycoeff.o\
+	slic/legerity/legerity78d11.o\
+	slic/legerity/legerity88111.o\
+	slic/legerity/legerity88221.o\
+	slic/legerity/legerity88241.o\
+	slic/legerity/legerity88010.o
+
+KRTP_OBJ :=\
+	krtp/rtpapi.o\
+	krtp/rtpmsg.o\
+	krtp/rtpxport.o\
+	krtp/rtpdrv.o\
+	krtp/rtcp.o
+
+
+obj-m :=  dspvoice.o 
+dspvoice-objs := $(DSPLIB_OBJ)
+dspvoice-objs += $(CONF_OBJ)
+dspvoice-objs += $(DSPIPC_OBJ)
+dspvoice-objs += $(OSDEP_OBJ)
+dspvoice-objs += $(SLIC_OBJ)
+dspvoice-objs += $(KRTP_OBJ)
+
+

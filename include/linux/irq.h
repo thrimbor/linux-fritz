@@ -218,7 +218,7 @@ extern struct irq_desc irq_desc[NR_IRQS];
 #ifdef CONFIG_NUMA_IRQ_DESC
 extern struct irq_desc *move_irq_desc(struct irq_desc *old_desc, int node);
 #else
-static inline struct irq_desc *move_irq_desc(struct irq_desc *desc, int node)
+static inline struct irq_desc *move_irq_desc(struct irq_desc *desc, int node __attribute__ ((unused)))
 {
 	return desc;
 }
@@ -245,15 +245,15 @@ void move_masked_irq(int irq);
 
 #else /* CONFIG_GENERIC_PENDING_IRQ */
 
-static inline void move_irq(int irq)
+static inline void move_irq(int irq __attribute__ ((unused)))
 {
 }
 
-static inline void move_native_irq(int irq)
+static inline void move_native_irq(int irq __attribute__ ((unused)))
 {
 }
 
-static inline void move_masked_irq(int irq)
+static inline void move_masked_irq(int irq __attribute__ ((unused)))
 {
 }
 
@@ -295,7 +295,11 @@ extern void handle_nested_irq(unsigned int irq);
  * Monolithic do_IRQ implementation.
  */
 #ifndef CONFIG_GENERIC_HARDIRQS_NO__DO_IRQ
-extern unsigned int __do_IRQ(unsigned int irq);
+#ifdef CONFIG_LTQ_SYS_OPT
+	extern unsigned int __system __do_IRQ(unsigned int irq);
+#else
+	extern unsigned int __do_IRQ(unsigned int irq);
+#endif
 #endif
 
 /*
@@ -304,7 +308,12 @@ extern unsigned int __do_IRQ(unsigned int irq);
  * irqchip-style controller then we call the ->handle_irq() handler,
  * and it calls __do_IRQ() if it's attached to an irqtype-style controller.
  */
+
+#ifdef CONFIG_LTQ_SYS_OPT
+static inline void __system generic_handle_irq_desc(unsigned int irq, struct irq_desc *desc)
+#else
 static inline void generic_handle_irq_desc(unsigned int irq, struct irq_desc *desc)
+#endif
 {
 #ifdef CONFIG_GENERIC_HARDIRQS_NO__DO_IRQ
 	desc->handle_irq(irq, desc);
@@ -316,7 +325,11 @@ static inline void generic_handle_irq_desc(unsigned int irq, struct irq_desc *de
 #endif
 }
 
+#ifdef CONFIG_LTQ_SYS_OPT
+static inline void __system generic_handle_irq(unsigned int irq)
+#else
 static inline void generic_handle_irq(unsigned int irq)
+#endif
 {
 	generic_handle_irq_desc(irq, irq_to_desc(irq));
 }
@@ -434,13 +447,15 @@ extern int set_irq_msi(unsigned int irq, struct msi_desc *entry);
  * Allocates affinity and pending_mask cpumask if required.
  * Returns true if successful (or not required).
  */
-static inline bool alloc_desc_masks(struct irq_desc *desc, int node,
-							bool boot)
+static inline bool alloc_desc_masks(struct irq_desc *desc __attribute__ ((unused)), int node __attribute__ ((unused)),
+							bool boot __attribute__ ((unused)))
 {
+#ifdef CONFIG_CPUMASK_OFFSTACK
 	gfp_t gfp = GFP_ATOMIC;
 
 	if (boot)
 		gfp = GFP_NOWAIT;
+#endif /*--- #ifdef CONFIG_CPUMASK_OFFSTACK ---*/
 
 #ifdef CONFIG_CPUMASK_OFFSTACK
 	if (!alloc_cpumask_var_node(&desc->affinity, gfp, node))
@@ -474,8 +489,8 @@ static inline void init_desc_masks(struct irq_desc *desc)
  * irq_desc struct so the copy is redundant.
  */
 
-static inline void init_copy_desc_masks(struct irq_desc *old_desc,
-					struct irq_desc *new_desc)
+static inline void init_copy_desc_masks(struct irq_desc *old_desc __attribute__ ((unused)),
+					struct irq_desc *new_desc __attribute__ ((unused)))
 {
 #ifdef CONFIG_CPUMASK_OFFSTACK
 	cpumask_copy(new_desc->affinity, old_desc->affinity);
@@ -486,8 +501,8 @@ static inline void init_copy_desc_masks(struct irq_desc *old_desc,
 #endif
 }
 
-static inline void free_desc_masks(struct irq_desc *old_desc,
-				   struct irq_desc *new_desc)
+static inline void free_desc_masks(struct irq_desc *old_desc __attribute__ ((unused)),
+				   struct irq_desc *new_desc __attribute__ ((unused)))
 {
 	free_cpumask_var(old_desc->affinity);
 
@@ -498,23 +513,23 @@ static inline void free_desc_masks(struct irq_desc *old_desc,
 
 #else /* !CONFIG_SMP */
 
-static inline bool alloc_desc_masks(struct irq_desc *desc, int node,
-								bool boot)
+static inline bool alloc_desc_masks(struct irq_desc *desc __attribute__ ((unused)), int node __attribute__ ((unused)),
+								bool boot __attribute__ ((unused)))
 {
 	return true;
 }
 
-static inline void init_desc_masks(struct irq_desc *desc)
+static inline void init_desc_masks(struct irq_desc *desc __attribute__ ((unused)))
 {
 }
 
-static inline void init_copy_desc_masks(struct irq_desc *old_desc,
-					struct irq_desc *new_desc)
+static inline void init_copy_desc_masks(struct irq_desc *old_desc __attribute__ ((unused)),
+					struct irq_desc *new_desc __attribute__ ((unused)))
 {
 }
 
-static inline void free_desc_masks(struct irq_desc *old_desc,
-				   struct irq_desc *new_desc)
+static inline void free_desc_masks(struct irq_desc *old_desc __attribute__ ((unused)),
+				   struct irq_desc *new_desc __attribute__ ((unused)))
 {
 }
 #endif	/* CONFIG_SMP */

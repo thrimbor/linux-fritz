@@ -982,6 +982,19 @@ static int storage_probe(struct usb_interface *intf,
 	struct us_data *us;
 	int result;
 
+	/* == AVM/WK 20101110 Patch from AVM Kernel 2.6.19 
+	 * Filter out all AVM (057C) mass storage devices...
+	 */
+	struct usb_device *udev;
+	#define AVM_VENDOR_ID				0x057C
+	udev = interface_to_usbdev(intf);
+	if (le16_to_cpu(udev->descriptor.idVendor) == AVM_VENDOR_ID) {
+		printk (KERN_INFO "USB Mass Storage device (%04x:%04x) ignored!\n",
+			le16_to_cpu(udev->descriptor.idVendor),
+			le16_to_cpu(udev->descriptor.idProduct));
+		return -ENODEV;
+	}
+
 	/*
 	 * If libusual is configured, let it decide whether a standard
 	 * device should be handled by usb-storage or by ub.

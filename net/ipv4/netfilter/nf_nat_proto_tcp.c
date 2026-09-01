@@ -42,6 +42,7 @@ tcp_manip_pkt(struct sk_buff *skb,
 	__be32 oldip, newip;
 	__be16 *portptr, newport, oldport;
 	int hdrsize = 8; /* TCP connection tracking guarantees this much */
+        int nat_manip_type;
 
 	/* this could be a inner header returned in icmp packet; in such
 	   cases we cannot update the checksum field since it is outside of
@@ -61,16 +62,21 @@ tcp_manip_pkt(struct sk_buff *skb,
 		newip = tuple->src.u3.ip;
 		newport = tuple->src.u.tcp.port;
 		portptr = &hdr->source;
+                nat_manip_type = 1;
 	} else {
 		/* Get rid of dst ip and dst pt */
 		oldip = iph->daddr;
 		newip = tuple->dst.u3.ip;
 		newport = tuple->dst.u.tcp.port;
 		portptr = &hdr->dest;
+                nat_manip_type = 2;
 	}
 
 	oldport = *portptr;
 	*portptr = newport;
+#ifdef CONFIG_MACH_ATHEROS
+        athrs_hw_nat_add_entry(oldip, oldport, newip, newport, 1, nat_manip_type);
+#endif /*--- #ifdef CONFIG_MACH_ATHEROS ---*/
 
 	if (hdrsize < sizeof(*hdr))
 		return true;

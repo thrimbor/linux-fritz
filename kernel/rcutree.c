@@ -93,7 +93,7 @@ static int rcu_gp_in_progress(struct rcu_state *rsp)
  * how many quiescent states passed, just if there was at least
  * one since the start of the grace period, this just sets a flag.
  */
-void rcu_sched_qs(int cpu)
+inline void rcu_sched_qs(int cpu)
 {
 	struct rcu_data *rdp;
 

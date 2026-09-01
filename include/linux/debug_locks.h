@@ -58,21 +58,21 @@ static inline void debug_show_all_locks(void)
 {
 }
 
-static inline void __debug_show_held_locks(struct task_struct *task)
+static inline void __debug_show_held_locks(struct task_struct *task __attribute__ ((unused)))
 {
 }
 
-static inline void debug_show_held_locks(struct task_struct *task)
-{
-}
-
-static inline void
-debug_check_no_locks_freed(const void *from, unsigned long len)
+static inline void debug_show_held_locks(struct task_struct *task __attribute__ ((unused)))
 {
 }
 
 static inline void
-debug_check_no_locks_held(struct task_struct *task)
+debug_check_no_locks_freed(const void *from __attribute__ ((unused)), unsigned long len __attribute__ ((unused)))
+{
+}
+
+static inline void
+debug_check_no_locks_held(struct task_struct *task __attribute__ ((unused)))
 {
 }
 #endif

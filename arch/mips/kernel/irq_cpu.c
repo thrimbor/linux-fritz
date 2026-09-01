@@ -36,6 +36,10 @@
 #include <asm/mipsmtregs.h>
 #include <asm/system.h>
 
+#if defined(CONFIG_LANTIQ)
+#include <irq.h>
+#endif
+
 static inline void unmask_mips_irq(unsigned int irq)
 {
 	set_c0_status(0x100 << (irq - MIPS_CPU_IRQ_BASE));
@@ -48,6 +52,7 @@ static inline void mask_mips_irq(unsigned int irq)
 	irq_disable_hazard();
 }
 
+#if !defined(CONFIG_LANTIQ)
 static struct irq_chip mips_cpu_irq_controller = {
 	.name		= "MIPS",
 	.ack		= mask_mips_irq,
@@ -56,6 +61,7 @@ static struct irq_chip mips_cpu_irq_controller = {
 	.unmask		= unmask_mips_irq,
 	.eoi		= unmask_mips_irq,
 };
+#endif
 
 /*
  * Basically the same as above but taking care of all the MT stuff
@@ -64,14 +70,21 @@ static struct irq_chip mips_cpu_irq_controller = {
 #define unmask_mips_mt_irq	unmask_mips_irq
 #define mask_mips_mt_irq	mask_mips_irq
 
+DEFINE_SPINLOCK(ipi_irq_lock);
+
 static unsigned int mips_mt_cpu_irq_startup(unsigned int irq)
 {
-	unsigned int vpflags = dvpe();
+	/*--- unsigned int vpflags = dvpe(); ---*/
+	unsigned long mtflags, flags;			
+	mtflags = dmt();                
+    spin_lock_irqsave(&ipi_irq_lock, flags);
 
 	clear_c0_cause(0x100 << (irq - MIPS_CPU_IRQ_BASE));
-	evpe(vpflags);
 	unmask_mips_mt_irq(irq);
+	/*--- evpe(vpflags); ---*/
 
+    spin_unlock_irqrestore(&ipi_irq_lock, flags); 
+	emt(mtflags);			   	   
 	return 0;
 }
 
@@ -81,10 +94,17 @@ static unsigned int mips_mt_cpu_irq_startup(unsigned int irq)
  */
 static void mips_mt_cpu_irq_ack(unsigned int irq)
 {
-	unsigned int vpflags = dvpe();
+	/*--- unsigned int vpflags = dvpe(); ---*/
+	unsigned long mtflags, flags;			
+	mtflags = dmt();                
+    spin_lock_irqsave(&ipi_irq_lock, flags);
+
 	clear_c0_cause(0x100 << (irq - MIPS_CPU_IRQ_BASE));
-	evpe(vpflags);
 	mask_mips_mt_irq(irq);
+	/*--- evpe(vpflags); ---*/
+
+    spin_unlock_irqrestore(&ipi_irq_lock, flags); 
+	emt(mtflags);			   	   
 }
 
 static struct irq_chip mips_mt_cpu_irq_controller = {
@@ -99,8 +119,11 @@ static struct irq_chip mips_mt_cpu_irq_controller = {
 
 void __init mips_cpu_irq_init(void)
 {
-	int irq_base = MIPS_CPU_IRQ_BASE;
+	//int irq_base = MIPS_CPU_IRQ_BASE;
+	int irq_base = 0;
 	int i;
+
+    printk("[%s] irq_base %d\n", __FUNCTION__, irq_base);
 
 	/* Mask interrupts. */
 	clear_c0_status(ST0_IM);
@@ -115,7 +138,13 @@ void __init mips_cpu_irq_init(void)
 			set_irq_chip_and_handler(i, &mips_mt_cpu_irq_controller,
 						 handle_percpu_irq);
 
+/* Avoid reinitialisation of the 6 hardware interrupts incase of AR9 and VR9 platfoms
+   incase of Danube/ASE initialises 6 hw interrupt.
+   Need to Check ?? 
+*/
+#if !defined(CONFIG_LANTIQ)
 	for (i = irq_base + 2; i < irq_base + 8; i++)
 		set_irq_chip_and_handler(i, &mips_cpu_irq_controller,
 					 handle_percpu_irq);
+#endif
 }

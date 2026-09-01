@@ -71,7 +71,7 @@ static inline int register_cpu_notifier(struct notifier_block *nb)
 }
 #endif
 
-static inline void unregister_cpu_notifier(struct notifier_block *nb)
+static inline void unregister_cpu_notifier(struct notifier_block *nb __attribute__((unused)))
 {
 }
 #endif

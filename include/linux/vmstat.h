@@ -108,22 +108,22 @@ static inline void vm_events_fold_cpu(int cpu)
 #else
 
 /* Disable counters */
-static inline void count_vm_event(enum vm_event_item item)
+static inline void count_vm_event(enum vm_event_item item __attribute__ ((unused)))
 {
 }
-static inline void count_vm_events(enum vm_event_item item, long delta)
+static inline void count_vm_events(enum vm_event_item item __attribute__ ((unused)), long delta __attribute__ ((unused)))
 {
 }
-static inline void __count_vm_event(enum vm_event_item item)
+static inline void __count_vm_event(enum vm_event_item item __attribute__ ((unused)))
 {
 }
-static inline void __count_vm_events(enum vm_event_item item, long delta)
+static inline void __count_vm_events(enum vm_event_item item __attribute__ ((unused)), long delta __attribute__ ((unused)))
 {
 }
-static inline void all_vm_events(unsigned long *ret)
+static inline void all_vm_events(unsigned long *ret __attribute__ ((unused)))
 {
 }
-static inline void vm_events_fold_cpu(int cpu)
+static inline void vm_events_fold_cpu(int cpu __attribute__ ((unused)))
 {
 }
 
@@ -294,7 +294,7 @@ static inline void __dec_zone_page_state(struct page *page,
 #define dec_zone_page_state __dec_zone_page_state
 #define mod_zone_page_state __mod_zone_page_state
 
-static inline void refresh_cpu_vm_stats(int cpu) { }
+static inline void refresh_cpu_vm_stats(int cpu __attribute__ ((unused))) { }
 #endif
 
 #endif /* _LINUX_VMSTAT_H */

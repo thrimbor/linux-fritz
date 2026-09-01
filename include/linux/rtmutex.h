@@ -43,8 +43,8 @@ struct hrtimer_sleeper;
 						unsigned long len);
  extern void rt_mutex_debug_check_no_locks_held(struct task_struct *task);
 #else
- static inline int rt_mutex_debug_check_no_locks_freed(const void *from,
-						       unsigned long len)
+ static inline int rt_mutex_debug_check_no_locks_freed(const void *from __attribute__ ((unused)),
+						       unsigned long len __attribute__ ((unused)))
  {
 	return 0;
  }

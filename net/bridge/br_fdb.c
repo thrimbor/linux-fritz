@@ -24,6 +24,16 @@
 #include <asm/unaligned.h>
 #include "br_private.h"
 
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && ( defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+  #include <net/ifx_ppa_api.h>
+#endif
+
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+void (*ap2apBridgeFlowDelete_ptr)(void *) = NULL;
+int (*Isap2apBridgeTraffic_ptr)(void *) = NULL;
+short (*apAddBridgePortNewHWaddr_ptr)( struct net_bridge_port* p) = NULL;
+#endif
+
 static struct kmem_cache *br_fdb_cache __read_mostly;
 static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 		      const unsigned char *addr);
@@ -80,6 +90,10 @@ static void fdb_rcu_free(struct rcu_head *head)
 
 static inline void fdb_delete(struct net_bridge_fdb_entry *f)
 {
+#if !defined(CONFIG_IFX_PPA_AVM_USAGE) && ( defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+    if ( ppa_hook_bridge_entry_delete_fn != NULL )
+        ppa_hook_bridge_entry_delete_fn(f->addr.addr, 0);
+#endif
 	hlist_del_rcu(&f->hlist);
 	call_rcu(&f->rcu, fdb_rcu_free);
 }
@@ -120,6 +134,13 @@ void br_fdb_changeaddr(struct net_bridge_port *p, const unsigned char *newaddr)
 	/* insert new address,  may fail if invalid address or dup. */
 	fdb_insert(br, p, newaddr);
 
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+	if(apAddBridgePortNewHWaddr_ptr != NULL)
+	{
+		(*apAddBridgePortNewHWaddr_ptr)(p);
+	}
+#endif
+
 	spin_unlock_bh(&br->hash_lock);
 }
 
@@ -137,6 +158,23 @@ void br_fdb_cleanup(unsigned long _data)
 
 		hlist_for_each_entry_safe(f, h, n, &br->hash[i], hlist) {
 			unsigned long this_timer;
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+			if(Isap2apBridgeTraffic_ptr != NULL)
+			{
+				if (!(*Isap2apBridgeTraffic_ptr)((void *)f))
+					continue;
+			} else
+				printk("\n ap2ap module must required\n");
+#endif
+#if (!defined(CONFIG_IFX_PPA_AVM_USAGE)) && (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+            if ( ppa_hook_bridge_entry_hit_time_fn != NULL && !f->is_local )
+            {
+                uint32_t last_hit_time;
+
+                if ( ppa_hook_bridge_entry_hit_time_fn(f->addr.addr, &last_hit_time) == IFX_PPA_HIT )
+                f->ageing_timer = last_hit_time * HZ;
+            }
+#endif
 			if (f->is_static)
 				continue;
 			this_timer = f->ageing_timer + delay;
@@ -214,6 +252,29 @@ void br_fdb_delete_by_port(struct net_bridge *br,
 	}
 	spin_unlock_bh(&br->hash_lock);
 }
+
+void br_fdb_delete_by_mac_if_local_without_port(struct net_bridge *br, unsigned char *addr)
+{
+	int i;
+
+	spin_lock_bh(&br->hash_lock);
+	for (i = 0; i < BR_HASH_SIZE; i++) {
+		struct hlist_node *h, *g;
+		
+		hlist_for_each_safe(h, g, &br->hash[i]) {
+			struct net_bridge_fdb_entry *f
+				= hlist_entry(h, struct net_bridge_fdb_entry, hlist);
+			if (0 == f->dst && f->is_local && !compare_ether_addr(f->addr.addr,	addr)) {
+				fdb_delete(f);
+				goto end;
+			}
+		}
+	}
+end:
+	spin_unlock_bh(&br->hash_lock);
+}
+
+
 
 /* No locking or refcounting, assumes caller has no preempt (rcu_read_lock) */
 struct net_bridge_fdb_entry *__br_fdb_get(struct net_bridge *br,
@@ -325,10 +386,13 @@ static struct net_bridge_fdb_entry *fdb_create(struct hlist_head *head,
 
 	fdb = kmem_cache_alloc(br_fdb_cache, GFP_ATOMIC);
 	if (fdb) {
+#if defined(CONFIG_FUSIV_KERNEL_AP_2_AP) || defined(CONFIG_FUSIV_KERNEL_AP_2_AP_MODULE)
+		memset(fdb, 0, sizeof(*fdb));
+#endif
 		memcpy(fdb->addr.addr, addr, ETH_ALEN);
 		hlist_add_head_rcu(&fdb->hlist, head);
 
-		fdb->dst = source;
+		fdb->dst = source; /* AVM: note that source may be 0 if is_local */
 		fdb->is_local = is_local;
 		fdb->is_static = is_local;
 		fdb->ageing_timer = jiffies;
@@ -355,7 +419,7 @@ static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 
 		printk(KERN_WARNING "%s adding interface with same address "
 		       "as a received packet\n",
-		       source->dev->name);
+			   source ? source->dev->name : "<null>");
 		fdb_delete(fdb);
 	}
 
@@ -411,6 +475,14 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 		/* else  we lose race and someone else inserts
 		 * it first, don't bother updating
 		 */
+#if (!defined(CONFIG_IFX_PPA_AVM_USAGE)) && (defined(CONFIG_IFX_PPA_API) || defined(CONFIG_IFX_PPA_API_MODULE))
+        if ( ppa_hook_bridge_entry_add_fn != NULL && source->dev )
+            ppa_hook_bridge_entry_add_fn((unsigned char *)addr, source->dev, 0);
+#endif
 		spin_unlock(&br->hash_lock);
 	}
 }
+#if defined(CONFIG_IFX_PPA_API_MODULE)
+  EXPORT_SYMBOL(__br_fdb_get);
+  EXPORT_SYMBOL(br_dev_xmit);
+#endif

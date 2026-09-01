@@ -50,6 +50,13 @@ inline int ip6_rcv_finish( struct sk_buff *skb)
 {
 	if (skb_dst(skb) == NULL)
 		ip6_route_input(skb);
+#ifdef	CONFIG_MAPPING
+        struct dst_entry *rt = skb_dst(skb);
+	if ((rt == NULL) || (rt->mapping)) {	/* To free the old sk_buff */
+		kfree_skb(skb);
+		return NET_RX_DROP;
+	}
+#endif
 
 	return dst_input(skb);
 }
@@ -79,6 +86,10 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	}
 
 	memset(IP6CB(skb), 0, sizeof(struct inet6_skb_parm));
+
+#ifdef CONFIG_AVM_PA
+    AVM_PKT_INFO(skb)->ptype_pid_handle = AVM_PA_PTYPE_DEVINFO(pt)->pid_handle;
+#endif
 
 	/*
 	 * Store incoming device index. When the packet will

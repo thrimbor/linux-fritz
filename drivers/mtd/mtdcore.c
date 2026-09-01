@@ -593,6 +593,245 @@ static inline int mtd_proc_info (char *buf, int i)
 		       this->erasesize, this->name);
 }
 
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+static struct semaphore erase_lock_sema;
+
+static void mtd_erase_block_done(struct erase_info *self) {
+    up(&erase_lock_sema);
+
+    if(self->fail_addr != MTD_FAIL_ADDR_UNKNOWN) {
+        printk("[MTD%d]: callback erase failed\n", self->mtd->index);
+    }
+}
+
+static int mtd_erase_block(struct mtd_info *mtd, unsigned int addr, unsigned int len, unsigned int force) {
+    static struct erase_info erase;
+    memset(&erase, 0, sizeof(erase));
+	erase.mtd = mtd;
+	erase.addr = addr;
+	erase.len = len;
+	erase.retries = 1;
+	erase.callback = mtd_erase_block_done;
+
+    if (force) {
+        erase.priv = 1;         /*--- signal force to mtd->erase ---*/
+    }
+
+    if(mtd->erase(mtd, &erase)) {
+        printk("[MTD%d]: setup erase failed\n", mtd->index);
+        return -EFAULT;
+    }
+
+    if(down_interruptible(&erase_lock_sema)) {
+        printk("[MTD%d]: wait for erase failed\n", mtd->index);
+        return -EFAULT;
+    }
+
+    return erase.fail_addr == MTD_FAIL_ADDR_UNKNOWN ?  -EFAULT : 0;
+}
+
+static void mtd_read_block(struct mtd_info *mtd, unsigned int addr, unsigned int len, char *buf) {
+    size_t retlen;
+
+    if(mtd->read(mtd, addr, len, &retlen, buf)) {
+        printk(KERN_ERR "[MTD%d]: setup read failed\n", mtd->index);
+        return;
+    }
+    printk(KERN_ERR "[%s] %d, %d %d\n", __FUNCTION__, addr, len, retlen);
+}
+
+static void mtd_write_block(struct mtd_info *mtd, unsigned int addr, unsigned int len, char *buf) {
+    size_t retlen;
+
+    if(mtd->write(mtd, addr, len, &retlen, (const u_char*)buf)) {
+        printk(KERN_ERR "[MTD%d]: setup write failed\n", mtd->index);
+        printk(KERN_ERR "[%s] %d, %d %d\n", __FUNCTION__, addr, len, retlen);
+        return;
+    }
+    printk(KERN_ERR "[%s] %d, %d %d\n", __FUNCTION__, addr, len, retlen);
+}
+
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+static int mtd_write_proc (struct file *file, const char *buf,
+					 unsigned long count, void *data)
+{
+    int blocknr, mtd;
+    char *s, *ss, *end;
+    if((s = strstr(buf, "mtd")) != NULL) {
+        /*--- u_int32_t mtd_size; ---*/
+        u_int32_t mtd_erasesize;
+        u_int32_t mtd_blockcount;
+        mtd = simple_strtoul(s + sizeof("mtd"), &end, 0);
+
+        /*----------------------------------------------------------------------------------*\
+        \*----------------------------------------------------------------------------------*/
+        if(mtd >= MAX_MTD_DEVICES) {
+            printk(KERN_ERR "[MTD]: mtd %d ist no valid MTD\n", mtd);
+            return count;
+        }
+        if(mtd_table[mtd] == NULL) {
+            printk(KERN_ERR "[MTD]: mtd %d ist not initialized\n", mtd);
+            return count;
+        }
+        /*----------------------------------------------------------------------------------*\
+        \*----------------------------------------------------------------------------------*/
+        /*--- mtd_size = mtd_table[mtd]->size; ---*/
+        mtd_erasesize = mtd_table[mtd]->erasesize;
+        mtd_blockcount = (uint32_t)mtd_table[mtd]->size / mtd_table[mtd]->erasesize;
+
+        printk(KERN_ERR "[MTD%d]: name = \"%s\"\n", mtd, mtd_table[mtd]->name);
+
+        sema_init (&erase_lock_sema, 1);
+        /*----------------------------------------------------------------------------------*\
+        \*----------------------------------------------------------------------------------*/
+        if((ss = strstr(s, "erase"))) {
+            unsigned int force = 0;
+            printk(KERN_ERR "[MTD%d]: erase: mtd size 0x%llx block size 0x%x erase block count 0x%x\n",
+                    mtd,
+                    mtd_table[mtd]->size,
+                    mtd_table[mtd]->erasesize,
+                    (uint32_t)mtd_table[mtd]->size / mtd_table[mtd]->erasesize);
+            if((s = strstr(ss, "all"))) {
+                if ((ss = strstr(s, "force"))) 
+                    force = 1;
+                printk(KERN_ERR "[MTD%d]: erase all blocks.\n", mtd);
+                for(blocknr = 0 ; blocknr < mtd_blockcount ; blocknr++) {
+                    printk(KERN_ERR "[MTD%d]: erase block %d(0x%x) from %d(0x%x)\n", mtd, blocknr, blocknr, mtd_blockcount, mtd_blockcount);
+                    mtd_erase_block(mtd_table[mtd], mtd_erasesize * blocknr, mtd_erasesize, force);
+                }
+            } else {
+                blocknr = simple_strtoul(ss + sizeof("erase"), &end, 0);
+                printk(KERN_ERR "[MTD%d]: erase block %d(0x%x)\n", mtd, blocknr, blocknr);
+                mtd_erase_block(mtd_table[mtd], mtd_erasesize * blocknr, mtd_erasesize, force);
+            }
+            return count;
+        } else if((ss = strstr(s, "write_pattern"))) {
+            static char my_buf[2112];
+            int i;
+            for(i = 0; i < 2112; i++)
+                my_buf[i] = i&0xFF;
+            printk(KERN_ERR "[MTD%d]: write_pattern: mtd size 0x%llx block size 0x%x erase block count 0x%x\n",
+                    mtd,
+                    mtd_table[mtd]->size,
+                    mtd_table[mtd]->erasesize,
+                    (uint32_t)mtd_table[mtd]->size / mtd_table[mtd]->erasesize);
+            if((s = strstr(ss, "all"))) {
+                printk(KERN_ERR "[MTD%d]: write pattern to all blocks.\n", mtd);
+                for(blocknr = 0 ; blocknr < mtd_blockcount ; blocknr++) {
+                    printk(KERN_ERR "[MTD%d]: write pattern to block %d(0x%x) from %d(0x%x)\n", mtd, blocknr, blocknr, mtd_blockcount, mtd_blockcount);
+                    mtd_write_block(mtd_table[mtd], mtd_erasesize * blocknr, 2112, my_buf);
+                }
+            } else {
+                blocknr = simple_strtoul(ss + sizeof("write_pattern"), &end, 0);
+                printk(KERN_ERR "[MTD%d]: write pattern to block %d(0x%x)\n", mtd, blocknr, blocknr);
+                mtd_write_block(mtd_table[mtd], mtd_erasesize * blocknr, 2112, my_buf);
+            }
+            return count;
+        } else if((ss = strstr(s, "verify_pattern"))) {
+            static char my_buf[2112];
+            int i;
+            printk(KERN_ERR "[MTD%d]: verify_pattern: mtd size 0x%llx block size 0x%x erase block count 0x%x\n",
+                    mtd,
+                    mtd_table[mtd]->size,
+                    mtd_table[mtd]->erasesize,
+                    (uint32_t)mtd_table[mtd]->size / mtd_table[mtd]->erasesize);
+            if((s = strstr(ss, "all"))) {
+                printk(KERN_ERR "[MTD%d]: verify pattern of all blocks.\n", mtd);
+                for(blocknr = 0 ; blocknr < mtd_blockcount ; blocknr++) {
+                    printk(KERN_ERR "[MTD%d]: verify pattern of block %d(0x%x) from %d(0x%x)\n", mtd, blocknr, blocknr, mtd_blockcount, mtd_blockcount);
+                    mtd_read_block(mtd_table[mtd], mtd_erasesize * blocknr, 2112, my_buf);
+                    for(i = 0; i < 2112; i++) {
+                        char comp1, comp2;
+                        comp1 = (my_buf[i])&0xFF;
+                        comp2 = (char)(i&0xFF);
+                        if(comp1 != comp2) {
+                            printk("err %04d:%04d %02x (exp %02x)\n", blocknr, i, my_buf[i]&0xFF, i&0xFF);
+                        }
+                    }
+                }
+            } else {
+                blocknr = simple_strtoul(ss + sizeof("verify_pattern"), &end, 0);
+                printk(KERN_ERR "[MTD%d]: verify pattern of block %d(0x%x)\n", mtd, blocknr, blocknr);
+                mtd_read_block(mtd_table[mtd], mtd_erasesize * blocknr, 2112, my_buf);
+                for(i = 0; i < 2112; i++) {
+                    char comp1, comp2;
+                    comp1 = (my_buf[i])&0xFF;
+                    comp2 = (char)(i&0xFF);
+                    if(comp1 != comp2) {
+                        printk("err %04d:%04d %02x (exp %02x)\n", blocknr, i, my_buf[i]&0xFF, i&0xFF);
+                    }
+                }
+            }
+            return count;
+        } else if((ss = strstr(s, "write"))) {
+            static char my_buf[2112];
+            int i, block_no, page_no, offset;
+            for(i = 0; i < 2112; i++) {
+                my_buf[i] = i & 0xFF;
+            }
+
+            /*--- printk(KERN_ERR "1: %s\n", ss); ---*/
+            block_no = simple_strtoul( ss + sizeof("write"), &end, 0);
+
+            /*--- printk(KERN_ERR "2: %s\n", end + 1); ---*/
+            page_no  = simple_strtoul(end + 1, &end, 0);
+
+            /*--- printk(KERN_ERR "3: %s\n", end + 1); ---*/
+            offset   = simple_strtoul(end + 1, &end, 0);
+
+            while(*end == ' ') {
+                end++;
+            }
+            memcpy(my_buf, end, count + (end - buf));
+
+            /*--- printk(KERN_ERR "%d, %d, %d, '%s'\n", block_no, page_no, offset, end); ---*/
+
+            mtd_write_block(mtd_table[mtd], mtd_erasesize * block_no + page_no * 2112 + offset, count + (end - buf), my_buf);
+
+            return count;
+        } else if((ss = strstr(s, "read"))) {
+            static char my_buf[2112];
+            int i, block_no, page_no, offset, len;
+            for(i = 0; i < 2112; i++) {
+                my_buf[i] = i & 0xFF;
+            }
+
+            /*--- printk(KERN_ERR "1: %s\n", ss); ---*/
+            block_no = simple_strtoul( ss + sizeof("read"), &end, 0);
+
+            /*--- printk(KERN_ERR "2: %s\n", end + 1); ---*/
+            page_no  = simple_strtoul(end + 1, &end, 0);
+
+            /*--- printk(KERN_ERR "3: %s\n", end + 1); ---*/
+            offset   = simple_strtoul(end + 1, &end, 0);
+
+            /*--- printk(KERN_ERR "4: %s\n", end + 1); ---*/
+            len   = simple_strtoul(end + 1, &end, 0);
+
+            /*--- printk(KERN_ERR "%d, %d, %d, %d\n", block_no, page_no, offset, len); ---*/
+
+            mtd_read_block(mtd_table[mtd], mtd_erasesize * block_no + page_no * 2112 + offset, len, my_buf);
+
+            for(i = 0; i < len; i++) {
+                printk("%02x ", my_buf[i] & 0xFF);
+                if(!(len%10))
+                    printk("\n");
+            }
+            printk("\n");
+
+            return count;
+        }
+    }
+
+    printk(KERN_ERR "[MTD]: mtd <number> erase <block>|all\n");
+    printk(KERN_ERR "[MTD]: mtd <number> write <block> <page> <offset> <DATA>\n");
+    printk(KERN_ERR "[MTD]: mtd <number> read <block> <page> <offset> <len>\n");
+	return count;
+}
+
 static int mtd_read_proc (char *page, char **start, off_t off, int count,
 			  int *eof, void *data_unused)
 {
@@ -639,8 +878,10 @@ static int __init init_mtd(void)
 		return ret;
 	}
 #ifdef CONFIG_PROC_FS
-	if ((proc_mtd = create_proc_entry( "mtd", 0, NULL )))
+	if ((proc_mtd = create_proc_entry( "mtd", 0, NULL ))){
 		proc_mtd->read_proc = mtd_read_proc;
+		proc_mtd->write_proc = mtd_write_proc;
+    }
 #endif /* CONFIG_PROC_FS */
 	return 0;
 }

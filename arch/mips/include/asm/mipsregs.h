@@ -403,6 +403,7 @@
 #define ST0_SR			0x00100000
 #define ST0_TS			0x00200000
 #define ST0_BEV			0x00400000
+#define STO_MX          0x01000000
 #define ST0_RE			0x02000000
 #define ST0_FR			0x04000000
 #define ST0_CU			0xf0000000
@@ -823,6 +824,19 @@ do {									\
 
 #define read_c0_wired()		__read_32bit_c0_register($6, 0)
 #define write_c0_wired(val)	__write_32bit_c0_register($6, 0, val)
+
+#if defined(CONFIG_CPU_MIPS_34K)
+#define read_c0_srsconf0()   __read_32bit_c0_register($6, 1)
+#define write_c0_srsconf0(val) __write_32bit_c0_register($6, 1, val)
+#define read_c0_srsconf1()   __read_32bit_c0_register($6, 2)
+#define write_c0_srsconf1(val) __write_32bit_c0_register($6, 2, val)
+#define read_c0_srsconf2()   __read_32bit_c0_register($6, 3)
+#define write_c0_srsconf2(val) __write_32bit_c0_register($6, 3, val)
+#define read_c0_srsconf3()   __read_32bit_c0_register($6, 4)
+#define write_c0_srsconf3(val) __write_32bit_c0_register($6, 4, val)
+#define read_c0_srsconf4()   __read_32bit_c0_register($6, 5)
+#define write_c0_srsconf4(val) __write_32bit_c0_register($6, 5, val)
+#endif /*--- #if defined(CONFIG_CPU_MIPS_34K) ---*/
 
 #define read_c0_info()		__read_32bit_c0_register($7, 0)
 

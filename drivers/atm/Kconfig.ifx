@@ -1,0 +1,58 @@
+config IFX_ATM
+	tristate "IFX ATM driver"
+	depends on (DANUBE || AMAZON_SE || AR9 || VR9 || AR10) && ATM && IFX_PPA_DATAPATH != y
+	default n
+	---help---
+	Use this exclusively with PTM mode or Acceleration Package
+
+config IFX_ATM_TASKLET
+	bool "Support Tasklet"
+	depends on IFX_ATM
+	default y
+	---help---
+	Use tasklet handle incoming packet. Impact on ATM RX traffic performance.
+
+config IFX_ATM_RETX
+	bool "Support ReTX"
+	depends on IFX_ATM && (DANUBE || AR9 || AR10)
+	default n
+	---help---
+	Support Retransmission.
+
+config IFX_PTM
+	tristate "IFX PTM driver"
+	depends on (DANUBE || AMAZON_SE || AR9 || VR9) && IFX_PPA_DATAPATH != y
+	default n
+	---help---
+	Use this exclusively with ATM mode or Acceleration Package
+
+choice
+	prompt "RX Packet Handling Mechanism"
+	depends on IFX_PTM
+	default IFX_PTM_RX_NAPI
+
+config IFX_PTM_RX_NAPI
+	bool "NAPI"
+
+config IFX_PTM_RX_TASKLET
+	bool "Tasklet"
+	depends on DANUBE || AMAZON_SE || AR9
+
+config IFX_PTM_RX_INTERRUPT
+	bool "Interrupt"
+	depends on DANUBE || AMAZON_SE || AR9
+
+endchoice
+
+config IFX_PTM_TEST_PROC
+	bool "IFX PTM Driver Test Proc"
+	depends on IFX_PTM
+	default n
+
+config IFX_ADTRAN_PTM
+	tristate "IFX PTM driver for Adtran project"
+	depends on VR9 && IFX_PPA_DATAPATH != y
+	default n
+	---help---
+	Use this exclusively with ATM mode or Acceleration Package
+

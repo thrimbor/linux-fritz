@@ -181,7 +181,7 @@ static inline void free_percpu(void *p)
 
 static inline void __init setup_per_cpu_areas(void) { }
 
-static inline void *pcpu_lpage_remapped(void *kaddr)
+static inline void *pcpu_lpage_remapped(void *kaddr __attribute__ ((unused)))
 {
 	return NULL;
 }

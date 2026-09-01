@@ -546,6 +546,14 @@ config MTD_PLATRAM
 
 	  This selection automatically selects the map_ram driver.
 
+config MTD_PLATNOR
+	tristate "Map driver for platform device NOR (mtd-nor)"
+	help
+	  Map driver for NOR areas described via the platform device
+	  system.
+
+	  This selection automatically selects the map_nor driver.
+
 config MTD_VMU
 	tristate "Map driver for Dreamcast VMU"
 	depends on MAPLE
@@ -556,5 +564,12 @@ config MTD_VMU
 
 	  To build this as a module select M here, the module will be called
 	  vmu-flash.
+
+
+
+if LANTIQ
+#IFX plaform specific
+source "drivers/mtd/maps/Kconfig.ifx"
+endif
 
 endmenu

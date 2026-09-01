@@ -1029,6 +1029,14 @@ config CS5535_GPIO
 
 	  If compiled as a module, it will be called cs5535_gpio.
 
+config GPIO_DEVICE
+	tristate "GPIO device support"
+	depends on GENERIC_GPIO
+	help
+	  Say Y to enable Linux GPIO device support.  This allows control of
+	  GPIO pins using a character device
+
+
 config RAW_DRIVER
 	tristate "RAW driver (/dev/raw/rawN)"
 	depends on BLOCK
@@ -1116,7 +1124,304 @@ config DEVPORT
 	depends on ISA || PCI
 	default y
 
+config TFFS
+    select ZLIB_INFLATE
+    select ZLIB_DEFLATE
+    bool "AVM (T)iny (F)lash (F)ile (S)ystem"
+    default y
+
+config TFFS_ENV
+    depends on TFFS
+    bool "AVM TFFS Enviorment support"
+    default y
+
+config TFFS_CRYPT
+    depends on TFFS
+    bool "AVM TFFS crypt support"
+    default y
+
+config TFFS_MTD_DEVICE_0
+    int "MTD partition used for first TFFS buffer"
+    default 3
+    depends on TFFS
+
+config TFFS_MTD_DEVICE_1
+    int "MTD partition used for second TFFS buffer"
+    default 4
+    depends on TFFS
+
+config TFFS_PANIC_LOG
+    bool "Enable TFFS Panic Log"
+    depends on TFFS
+
+config TFFS_PANIC_LOG_ID
+    int "TFFS ID for TFFS panic log"
+    depends on TFFS_PANIC_LOG
+
+config AVM_NET_TRACE
+	bool "AVM net trace"
+	default y
+	help
+	  This driver provides tracing of network packets in pcap format.
+
+config AVM_POWER
+	bool "AVM power managment support"
+	default n
+	help
+	  This driver provides power managment functions for AVMs own drivers.
+	  
+	  To compile this driver as a module, choose M here. The module
+	  will be called avm.
+
+config AVM_POWERMETER
+	bool "AVM powermeter support"
+    depends on AVM_POWER
+	default y
+	help
+	  This driver provides power managment ressource info function for AVMs own drivers.
+
+config AVM_DECT_IO
+	tristate "AVM dect IO managment support"
+	default n
+	help
+	  This driver provides power managment functions for AVMs own drivers.
+	  
+	  To compile this driver as a module, choose M here. The module
+	  will be called avm.
+
+config AVM_DECT_SYNC
+	int "AVM dect sync support"
+    depends on AVM_DECT_IO
+	default -1
+	help
+	  the number of gpio for sync-usage, -1: ignore sync 
+
+config AVM_SAMMEL
+	tristate "AVM general support (LED, Event, Watchdog)"
+	default y
+	help
+	  This driver provides general functions for AVMs own drivers.
+	  
+	  To compile this driver as a module, choose M here. The module
+	  will be called avm.
+
+config AVM_EVENT
+	bool "AVM event support"
+    depends on AVM_SAMMEL
+	default y
+	help
+	  This driver provides support for event handling.
+
+config AVM_PUSH_BUTTON
+	bool "Push button support"
+    depends on AVM_EVENT
+	default n
+	help
+	  This driver provides push button support.
+
+config AVM_PUSH_BUTTON_TIME_1
+    int "Time to start push button event 2 [ms]"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON
+	default 2000
+
+config AVM_PUSH_BUTTON_TIME_2
+    int "Time to start push button event 3 [ms]"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON
+	default 6000
+
+config AVM_PUSH_BUTTON_GPIO 
+	int "Push button GPIO"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON
+	default 8
+	help
+	  This is the GPIO for avm event push button support
+
+config AVM_PUSH_BUTTON2
+	bool "second Push button support"
+    depends on AVM_EVENT
+	default n
+	help
+	  This driver provides push button support.
+
+config AVM_PUSH_BUTTON2_GPIO 
+	int "second Push button GPIO"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON && AVM_PUSH_BUTTON2
+	default 6
+	help
+	  This is the GPIO for avm event push button support
+
+config AVM_PUSH_BUTTON3
+	bool "Switch support"
+    depends on AVM_EVENT
+	default n
+	help
+	  This driver provides switch support.
+
+config AVM_PUSH_BUTTON3_GPIO 
+	int "Switch GPIO"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON && AVM_PUSH_BUTTON3
+	default 6
+	help
+	  This is the GPIO for avm event switch support
+
+config AVM_PUSH_BUTTON4
+	bool "4th Push button support"
+    depends on AVM_EVENT
+	default n
+	help
+	  This driver provides 4th Push button support.
+
+config AVM_PUSH_BUTTON4_GPIO 
+	int "4th Push button GPIO"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON && AVM_PUSH_BUTTON4
+	default 31
+	help
+	  This is the GPIO for avm event 4th Push button support
+
+config AVM_PUSH_BUTTON5
+	bool "5th Push button support"
+    depends on AVM_EVENT
+	default n
+	help
+	  This driver provides 5th Push button support.
+
+config AVM_PUSH_BUTTON5_GPIO 
+	int "5th Push button GPIO"
+    depends on AVM_EVENT && AVM_PUSH_BUTTON && AVM_PUSH_BUTTON5
+	default 31
+	help
+	  This is the GPIO for avm event 5th Push button support
+
+config AVM_AUDIO
+	tristate "AVM audio support"
+	default n
+	help
+	  This driver provides the AVM audio support.
+
+config PIGLET_AUDIO
+	tristate "Piglet audio support"
+	depends on AVM_AUDIO
+	default n
+	help
+	  This driver provides the piglet audio support.
+	  
+config NLR_AUDIO
+	tristate "NLR audio support"
+	depends on AVM_AUDIO
+	default n
+	help
+	  This driver provides the NLR audio support.
+
+config AVM_WATCHDOG
+	bool "Watchdog support"
+    depends on AVM_SAMMEL
+	default n
+	help
+	  This driver provides the watchdog support.
+
+config AVM_LED_EVENTS
+	tristate "support for AVM Led event based version"
+	default n
+
+config AVM_LED
+	tristate "support for AVM Led "
+	default y
+
+config AVM_DEBUG
+	tristate "support for AVM Debug (instead UBIK2 Debug)"
+	default n
+
+config LED_REMAP_STATES
+    bool "enable remap of LED states"
+    depends on AVM_LED
+    default y
+
+
+config AVM_LED_OUTPUT_SHIFT_REGISTER
+    bool "LED driver using shift registers (74HC595)"
+    depends on AVM_LED || AVM_LED_EVENTS
+	default n
+
+config AVM_LED_BIER_HOLEN
+    bool "LED driver Bier holen"
+    depends on AVM_LED
+	default n
+
+config AVM_LED_OUTPUT_SHIFT_REGISTER_MASTER_RESET
+    int "GPIO pin used for Master Reset"
+    depends on AVM_LED_OUTPUT_SHIFT_REGISTER
+    default 12
+
+config AVM_LED_OUTPUT_SHIFT_REGISTER_SHIFT_CLOCK
+    int "GPIO pin used for shift register clock"
+    depends on AVM_LED_OUTPUT_SHIFT_REGISTER
+    default 13
+
+config AVM_LED_OUTPUT_SHIFT_REGISTER_STORAGE_CLOCK
+    int "GPIO pin used for storage register clock"
+    depends on AVM_LED_OUTPUT_SHIFT_REGISTER
+    default 10
+
+config AVM_LED_OUTPUT_SHIFT_REGISTER_DATA
+    int "GPIO pin used for data input"
+    depends on AVM_LED_OUTPUT_SHIFT_REGISTER
+    default 9
+
+config AVM_LED_OUTPUT_GPIO
+    bool "LED driver using direct GPIOs"
+    depends on AVM_LED || AVM_LED_EVENTS
+	default y
+
+config AVM_LED_OUTPUT_DUAL_GPIO
+    bool "LED driver using direct two GPIOs for dual-color-leds"
+    depends on AVM_LED_OUTPUT_GPIO
+	default n
+
+config AVM_FLASH_UPDATE
+	tristate "FLASH_UPDATE Driver Support (AVM)"
+	default n
+
+config AVM_PIGLET
+	tristate "AVM Piglet load support"
+	default n
+	help
+	  This driver provides the piglet load support.
+
+config AVM_PIGLET_NOEMIF
+	tristate "AVM Piglet load support (No Emif)"
+	default n
+	help
+	  This driver provides the piglet load support (without Emif).
+
+config AVM_PIGLET_DECT
+	bool "AVM Piglet DECT Loader support (only on Piglet No Emif)"
+    depends on AVM_PIGLET_NOEMIF
+	default y
+	help
+	  This driver provides the DECT loader support in piglet
+
+config UBIK2
+	tristate "UBIK2/PCMLINK Driver Support for Ar7/Ohio/Ur8/Fusiv/Lantiq/Atheros (AVM)"
+    depends on MIPS_OHIO || MIPS_AR7 || MIPS_UR8 || MIPS_FUSIV || LANTIQ || MACH_AR7240 || MACH_AR724x || MACH_AR934x || MACH_QCA955x
+	default n
+
+config UBIK2_DEVELOPMENT_SUPPORT
+	int "Mask for Developmentfeature"
+    depends on UBIK2
+	default 0
+	help
+	  0x1 Touch-Datenerfassung/TDM-Rawdaten-Erfassung
+
+config UBIK2_MSEC_PER_IRQ
+	int "interrupt-trigger"
+    depends on UBIK2
+	default 8
+	help
+        only 4 or 8 ms supported
+
 source "drivers/s390/char/Kconfig"
+
+source "drivers/char/Kconfig.ifx"
 
 endmenu
 

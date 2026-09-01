@@ -162,21 +162,21 @@ extern void put_page_bootmem(struct page *page);
 /*
  * Stub functions for when hotplug is off
  */
-static inline void pgdat_resize_lock(struct pglist_data *p, unsigned long *f) {}
-static inline void pgdat_resize_unlock(struct pglist_data *p, unsigned long *f) {}
-static inline void pgdat_resize_init(struct pglist_data *pgdat) {}
+static inline void pgdat_resize_lock(struct pglist_data *p __attribute__ ((unused)), unsigned long *f __attribute__ ((unused))) {}
+static inline void pgdat_resize_unlock(struct pglist_data *p __attribute__ ((unused)), unsigned long *f __attribute__ ((unused))) {}
+static inline void pgdat_resize_init(struct pglist_data *pgdat __attribute__ ((unused))) {}
 
-static inline unsigned zone_span_seqbegin(struct zone *zone)
+static inline unsigned zone_span_seqbegin(struct zone *zone __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline int zone_span_seqretry(struct zone *zone, unsigned iv)
+static inline int zone_span_seqretry(struct zone *zone __attribute__ ((unused)), unsigned iv __attribute__ ((unused)))
 {
 	return 0;
 }
-static inline void zone_span_writelock(struct zone *zone) {}
-static inline void zone_span_writeunlock(struct zone *zone) {}
-static inline void zone_seqlock_init(struct zone *zone) {}
+static inline void zone_span_writelock(struct zone *zone __attribute__ ((unused))) {}
+static inline void zone_span_writeunlock(struct zone *zone __attribute__ ((unused))) {}
+static inline void zone_seqlock_init(struct zone *zone __attribute__ ((unused))) {}
 
 static inline int mhp_notimplemented(const char *func)
 {
@@ -185,7 +185,7 @@ static inline int mhp_notimplemented(const char *func)
 	return -ENOSYS;
 }
 
-static inline void register_page_bootmem_info_node(struct pglist_data *pgdat)
+static inline void register_page_bootmem_info_node(struct pglist_data *pgdat __attribute__ ((unused)))
 {
 }
 
@@ -196,8 +196,8 @@ static inline void register_page_bootmem_info_node(struct pglist_data *pgdat)
 extern int is_mem_section_removable(unsigned long pfn, unsigned long nr_pages);
 
 #else
-static inline int is_mem_section_removable(unsigned long pfn,
-					unsigned long nr_pages)
+static inline int is_mem_section_removable(unsigned long pfn __attribute__ ((unused)),
+					unsigned long nr_pages __attribute__ ((unused)))
 {
 	return 0;
 }

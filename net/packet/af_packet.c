@@ -204,6 +204,7 @@ struct packet_sock {
 	unsigned int		tp_reserve;
 	unsigned int		tp_loss:1;
 #endif
+	unsigned int		pkt_type;
 };
 
 struct packet_skb_cb {
@@ -342,6 +343,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 {
 	struct sock *sk;
 	struct sockaddr_pkt *spkt;
+	struct packet_sock *po;
 
 	/*
 	 *	When we registered the protocol we saved the socket in the data
@@ -349,6 +351,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 	 */
 
 	sk = pt->af_packet_priv;
+	po = pkt_sk(sk);
 
 	/*
 	 *	Yank back the headers [hope the device set this
@@ -361,7 +364,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 	 *	so that this procedure is noop.
 	 */
 
-	if (skb->pkt_type == PACKET_LOOPBACK)
+	if (!(po->pkt_type & (1 << skb->pkt_type)))
 		goto out;
 
 	if (dev_net(dev) != sock_net(sk))
@@ -551,6 +554,9 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	sk = pt->af_packet_priv;
 	po = pkt_sk(sk);
 
+	if (!(po->pkt_type & (1 << skb->pkt_type)))
+		goto drop;
+
 	if (dev_net(dev) != sock_net(sk))
 		goto drop;
 
@@ -667,11 +673,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	struct timeval tv;
 	struct timespec ts;
 
-	if (skb->pkt_type == PACKET_LOOPBACK)
-		goto drop;
-
 	sk = pt->af_packet_priv;
 	po = pkt_sk(sk);
+
+	if (!(po->pkt_type & (1 << skb->pkt_type)))
+		goto drop;
 
 	if (dev_net(dev) != sock_net(sk))
 		goto drop;
@@ -937,7 +943,7 @@ static int tpacket_fill_skb(struct packet_sock *po, struct sk_buff *skb,
 
 static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 {
-	struct socket *sock;
+	/*--- struct socket *sock; ---*/
 	struct sk_buff *skb;
 	struct net_device *dev;
 	__be16 proto;
@@ -949,7 +955,7 @@ static int tpacket_snd(struct packet_sock *po, struct msghdr *msg)
 	int len_sum = 0;
 	int status = 0;
 
-	sock = po->sk.sk_socket;
+	/*--- sock = po->sk.sk_socket; ---*/
 
 	mutex_lock(&po->pg_vec_lock);
 
@@ -1391,6 +1397,7 @@ static int packet_create(struct net *net, struct socket *sock, int protocol)
 	spin_lock_init(&po->bind_lock);
 	mutex_init(&po->pg_vec_lock);
 	po->prot_hook.func = packet_rcv;
+	po->pkt_type = PACKET_MASK_ANY & ~(1 << PACKET_LOOPBACK);
 
 	if (sock->type == SOCK_PACKET)
 		po->prot_hook.func = packet_rcv_spkt;
@@ -1740,6 +1747,16 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 			ret = packet_mc_drop(sk, &mreq);
 		return ret;
 	}
+	case PACKET_RECV_TYPE:
+	{
+		unsigned int val;
+		if (optlen != sizeof(val))
+			return -EINVAL;
+		if (copy_from_user(&val, optval, sizeof(val)))
+			return -EFAULT;
+		po->pkt_type = val & ~PACKET_LOOPBACK;
+		return 0;
+	}
 
 #ifdef CONFIG_PACKET_MMAP
 	case PACKET_RX_RING:
@@ -1882,6 +1899,13 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 		if (len > sizeof(int))
 			len = sizeof(int);
 		val = po->origdev;
+
+		data = &val;
+		break;
+	case PACKET_RECV_TYPE:
+		if (len > sizeof(unsigned int))
+			len = sizeof(unsigned int);
+		val = po->pkt_type;
 
 		data = &val;
 		break;

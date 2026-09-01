@@ -120,7 +120,7 @@ static inline void set_pte(pte_t *ptep, pte_t pte)
 		}
 	}
 }
-#define set_pte_at(mm, addr, ptep, pteval) set_pte(ptep, pteval)
+#define set_pte_at(mm __attribute__((unused)), addr __attribute__((unused)), ptep, pteval) set_pte(ptep, pteval)
 
 static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 {
@@ -159,7 +159,7 @@ static inline void set_pte(pte_t *ptep, pte_t pteval)
 }
 #define set_pte_at(mm, addr, ptep, pteval) set_pte(ptep, pteval)
 
-static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
+static inline void pte_clear(struct mm_struct *mm __attribute__((unused)), unsigned long addr __attribute__((unused)), pte_t *ptep)
 {
 #if !defined(CONFIG_CPU_R3000) && !defined(CONFIG_CPU_TX39XX)
 	/* Preserve global status for the pair */
@@ -313,7 +313,7 @@ static inline pte_t pte_mkhuge(pte_t pte)
 }
 #endif /* _PAGE_HUGE */
 #endif
-static inline int pte_special(pte_t pte)	{ return 0; }
+static inline int pte_special(pte_t pte __attribute__((unused)))	{ return 0; }
 static inline pte_t pte_mkspecial(pte_t pte)	{ return pte; }
 
 /*

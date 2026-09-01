@@ -24,6 +24,8 @@
 
 #include "xhci.h"
 
+extern int usb3port_config;
+
 static void xhci_hub_descriptor(struct xhci_hcd *xhci,
 		struct usb_hub_descriptor *desc)
 {
@@ -167,6 +169,9 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			status |= 1 << USB_PORT_FEAT_C_ENABLE;
 		if ((temp & PORT_OCC))
 			status |= 1 << USB_PORT_FEAT_C_OVER_CURRENT;
+		/* AVM/WK Workaround: tell USB core about RESET completion */
+		if (temp & PORT_RC)
+			status |= 1 << USB_PORT_FEAT_C_RESET;
 		/*
 		 * FIXME ignoring suspend, reset, and USB 2.1/3.0 specific
 		 * changes
@@ -202,8 +207,12 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			 * However, khubd will ignore the roothub events until
 			 * the roothub is registered.
 			 */
-			xhci_writel(xhci, temp | PORT_POWER, addr);
-
+			if ((wIndex < 2) && !((1<<wIndex) & usb3port_config)) {
+				printk (KERN_INFO "AVM: disable USB3 port#%d status = 0x%x\n", wIndex, temp);
+				xhci_writel(xhci, temp & ~ PORT_POWER, addr);
+			} else {
+				xhci_writel(xhci, temp | PORT_POWER, addr);
+			}
 			temp = xhci_readl(xhci, addr);
 			xhci_dbg(xhci, "set port power, actual port %d status  = 0x%x\n", wIndex, temp);
 			break;
@@ -228,6 +237,11 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		temp = xhci_readl(xhci, addr);
 		temp = xhci_port_state_to_neutral(temp);
 		switch (wValue) {
+		case USB_PORT_FEAT_POWER:
+			status = 0; 
+			temp &= ~((u32)PORT_POWER);
+			port_change_bit = "power";
+			break;
 		case USB_PORT_FEAT_C_RESET:
 			status = PORT_RC;
 			port_change_bit = "reset";
@@ -239,6 +253,10 @@ int xhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 		case USB_PORT_FEAT_C_OVER_CURRENT:
 			status = PORT_OCC;
 			port_change_bit = "over-current";
+			break;
+		case USB_PORT_FEAT_ENABLE:
+			status = PORT_PE; 
+			port_change_bit = "enable";
 			break;
 		default:
 			goto error;
@@ -295,7 +313,8 @@ int xhci_hub_status_data(struct usb_hcd *hcd, char *buf)
 		addr = &xhci->op_regs->port_status_base +
 			NUM_PORT_REGS*i;
 		temp = xhci_readl(xhci, addr);
-		if (temp & (PORT_CSC | PORT_PEC | PORT_OCC)) {
+		/* AVM/WK Workaround: PORT_RC added */
+		if (temp & (PORT_CSC | PORT_PEC | PORT_OCC|PORT_RC)) {
 			if (i < 7)
 				buf[0] |= 1 << (i + 1);
 			else

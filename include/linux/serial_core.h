@@ -44,7 +44,8 @@
 #define PORT_RM9000	16	/* PMC-Sierra RM9xxx internal UART */
 #define PORT_OCTEON	17	/* Cavium OCTEON internal UART */
 #define PORT_AR7	18	/* Texas Instruments AR7 internal UART */
-#define PORT_MAX_8250	18	/* max port ID */
+#define PORT_UR8	19	/* Texas Instruments AR7 internal UART */
+#define PORT_MAX_8250	19	/* max port ID */
 
 /*
  * ARM specific type numbers.  These are not currently guaranteed
@@ -179,6 +180,10 @@
 /* BCM63xx family SoCs */
 #define PORT_BCM63XX	89
 
+#define PORT_IFX_ASC    90
+
+#define PORT_ATHEROS_HI	91	/* Atheros High Speed UART */
+
 #ifdef __KERNEL__
 
 #include <linux/compiler.h>
@@ -285,6 +290,7 @@ struct uart_port {
 #define UPIO_TSI		(5)			/* Tsi108/109 type IO */
 #define UPIO_DWAPB		(6)			/* DesignWare APB UART */
 #define UPIO_RM9000		(7)			/* RM9000 type IO */
+#define UPIO_MEM16		(8)
 
 	unsigned int		read_status_mask;	/* driver specific */
 	unsigned int		ignore_status_mask;	/* driver specific */
@@ -440,7 +446,7 @@ static inline int uart_tx_stopped(struct uart_port *port)
  * The following are helper functions for the low level drivers.
  */
 static inline int
-uart_handle_sysrq_char(struct uart_port *port, unsigned int ch)
+uart_handle_sysrq_char(struct uart_port *port __attribute__((unused)), unsigned int ch __attribute__((unused)))
 {
 #ifdef SUPPORT_SYSRQ
 	if (port->sysrq) {

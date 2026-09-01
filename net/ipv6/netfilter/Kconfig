@@ -201,6 +201,8 @@ config IP6_NF_SECURITY
         
          If unsure, say N.
 
+source "net/ipv6/netfilter/Kconfig.ifx"
+
 endif # IP6_NF_IPTABLES
 
 endmenu

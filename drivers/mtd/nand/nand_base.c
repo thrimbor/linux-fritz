@@ -360,7 +360,7 @@ static int nand_block_bad(struct mtd_info *mtd, loff_t ofs, int getchip)
 static int nand_default_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
 	struct nand_chip *chip = mtd->priv;
-	uint8_t buf[2] = { 0, 0 };
+	uint8_t buf[2] = { 2, 2 }; // hbl: 2 == user bad marked (kernel, urlader nimmt die 1)
 	int block, ret;
 
 	/* Get block number */
@@ -669,6 +669,39 @@ static void nand_command_lp(struct mtd_info *mtd, unsigned int command,
 	ndelay(100);
 
 	nand_wait_ready(mtd);
+
+    if(chip->options & NAND_FLASH_HWECC) {
+        switch (command) {
+            case NAND_CMD_READ0:
+            case NAND_CMD_READ1:
+                {
+                    unsigned int status;
+
+                    /*--- printk(KERN_ERR "[%s:%d] was here\n", __func__, __LINE__); ---*/
+
+                    nand_command(mtd, NAND_CMD_STATUS, 0, 0);
+                    status = chip->read_byte(mtd);
+                    if(status & NAND_STATUS_FAIL) {
+                        printk(KERN_ERR "[%s] read block failed (status: 0x%x, column: 0x%x page: 0x%x)\n", __FUNCTION__, status, column, page_addr);
+
+                        mtd->ecc_stats.failed++;
+                    }
+                    if(status & NAND_STATUS_CRITICAL_BLOCK) {
+                        printk(KERN_ERR "[%s] read block is critical (status: 0x%x, column: 0x%x page: 0x%x)\n", __FUNCTION__, status, column, page_addr);
+                        mtd->ecc_stats.corrected++;
+                    }
+
+                    chip->cmd_ctrl(mtd, command,
+                            NAND_NCE | NAND_CLE | NAND_CTRL_CHANGE);
+                    chip->cmd_ctrl(mtd, NAND_CMD_NONE,
+                            NAND_NCE | NAND_CTRL_CHANGE);
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
 }
 
 /**
@@ -1754,6 +1787,12 @@ static int nand_write_page(struct mtd_info *mtd, struct nand_chip *chip,
 {
 	int status;
 
+#ifdef CONFIG_MTD_NAND_VERIFY_WRITE
+    unsigned char no_of_verify_retries = 0;
+
+verify_retry:
+#endif /*--- #ifdef CONFIG_MTD_NAND_VERIFY_WRITE ---*/
+
 	chip->cmdfunc(mtd, NAND_CMD_SEQIN, 0x00, page);
 
 	if (unlikely(raw))
@@ -1787,11 +1826,45 @@ static int nand_write_page(struct mtd_info *mtd, struct nand_chip *chip,
 	}
 
 #ifdef CONFIG_MTD_NAND_VERIFY_WRITE
-	/* Send command to read back the data */
-	chip->cmdfunc(mtd, NAND_CMD_READ0, 0, page);
+    {
+        // 1. Durchlauf
+        //   .Korrigierbarer Fehler erkannt?
+        //     -> Chip resetten (es wird nichts gelesen)
+        //     -> erneutes Schreiben auf die selbe Page (ohne Löschen)
+        //
+        // 2. Durchlauf
+        //   .korrigierbare Fehler sind egal
+        //   .'verify_buf' entscheidet, ob Schreiben funktioniert hat
+        //
+        struct mtd_ecc_stats stats = mtd->ecc_stats;
 
-	if (chip->verify_buf(mtd, buf, mtd->writesize))
-		return -EIO;
+        /* Send command to read back the data */
+        chip->cmdfunc(mtd, NAND_CMD_READ0, 0, page);
+
+        if(chip->options & NAND_FLASH_HWECC) {
+            /*--- printk(KERN_ERR "[%s:%d] was here\n", __func__, __LINE__); ---*/
+
+            if (   (no_of_verify_retries == 0)
+                && (mtd->ecc_stats.corrected - stats.corrected)) {
+                printk(KERN_ERR "VERIFY-ERROR on page: %d: rewrite...\n", page);
+
+                no_of_verify_retries++;
+                chip->cmdfunc(mtd, NAND_CMD_RESET, -1, -1);
+
+                goto verify_retry;
+            } else if(mtd->ecc_stats.failed - stats.failed) {
+                printk(KERN_ERR "VERIFY-ERROR on page: %d: non correctable error detected\n", page);
+                return -EIO;
+            } else if(mtd->ecc_stats.corrected - stats.corrected) {
+                printk(KERN_ERR "VERIFY-ERROR on page: %d: rewrite also results in a correctable error\n", page);
+            }
+        }
+
+        if (chip->verify_buf(mtd, buf, mtd->writesize)) {
+            printk(KERN_ERR "VERIFY-ERROR on page: %d: verify read results in a mismatch\n", page);
+            return -EIO;
+        }
+    }
 #endif
 	return 0;
 }
@@ -2237,13 +2310,15 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 		/*
 		 * heck if we have a bad block, we do not erase bad blocks !
 		 */
-		if (nand_block_checkbad(mtd, ((loff_t) page) <<
-					chip->page_shift, 0, allowbbt)) {
-			printk(KERN_WARNING "%s: attempt to erase a bad block "
-					"at page 0x%08x\n", __func__, page);
-			instr->state = MTD_ERASE_FAILED;
-			goto erase_exit;
-		}
+        if (instr->priv != 1) {     /*--- 1 signals force to mtd->erase ---*/
+            if (nand_block_checkbad(mtd, ((loff_t) page) <<
+                        chip->page_shift, 0, allowbbt)) {
+                printk(KERN_WARNING "%s: attempt to erase a bad block "
+                        "at page 0x%08x\n", __func__, page);
+                instr->state = MTD_ERASE_FAILED;
+                goto erase_exit;
+            }
+        }
 
 		/*
 		 * Invalidate the page cache, if we erase the block which

@@ -52,4 +52,8 @@ int svc_change_qos(struct atm_vcc *vcc,struct atm_qos *qos);
 
 void atm_dev_release_vccs(struct atm_dev *dev);
 
+#ifdef CONFIG_IFX_OAM
+int ifx_push_oam(struct atm_vcc *atmvcc, void *cell);
+#endif
+
 #endif

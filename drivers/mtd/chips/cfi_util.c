@@ -34,10 +34,13 @@ int __xipram cfi_qry_present(struct map_info *map, __u32 base,
 	qry[0] = cfi_build_cmd('Q', map, cfi);
 	qry[1] = cfi_build_cmd('R', map, cfi);
 	qry[2] = cfi_build_cmd('Y', map, cfi);
+	/*--- printk("      qry[0]: '%#x'\n", (unsigned int)qry[0].x[0]); ---*/
+	/*--- printk("      qry[1]: '%#x'\n", (unsigned int)qry[1].x[0]); ---*/
+	/*--- printk("      qry[2]: '%#x'\n", (unsigned int)qry[2].x[0]); ---*/
 
-	val[0] = map_read(map, base + osf*0x10);
-	val[1] = map_read(map, base + osf*0x11);
-	val[2] = map_read(map, base + osf*0x12);
+	val[0] = map_cmd_read(map, base + osf*0x10);
+	val[1] = map_cmd_read(map, base + osf*0x11);
+	val[2] = map_cmd_read(map, base + osf*0x12);
 
 	if (!map_word_equal(map, qry[0], val[0]))
 		return 0;

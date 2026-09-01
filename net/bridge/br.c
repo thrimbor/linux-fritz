@@ -69,6 +69,10 @@ static int __init br_init(void)
 	br_fdb_test_addr_hook = br_fdb_test_addr;
 #endif
 
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	br_mcast_snoop_init();
+#endif
+
 	return 0;
 err_out4:
 	unregister_netdevice_notifier(&br_device_notifier);
@@ -102,6 +106,10 @@ static void __exit br_deinit(void)
 
 	br_handle_frame_hook = NULL;
 	br_fdb_fini();
+
+#ifdef CONFIG_IFX_IGMP_SNOOPING
+	br_mcast_snoop_deinit();
+#endif
 }
 
 EXPORT_SYMBOL(br_should_route_hook);

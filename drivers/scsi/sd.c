@@ -1217,21 +1217,30 @@ sd_spinup_disk(struct scsi_disk *sdkp)
 						      &sshdr, SD_TIMEOUT,
 						      SD_MAX_RETRIES, NULL);
 
-			/*
-			 * If the drive has indicated to us that it
-			 * doesn't have any media in it, don't bother
-			 * with any more polling.
-			 */
-			if (media_not_present(sdkp, &sshdr))
-				return;
-
+			/* 20110524 AVM/WK FIX: Some devices find their media after some polling 
+			**						more retries and no return here
+			*/
+			//if (media_not_present(sdkp, &sshdr)) {
+			//	return;
+			//}
 			if (the_result)
 				sense_valid = scsi_sense_valid(&sshdr);
 			retries++;
-		} while (retries < 3 && 
+		} while (retries < 25 && 
 			 (!scsi_status_is_good(the_result) ||
 			  ((driver_byte(the_result) & DRIVER_SENSE) &&
 			  sense_valid && sshdr.sense_key == UNIT_ATTENTION)));
+
+		/* 20110524 AVM/WK Move Code: Exit if still no media */
+		/*
+		 * If the drive has indicated to us that it
+		 * doesn't have any media in it, don't bother
+		 * with any more polling.
+		 */
+		if (media_not_present(sdkp, &sshdr)) {
+			sd_printk(KERN_NOTICE, sdkp, "Media Not Present\n");
+			return;
+		}
 
 		if ((driver_byte(the_result) & DRIVER_SENSE) == 0) {
 			/* no sense, TUR either succeeded or failed

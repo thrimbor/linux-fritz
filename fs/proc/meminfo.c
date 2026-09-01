@@ -13,6 +13,7 @@
 #include <asm/atomic.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <linux/bootmem.h>
 #include "internal.h"
 
 void __attribute__((weak)) arch_report_meminfo(struct seq_file *m)
@@ -23,12 +24,23 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 {
 	struct sysinfo i;
 	unsigned long committed;
+	unsigned long reserved = 0;
 	unsigned long allowed;
 	struct vmalloc_info vmi;
 	long cached;
 	unsigned long pages[NR_LRU_LISTS];
 	int lru;
 
+    /*--------------------------------------------------------------------------------------*\
+    \*--------------------------------------------------------------------------------------*/
+    unsigned int tmp;
+    extern int page_is_ram(unsigned long pagenr);
+	for (tmp = 0, reserved = 0; tmp < max_low_pfn; tmp++) {
+		if (page_is_ram(tmp)) {
+			if (PageReserved(pfn_to_page(tmp)))
+				reserved++;
+		}
+    }
 /*
  * display in kilobytes.
  */
@@ -101,6 +113,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 #ifdef CONFIG_MEMORY_FAILURE
 		"HardwareCorrupted: %5lu kB\n"
 #endif
+        "Reserved:       %8lu kB\n"
 		,
 		K(i.totalram),
 		K(i.freeram),
@@ -151,6 +164,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 #ifdef CONFIG_MEMORY_FAILURE
 		,atomic_long_read(&mce_bad_pages) << (PAGE_SHIFT - 10)
 #endif
+		,K(reserved)
 		);
 
 	hugetlb_report_meminfo(m);

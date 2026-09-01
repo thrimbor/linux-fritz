@@ -48,6 +48,10 @@
 #include <asm/types.h>
 #include <asm/stacktrace.h>
 #include <asm/irq.h>
+#include <asm/watch.h>
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+#include <atheros.h>
+#endif/*--- #if defined(CONFIG_NMI_ARBITER_WORKAROUND) ---*/
 
 extern void check_wait(void);
 extern asmlinkage void r4k_wait(void);
@@ -83,6 +87,9 @@ extern int fpu_emulator_cop1Handler(struct pt_regs *xcp,
 extern asmlinkage void octeon_cop2_restore(struct octeon_cop2_state *task);
 #endif
 
+static unsigned int error_epc;
+unsigned int avm_nmi_taken;
+
 void (*board_be_init)(void);
 int (*board_be_handler)(struct pt_regs *regs, int is_fixup);
 void (*board_nmi_handler_setup)(void);
@@ -95,21 +102,26 @@ static void show_raw_backtrace(unsigned long reg29)
 	unsigned long *sp = (unsigned long *)(reg29 & ~3);
 	unsigned long addr;
 
-	printk("Call Trace:");
-#ifdef CONFIG_KALLSYMS
-	printk("\n");
-#endif
+			/*--- printk(KERN_ERR " %s/%d", __FUNCTION__, __LINE__); ---*/
+	printk(KERN_ERR "Call Trace:\n");
 	while (!kstack_end(sp)) {
 		unsigned long __user *p =
 			(unsigned long __user *)(unsigned long)sp++;
 		if (__get_user(addr, p)) {
-			printk(" (Bad stack address)");
+			printk("\n");
+			printk(KERN_ERR " (Bad stack address)");
 			break;
 		}
-		if (__kernel_text_address(addr))
-			print_ip_sym(addr);
+		if (__kernel_text_address(addr)) {
+			/*--- printk(KERN_ERR " %s/%d", __FUNCTION__, __LINE__); ---*/
+            /*--- printk(KERN_ERR); ---*/
+            printk(KERN_ERR "[<%p>] %pS\n", (void *)addr, (void *)addr);
+			/*--- print_ip_sym(addr); ---*/
+        }
+			/*--- printk("\n"); ---*/
+			/*--- printk(KERN_ERR " %s/%d", __FUNCTION__, __LINE__); ---*/
 	}
-	printk("\n");
+	/*--- printk("\n"); ---*/
 }
 
 #ifdef CONFIG_KALLSYMS
@@ -128,6 +140,8 @@ static void show_backtrace(struct task_struct *task, const struct pt_regs *regs)
 	unsigned long ra = regs->regs[31];
 	unsigned long pc = regs->cp0_epc;
 
+	if (!task)
+		task = current;
 	if (raw_show_trace || !__kernel_text_address(pc)) {
 		show_raw_backtrace(sp);
 		return;
@@ -156,7 +170,7 @@ static void show_stacktrace(struct task_struct *task,
 	i = 0;
 	while ((unsigned long) sp & (PAGE_SIZE - 1)) {
 		if (i && ((i % (64 / field)) == 0))
-			printk("\n       ");
+			printk("\n	 ");
 		if (i > 39) {
 			printk(" ...");
 			break;
@@ -186,6 +200,11 @@ void show_stack(struct task_struct *task, unsigned long *sp)
 			regs.regs[29] = task->thread.reg29;
 			regs.regs[31] = 0;
 			regs.cp0_epc = task->thread.reg31;
+#ifdef CONFIG_KGDB_KDB
+		} else if (atomic_read(&kgdb_active) != -1 &&
+			   kdb_current_regs) {
+			memcpy(&regs, kdb_current_regs, sizeof(regs));
+#endif /* CONFIG_KGDB_KDB */
 		} else {
 			prepare_frametrace(&regs);
 		}
@@ -228,7 +247,7 @@ static void show_code(unsigned int __user *pc)
 static void __show_regs(const struct pt_regs *regs)
 {
 	const int field = 2 * sizeof(unsigned long);
-	unsigned int cause = regs->cp0_cause;
+	unsigned int cause = regs->cp0_cause, exc_code;
 	int i;
 
 	printk("Cpu %d\n", smp_processor_id());
@@ -256,16 +275,16 @@ static void __show_regs(const struct pt_regs *regs)
 #endif
 	printk("Hi    : %0*lx\n", field, regs->hi);
 	printk("Lo    : %0*lx\n", field, regs->lo);
+#if defined(__mips_dsp)
+	printk("ac1Hi: %0*lx ac1Lo: %0*lx\n", field, regs->ac1hi, field, regs->ac1lo);
+	printk("ac2Hi: %0*lx ac2Lo: %0*lx\n", field, regs->ac2hi, field, regs->ac2lo);
+	printk("ac3Hi: %0*lx ac3Lo: %0*lx\n", field, regs->ac3hi, field, regs->ac3lo);
+	printk("dspcontrol: %0*lx\n", field, regs->dspctrl);
+#endif/*--- #if defined(__mips_dsp) ---*/
 
 	/*
 	 * Saved cp0 registers
 	 */
-	printk("epc   : %0*lx %pS\n", field, regs->cp0_epc,
-	       (void *) regs->cp0_epc);
-	printk("    %s\n", print_tainted());
-	printk("ra    : %0*lx %pS\n", field, regs->regs[31],
-	       (void *) regs->regs[31]);
-
 	printk("Status: %08x    ", (uint32_t) regs->cp0_status);
 
 	if (current_cpu_data.isa_level == MIPS_CPU_ISA_I) {
@@ -311,11 +330,27 @@ static void __show_regs(const struct pt_regs *regs)
 	}
 	printk("\n");
 
-	printk("Cause : %08x\n", cause);
+	exc_code = (cause & CAUSEF_EXCCODE) >> CAUSEB_EXCCODE;
+	printk("Cause : %08x exc_code:%d %s\n", cause, exc_code,
+                exc_code == 1 ? "Mod"  :
+                exc_code == 2 ? "TLBL" :
+                exc_code == 3 ? "TLBS" :
+                exc_code == 4 ? "AdEL" :
+                exc_code == 5 ? "AdES" :
+                exc_code == 6 ? "IBE"  :
+                exc_code == 7 ? "DBE"  :
+                exc_code == 25 ? "Thread"  :
+                exc_code == 31 ? "CacheErr"  : ""
+                );
 
 	cause = (cause & CAUSEF_EXCCODE) >> CAUSEB_EXCCODE;
-	if (1 <= cause && cause <= 5)
+	if (1 <= exc_code && exc_code <= 5) {
 		printk("BadVA : %0*lx\n", field, regs->cp0_badvaddr);
+    }
+	printk("epc   : %0*lx %pS\n", field, regs->cp0_epc, (void *) regs->cp0_epc);
+	printk("errepc: %08lx %pS\n", error_epc ? error_epc : read_c0_errorepc(), (void *)(error_epc ? error_epc : read_c0_errorepc()));
+	printk("    %s\n", print_tainted());
+	printk("ra    : %0*lx %pS\n", field, regs->regs[31], (void *) regs->regs[31]);
 
 	printk("PrId  : %08x (%s)\n", read_c0_prid(),
 	       cpu_name_string());
@@ -353,21 +388,43 @@ void show_registers(const struct pt_regs *regs)
 
 static DEFINE_SPINLOCK(die_lock);
 
+bool arch_trigger_all_cpu_backtrace(void) {
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
+    struct pt_regs regs;
+    int tc = 0, cur_tc;
+    while((cur_tc = mips_mt_prepare_frametrace(tc, &regs)) != -1) {
+        if(cur_tc == 0) {
+            printk("TC %x:\n", tc);
+            show_backtrace(NULL, &regs);
+        }
+        tc++;
+    }
+    return 1;
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC) ---*/
+    return 0;
+}
 void __noreturn die(const char * str, const struct pt_regs * regs)
 {
 	static int die_counter;
-#ifdef CONFIG_MIPS_MT_SMTC
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
 	unsigned long dvpret = dvpe();
-#endif /* CONFIG_MIPS_MT_SMTC */
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC) ---*/
 
 	console_verbose();
+    restore_printk();
+
 	spin_lock_irq(&die_lock);
 	bust_spinlocks(1);
-#ifdef CONFIG_MIPS_MT_SMTC
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
 	mips_mt_regdump(dvpret);
-#endif /* CONFIG_MIPS_MT_SMTC */
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC) ---*/
 	printk("%s[#%d]:\n", str, ++die_counter);
+#ifndef        CONFIG_MAPPING
 	show_registers(regs);
+#endif
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
+	arch_trigger_all_cpu_backtrace();
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC) ---*/
 	add_taint(TAINT_DIE);
 	spin_unlock_irq(&die_lock);
 
@@ -379,9 +436,102 @@ void __noreturn die(const char * str, const struct pt_regs * regs)
 		ssleep(5);
 		panic("Fatal exception");
 	}
-
 	do_exit(SIGSEGV);
 }
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+#ifdef CONFIG_BUG_EXTRA_INFO
+extern unsigned long __start___bug_debug_table;
+extern unsigned long __stop___bug_debug_table;
+
+#define MAX_BUG_TABLES  20
+struct bug_debug_tables { 
+    char *name;
+    struct bug_debug_table_entry *start;
+    struct bug_debug_table_entry *stop;
+} bug_debug_table[MAX_BUG_TABLES] = {
+    [0] = { 
+            .name  = "kernel", 
+            .start = (struct bug_debug_table_entry *)&__start___bug_debug_table, 
+            .stop  = (struct bug_debug_table_entry *)&__stop___bug_debug_table
+    }
+};
+
+__asm__(
+"	.section	__bug_debug_table, \"a\"\n"
+"	.previous			\n");
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+void register_bug_debug_table(char *name, unsigned long start, unsigned long end) {
+    unsigned int i;
+    for(i = 0 ; i < MAX_BUG_TABLES ; i++) {
+        struct bug_debug_tables *T = &bug_debug_table[i];
+        if(T->name == NULL) {
+            printk("[%s] name='%s' 0x%lx - 0x%lx\n", __FUNCTION__, name, start, end);
+            T->name = name;
+            T->start = (struct bug_debug_table_entry *)start;
+            T->stop  = (struct bug_debug_table_entry *)end;
+            return;
+        }
+    }
+}
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+void release_bug_debug_table(char *name) {
+    unsigned int i;
+    for(i = 0 ; i < MAX_BUG_TABLES ; i++) {
+        struct bug_debug_tables *T = &bug_debug_table[i];
+        if(T->name == name) {
+            T->name = NULL;
+            T->start = (struct bug_debug_table_entry *)0UL;
+            T->stop  = (struct bug_debug_table_entry *)0UL;
+            return;
+        }
+    }
+}
+
+
+EXPORT_SYMBOL(register_bug_debug_table);
+EXPORT_SYMBOL(release_bug_debug_table);
+
+/*------------------------------------------------------------------------------------------*\
+\*------------------------------------------------------------------------------------------*/
+static const struct bug_debug_table_entry *search_bug_debug_tables(unsigned long addr)
+{
+	const struct bug_debug_table_entry *e;
+    unsigned int i;
+
+    /*--- printk(KERN_ERR "[%s] addr 0x%lx %s", __FUNCTION__, addr, addr & 0x1 ? "(mips16)" : ""); ---*/
+
+    addr &= ~0x1;
+
+
+    for(i = 0 ; i < MAX_BUG_TABLES ; i++) {
+        struct bug_debug_tables *T = &bug_debug_table[i];
+        /*--- printk(KERN_ERR "[%s] '%s' search from 0x%p to 0x%p\n", __FUNCTION__, T->name, T->start, T->stop); ---*/
+
+        if(T->name == NULL)
+            continue;
+
+        for(e = T->start ; e < T->stop ; e++) {
+            /*--- if(i == 1) ---*/
+                /*--- printk(KERN_ERR "[%s] '%s' addr 0x%lx  e->addr 0x%lx\n", __FUNCTION__, T->name, addr, e->addr); ---*/
+            if(e->addr + 4 == addr) {
+                /*--- printk(KERN_ERR "[%s] found: '%s' addr 0x%lx + 4 == e->addr 0x%lx\n", __FUNCTION__, T->name, addr, e->addr); ---*/
+                return e;
+            }
+            if(e->addr == addr) {
+                /*--- printk(KERN_ERR "[%s] found: '%s' addr 0x%lx == e->addr 0x%lx\n", __FUNCTION__, T->name, addr, e->addr); ---*/
+                return e;
+            }
+        }
+    }
+    return NULL;
+}
+#endif /*--- #ifdef CONFIG_BUG_EXTRA_INFO ---*/
 
 extern struct exception_table_entry __start___dbe_table[];
 extern struct exception_table_entry __stop___dbe_table[];
@@ -395,7 +545,15 @@ static const struct exception_table_entry *search_dbe_tables(unsigned long addr)
 {
 	const struct exception_table_entry *e;
 
-	e = search_extable(__start___dbe_table, __stop___dbe_table - 1, addr);
+
+    e = search_extable(__start___dbe_table, __stop___dbe_table - 1, addr - 8UL);
+    if(e) {
+        /*--- printk(KERN_ERR "[%s] addr=0x%lx addr-0x%lx=0x%lx e=0x%p, nextinsn 0x%lx\n", ---*/ 
+                /*--- __FUNCTION__, addr, 8UL, addr - 8UL, e, e->nextinsn); ---*/
+        return e;
+    }
+	/*--- e = search_extable(__start___dbe_table, __stop___dbe_table - 1, addr); ---*/
+
 	if (!e)
 		e = search_module_dbetables(addr);
 	return e;
@@ -441,6 +599,7 @@ asmlinkage void do_be(struct pt_regs *regs)
 	    == NOTIFY_STOP)
 		return;
 
+    avm_nmi_taken = ~0xdeadbabe;
 	die_if_kernel("Oops", regs);
 	force_sig(SIGBUS, current);
 }
@@ -724,8 +883,21 @@ static void do_trap_or_bp(struct pt_regs *regs, unsigned int code,
 		force_sig_info(SIGFPE, &info, current);
 		break;
 	case BRK_BUG:
-		die_if_kernel("Kernel bug detected", regs);
-		force_sig(SIGTRAP, current);
+        {
+#ifdef CONFIG_BUG_EXTRA_INFO
+            const struct bug_debug_table_entry *bug_info = search_bug_debug_tables(regs->cp0_epc);
+            if(bug_info) {
+                printk(KERN_ERR "BUG%s(%s) at function '%s' line: %d file: %s\n",
+                        bug_info->condition ? "_ON" : "",
+                        bug_info->condition ? bug_info->condition : "",
+                        bug_info->functionname, bug_info->line, bug_info->filename);
+            } else {
+                printk(KERN_ERR "BUG() no bug_debug_table_entry found\n");
+            }
+#endif /*--- #ifdef CONFIG_BUG_EXTRA_INFO ---*/
+            die_if_kernel("Kernel bug detected", regs);
+            force_sig(SIGTRAP, current);
+        }
 		break;
 	case BRK_MEMU:
 		/*
@@ -943,6 +1115,8 @@ asmlinkage void do_mdmx(struct pt_regs *regs)
 	force_sig(SIGILL, current);
 }
 
+
+
 /*
  * Called with interrupts disabled.
  */
@@ -950,6 +1124,13 @@ asmlinkage void do_watch(struct pt_regs *regs)
 {
 	u32 cause;
 
+
+#if defined(CONFIG_AVM_WP)
+	if (avm_wp_dispatcher()) {
+		local_irq_enable();
+		return;
+	}
+#endif
 	/*
 	 * Clear WP (bit 22) bit of cause register so we don't loop
 	 * forever.
@@ -957,6 +1138,7 @@ asmlinkage void do_watch(struct pt_regs *regs)
 	cause = read_c0_cause();
 	cause &= ~(1 << 22);
 	write_c0_cause(cause);
+    
 
 	/*
 	 * If the current thread has the watch registers loaded, save
@@ -1230,14 +1412,118 @@ void ejtag_exception_handler(struct pt_regs *regs)
 /*
  * NMI exception handler.
  */
-NORET_TYPE void ATTRIB_NORET nmi_exception_handler(struct pt_regs *regs)
-{
+#include <asm/current.h>
+#include <linux/sched.h>
+
+/*--------------------------------------------------------------------------------*\
+Atheros: Exception 0xbfc00380 wird auch auf nmi_exception_handler gelegt
+\*--------------------------------------------------------------------------------*/
+void nmi_exception_handler(struct pt_regs *regs) {
+#if defined(CONFIG_MACH_ATHEROS)
+    static struct pt_regs tmp_regs;
+#endif
+    struct task_struct *curr __attribute__ ((unused));
+    int status __attribute__ ((unused));
+
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
+    unsigned long vpe_status = 0;
+    if (avm_nmi_taken != 0xdeadbabe)
+        vpe_status = dvpe();
+#endif/*--- #ifdef CONFIG_SMP ---*/
 	bust_spinlocks(1);
-	printk("NMI taken!!!!\n");
+
+    console_verbose();
+    restore_printk();
+    {
+        extern void set_reboot_status_to_NMI(void);
+#if defined(CONFIG_VR9) || defined(CONFIG_AR10)
+        *(volatile unsigned int *)(0xbf101000 + 0xF0) = (1<<31);    /*--- clear NMI-IrqStatus ---*/
+#endif /*--- #if defined(CONFIG_VR9) ---*/ 
+#if ! defined(CONFIG_MIPS_UR8) && ! defined(CONFIG_MIPS_FUSIV)
+        set_reboot_status_to_NMI();
+#endif
+    }
+    status = read_c0_status();
+    status &= ~(1 << 0);  /* disable all interrupts */
+    status &= ~(1 << 19); /* reset NMI status */
+    status &= ~(1 << 22); /* bootstap bit BEV zurücksetzen */
+    write_c0_status(status);
+
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+    ath_reg_wr(ATH_WATCHDOG_TMR_CONTROL, ATH_WD_ACT_NONE);
+    memset(&nmi_workaround_func, 0, sizeof(struct _nmi_workaround_func));
+#endif/*--- #if defined(CONFIG_NMI_ARBITER_WORKAROUND) ---*/
+
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
+    evpe(vpe_status);
+#endif
+
+#if defined(CONFIG_MACH_ATHEROS)
+    if(error_epc == 0) {
+        printk(KERN_EMERG"\nHardwareWatchDog - NMI taken!!!!\n");
+        /*--------------------------------------------------------------------------------*\
+        im NMI-Kontext funktionieren Symbolausfloesungen auf virtuelle Adressen nicht 
+        (ausser sie stehen bereits im TLB):
+        -> NMI verlassen und error_epc=nmi_exception_handler -> retrigger im normalen Kontext 
+        \*--------------------------------------------------------------------------------*/
+        error_epc = read_c0_errorepc();
+        memcpy(&tmp_regs, regs, sizeof(tmp_regs));
+        write_c0_errorepc(nmi_exception_handler);
+        write_c0_epc(nmi_exception_handler);  /*--- eigentlich nicht notwendig, sollte aber auch nicht schaden ... ---*/
+        return;
+    } else {
+        unsigned int status = read_c0_status();
+        regs          = &tmp_regs;
+		if ((status & ST0_ERL)) {
+            return;
+        }
+		if ((status & ST0_EXL) && (((read_c0_cause() & CAUSEF_EXCCODE) >> CAUSEB_EXCCODE) == 7)) {
+            /*--------------------------------------------------------------------------------*\
+             * DBE-Error: EXL ist noch gesetzt
+             * fuehrt u.U. auch nochmal zur fehlenden Symbolaufloesung - fuer 2. Versuch dann 
+             * deshalb Register lokal in aus tmp_regs verwenden 
+            \*--------------------------------------------------------------------------------*/
+            printk(KERN_EMERG"\nDBE-Fault: status=%08x cause=%08x epc=%08lx error_epc =%08x!!!!\n", status, read_c0_cause(), regs->cp0_epc, error_epc);
+        }
+    }
+    regs = &tmp_regs;
+#else
+    printk(KERN_EMERG"\nHardwareWatchDog - NMI taken!!!!\n");
+    avm_nmi_taken = 0xdeadbabe;
+#endif  /*--- #else ---*//*--- #if defined(CONFIG_MACH_ATHEROS) ---*/
+
+#if defined(CONFIG_LANTIQ) || defined(CONFIG_MACH_ATHEROS)
+
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
+    mips_mt_regdump(vpe_status);
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC) ---*/
+
+    show_registers(regs);
+    curr = get_current();
+    if (curr) {
+	    printk(KERN_EMERG"<current pid %d name %s>\n", curr->pid, curr->comm);
+    } else {
+        printk(KERN_EMERG"<no current found>\n");
+    }
+
+#if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC)
+	arch_trigger_all_cpu_backtrace();
+#endif /*--- #if defined(CONFIG_MIPS_MT_SMP) || defined(CONFIG_MIPS_MT_SMTC) ---*/
+
+    panic("HardwareWatchDog");
+#endif /*--- #if defined(CONFIG_LANTIQ) || defined(CONFIG_MACH_ATHEROS) ---*/
 	die("NMI", regs);
 }
+#if defined(CONFIG_NMI_ARBITER_WORKAROUND)
+EXPORT_SYMBOL(nmi_exception_handler);
+#endif/*--- #if defined(CONFIG_NMI_ARBITER_WORKAROUND) ---*/
 
+
+#if defined(CONFIG_LANTIQ)
+#define VECTORSPACING 0x200     /* for EI/VI mode */
+#else
 #define VECTORSPACING 0x100	/* for EI/VI mode */
+#endif
 
 unsigned long ebase;
 unsigned long exception_handlers[32];
@@ -1248,17 +1534,29 @@ unsigned long vi_handlers[64];
  * to interrupt handlers in the address range from
  * KSEG0 <= x < KSEG0 + 256mb on the Nevada.  Oh well ...
  */
-void *set_except_vector(int n, void *addr)
+void __init *set_except_vector(int n, void *addr)
 {
 	unsigned long handler = (unsigned long) addr;
 	unsigned long old_handler = exception_handlers[n];
+    extern char except_vec4_lui, except_vec4_ori, except_vec4;      /* genex.S */
 
 	exception_handlers[n] = handler;
+	if (n == 0 && cpu_has_divec) {
+		*(volatile u32 *)(&except_vec4_lui - &except_vec4 + ebase + 0x200) = 
+            (*(volatile u32 *)(&except_vec4_lui - &except_vec4 + ebase + 0x200) & 0xffff0000) | ((handler >> 16) & 0xffff);
+
+		*(volatile u32 *)(&except_vec4_ori - &except_vec4 + ebase + 0x200) = 
+            (*(volatile u32 *)(&except_vec4_ori - &except_vec4 + ebase + 0x200) & 0xffff0000) | (handler & 0xffff);
+		flush_icache_range(ebase + 0x200, ebase + 0x210);
+	}
+#if 0
 	if (n == 0 && cpu_has_divec) {
 		*(u32 *)(ebase + 0x200) = 0x08000000 |
 					  (0x03ffffff & (handler >> 2));
 		local_flush_icache_range(ebase + 0x200, ebase + 0x204);
+		printk("[%s] setup handler (%#x), %pF, op-code '%#x' \n", __FUNCTION__, handler, (void*)handler, *(u32 *)(ebase + 0x200));
 	}
+#endif
 	return (void *)old_handler;
 }
 
@@ -1376,8 +1674,10 @@ asmlinkage int (*restore_fp_context)(struct sigcontext __user *sc);
 extern asmlinkage int _save_fp_context(struct sigcontext __user *sc);
 extern asmlinkage int _restore_fp_context(struct sigcontext __user *sc);
 
+#if !defined(CONFIG_ATH_2x8)
 extern asmlinkage int fpu_emulator_save_context(struct sigcontext __user *sc);
 extern asmlinkage int fpu_emulator_restore_context(struct sigcontext __user *sc);
+#endif
 
 #ifdef CONFIG_SMP
 static int smp_save_fp_context(struct sigcontext __user *sc)
@@ -1519,7 +1819,11 @@ void __cpuinit per_cpu_trap_init(void)
 		write_c0_status(sr);
 		/* Setting vector spacing enables EI/VI mode  */
 		change_c0_intctl(0x3e0, VECTORSPACING);
+	} else {
+		/*--- printk("[%s] ebase before writing %#x, new ebase %#x \n",__FUNCTION__, (unsigned int)read_c0_ebase() , (unsigned int)ebase); ---*/
+		write_c0_ebase(ebase);
 	}
+
 	if (cpu_has_divec) {
 		if (cpu_has_mipsmt) {
 			unsigned int vpflags = dvpe();
@@ -1628,6 +1932,21 @@ void __init trap_init(void)
 	if (kgdb_early_setup)
 		return;	/* Already done */
 #endif
+#if 0
+	printk("[%s] rollback = %d \n", __FUNCTION__, rollback);
+	if (cpu_has_veic ) printk("[%s] cpu_has_veic \n", __FUNCTION__);
+	if (cpu_has_vint) printk("[%s] cpu_has_vint\n", __FUNCTION__);
+	if (cpu_has_ejtag ) printk("[%s] cpu_has_ejtag \n", __FUNCTION__);
+	if (cpu_has_watch) printk("[%s] cpu_has_watch\n", __FUNCTION__);
+	if (cpu_has_divec) printk("[%s] cpu_has_divec\n", __FUNCTION__);
+	if (cpu_has_vtag_icache ) printk("[%s] cpu_has_vtag_icache \n", __FUNCTION__);
+	if (cpu_has_fpu ) printk("[%s] cpu_has_fpu \n", __FUNCTION__);
+	if (cpu_has_nofpuex) printk("[%s] cpu_has_nofpuex\n", __FUNCTION__);
+	if (cpu_has_mcheck) printk("[%s] cpu_has_mcheck\n", __FUNCTION__);
+	if (cpu_has_mipsmt) printk("[%s] cpu_has_mipsmt\n", __FUNCTION__);
+	if (cpu_has_vce) printk("[%s] cpu_has_vce\n", __FUNCTION__);
+	if (cpu_has_4kex) printk("[%s] cpu_has_4kex\n", __FUNCTION__);
+#endif
 
 	if (cpu_has_veic || cpu_has_vint) {
 		unsigned long size = 0x200 + VECTORSPACING*64;
@@ -1676,7 +1995,10 @@ void __init trap_init(void)
 			set_vi_handler(i, NULL);
 	}
 	else if (cpu_has_divec)
-		set_handler(0x200, &except_vec4, 0x8);
+		set_handler(0x200, &except_vec4, 0x10);
+        /* hbl: Vorgeschlagene Lantiq-Aenderung
+         * set_handler(0x200, &except_vec4, 0x8);
+         */
 
 	/*
 	 * Some CPUs can enable/disable for cache parity detection, but does

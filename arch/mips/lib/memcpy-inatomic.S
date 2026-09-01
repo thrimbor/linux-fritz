@@ -28,6 +28,7 @@
 #undef CONFIG_CPU_HAS_PREFETCH
 #endif
 
+#include <linux/autoconf.h>
 #include <asm/asm.h>
 #include <asm/asm-offsets.h>
 #include <asm/regdef.h>
@@ -305,6 +306,12 @@ EXC(	LOAD	t0, 0(src),		.Ll_exc)
 	 * more instruction-level parallelism.
 	 */
 #define bits t2
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+	beqz	len, .Ldone
+	nop
+	j	.Lcopy_bytes
+	nop
+#else
 	beqz	len, .Ldone
 	 ADD	t1, dst, len	# t1 is just past last byte of dst
 	li	bits, 8*NBYTES
@@ -315,6 +322,7 @@ EXC(	LOAD	t0, 0(src),		.Ll_exc)
 	STREST	t0, -1(t1)
 	jr	ra
 	 move	len, zero
+#endif
 .Ldst_unaligned:
 	/*
 	 * dst is unaligned
@@ -326,6 +334,27 @@ EXC(	LOAD	t0, 0(src),		.Ll_exc)
 	 * Set match = (src and dst have same alignment)
 	 */
 #define match rem
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+#define COPY_BYTE1(src,dst)			\
+EXC(	lbu	t4, 0(src), .Ll_exc);	\
+	SUB	len, len, 1;		\
+	 sb	t4, 0(dst); 		\
+	ADD src, src, 1;		\
+	beqz	len, .Ldone;		\
+	ADD dst, dst,1;		\
+
+	ADD t2, zero,NBYTES
+	SUB t3, t2, t1			
+.Lcopy1:
+	COPY_BYTE1(src,dst)
+	SUB t3, t3 , 1
+	bne t3, zero, .Lcopy1 
+	nop
+
+	xor match, t0, t1
+	beqz	match, .Lboth_aligned
+	nop
+#else
 EXC(	LDFIRST	t3, FIRST(0)(src),	.Ll_exc)
 	ADD	t2, zero, NBYTES
 EXC(	LDREST	t3, REST(0)(src),	.Ll_exc_copy)
@@ -337,7 +366,7 @@ EXC(	LDREST	t3, REST(0)(src),	.Ll_exc_copy)
 	ADD	dst, dst, t2
 	beqz	match, .Lboth_aligned
 	 ADD	src, src, t2
-
+#endif
 .Lsrc_unaligned_dst_aligned:
 	SRL	t0, len, LOG_NBYTES+2    # +2 for 4 units/iter
 	PREF(	0, 3*32(src) )
@@ -351,6 +380,54 @@ EXC(	LDREST	t3, REST(0)(src),	.Ll_exc_copy)
  * It's OK to load FIRST(N+1) before REST(N) because the two addresses
  * are to the same unit (unless src is aligned, but it's not).
  */
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+EXC( lbu 	t0, 0(src), .Ll_exc)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t0 , 8
+	or	t0, t4
+	sll 	t0, 8
+	or	t0, t5
+	sll 	t0, 8
+	or	t0, t6
+	ADD src, src, 4
+EXC( lbu 	t1, 0(src), .Ll_exc_copy)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t1 , 8
+	or	t1, t4
+	sll 	t1, 8
+	or	t1, t5
+	sll 	t1, 8
+	or	t1, t6
+	ADD src, src, 4
+EXC( lbu 	t2, 0(src), .Ll_exc_copy)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t2 , 8
+	or	t2, t4
+	sll 	t2, 8
+	or	t2, t5
+	sll 	t2, 8
+	or	t2, t6
+	ADD src, src, 4
+EXC( lbu 	t3, 0(src), .Ll_exc_copy)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t3 , 8
+	or	t3, t4
+	sll 	t3, 8
+	or	t3, t5
+	sll 	t3, 8
+	or	t3, t6
+	ADD src, src, 4
+	
+	SUB     len, len, 4*NBYTES
+#else	/* FUSIV MIPS1 */
 EXC(	LDFIRST	t0, FIRST(0)(src),	.Ll_exc)
 EXC(	LDFIRST	t1, FIRST(1)(src),	.Ll_exc_copy)
 	SUB     len, len, 4*NBYTES
@@ -365,6 +442,7 @@ EXC(	LDREST	t3, REST(3)(src),	.Ll_exc_copy)
 #ifdef CONFIG_CPU_SB1
 	nop				# improves slotting
 #endif
+#endif	/* FUSIV MIPS1 */
 	STORE	t0, UNIT(0)(dst)
 	STORE	t1, UNIT(1)(dst)
 	STORE	t2, UNIT(2)(dst)
@@ -381,8 +459,21 @@ EXC(	LDREST	t3, REST(3)(src),	.Ll_exc_copy)
 	beq	rem, len, .Lcopy_bytes
 	 nop
 1:
+#ifdef CONFIG_MACH_FUSIV_MIPS1
+EXC( lbu 	t0, 0(src), .Ll_exc)
+EXC( lbu 	t4, 1(src), .Ll_exc_copy)
+EXC( lbu  t5, 2(src), .Ll_exc_copy)
+EXC( lbu  t6, 3(src), .Ll_exc_copy)
+	sll	t0 , 8
+	or	t0, t4
+	sll 	t0, 8
+	or	t0, t5
+	sll 	t0, 8
+	or	t0, t6
+#else	/* FUSIV MIPS1 */
 EXC(	LDFIRST t0, FIRST(0)(src),	.Ll_exc)
 EXC(	LDREST	t0, REST(0)(src),	.Ll_exc_copy)
+#endif	/* FUSIV MIPS1 */
 	ADD	src, src, NBYTES
 	SUB	len, len, NBYTES
 	STORE	t0, 0(dst)

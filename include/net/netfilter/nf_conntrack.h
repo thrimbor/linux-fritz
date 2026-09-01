@@ -23,6 +23,11 @@
 #include <linux/netfilter/nf_conntrack_dccp.h>
 #include <linux/netfilter/nf_conntrack_sctp.h>
 #include <linux/netfilter/nf_conntrack_proto_gre.h>
+
+#if (defined CONFIG_NF_CT_PROTO_ESP) || (defined CONFIG_NF_CT_PROTO_ESP_MODULE)
+#include <linux/netfilter/nf_conntrack_proto_esp.h>
+#endif
+
 #include <net/netfilter/ipv6/nf_conntrack_icmpv6.h>
 
 #include <net/netfilter/nf_conntrack_tuple.h>
@@ -34,6 +39,10 @@ union nf_conntrack_proto {
 	struct ip_ct_sctp sctp;
 	struct ip_ct_tcp tcp;
 	struct nf_ct_gre gre;
+#if (defined CONFIG_NF_CT_PROTO_ESP) || (defined CONFIG_NF_CT_PROTO_ESP_MODULE)
+	struct nf_ct_esp esp;
+#endif
+
 };
 
 union nf_conntrack_expect_proto {
@@ -114,6 +123,24 @@ struct nf_conn {
 
 #ifdef CONFIG_NF_CONNTRACK_SECMARK
 	u_int32_t secmark;
+#endif
+#ifdef CONFIG_ATHRS_HW_NAT
+        void *hwnat_priv;
+#endif
+#if defined(CONFIG_NETFILTER_XT_MATCH_LAYER7) || \
+    defined(CONFIG_NETFILTER_XT_MATCH_LAYER7_MODULE)
+	struct {
+		/*
+		 * e.g. "http". NULL before decision. "unknown" after decision
+		 * if no match.
+		 */
+		char *app_proto;
+		/*
+		 * application layer data so far. NULL after match decision.
+		 */
+		char *app_data;
+		unsigned int app_data_len;
+	} layer7;
 #endif
 
 	/* Storage reserved for other modules: */
@@ -199,6 +226,22 @@ extern void nf_ct_free_hashtable(void *hash, int vmalloced, unsigned int size);
 
 extern struct nf_conntrack_tuple_hash *
 __nf_conntrack_find(struct net *net, const struct nf_conntrack_tuple *tuple);
+
+#ifdef CONFIG_ATHRS_HW_NAT
+
+typedef struct {
+    void                (*nf_process_nat)      (struct sk_buff *skb, struct nf_conn *ct,
+                                                enum ip_conntrack_info ctinfo, u_int8_t protonum);
+    struct nf_conn *    (*nf_find_get)         (struct net *net, struct nf_conntrack_tuple *tuple,
+                                                __u32 flag, struct nf_conntrack_tuple_hash **h);
+    void                (*get_wan_ipaddr)      (uint32_t *wan_ip);
+    void                (*nf_alter_port)       (struct nf_conntrack_tuple, struct nf_conntrack_tuple,
+                                                struct nf_conn *ct);
+    int                 (*nf_tuple_taken)      (const struct nf_conntrack_tuple *, const struct nf_conn *ct);
+} athr_nf_nat_ops_t;
+
+extern athr_nf_nat_ops_t *athr_nat_sw_ops;
+#endif
 
 extern void nf_conntrack_hash_insert(struct nf_conn *ct);
 extern void nf_ct_delete_from_lists(struct nf_conn *ct);

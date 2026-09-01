@@ -1734,7 +1734,7 @@ itd_complete (
 	unsigned				uframe;
 	int					urb_index = -1;
 	struct ehci_iso_stream			*stream = itd->stream;
-	struct usb_device			*dev;
+	struct usb_device			*dev __maybe_unused__;
 	unsigned				retval = false;
 
 	/* for each uframe with a packet */
@@ -2150,7 +2150,7 @@ sitd_complete (
 	u32					t;
 	int					urb_index = -1;
 	struct ehci_iso_stream			*stream = sitd->stream;
-	struct usb_device			*dev;
+	struct usb_device			*dev __maybe_unused__;
 	unsigned				retval = false;
 
 	urb_index = sitd->index;

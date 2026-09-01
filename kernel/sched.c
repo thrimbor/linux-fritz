@@ -2616,7 +2616,7 @@ out:
  * It may be assumed that this function implies a write memory barrier before
  * changing the task state if and only if any tasks are woken up.
  */
-int wake_up_process(struct task_struct *p)
+inline int wake_up_process(struct task_struct *p)
 {
 	return try_to_wake_up(p, TASK_ALL, 0);
 }
@@ -5596,6 +5596,8 @@ static noinline void __schedule_bug(struct task_struct *prev)
 {
 	struct pt_regs *regs = get_irq_regs();
 
+	console_verbose();
+    restore_printk();
 	printk(KERN_ERR "BUG: scheduling while atomic: %s/%d/0x%08x\n",
 		prev->comm, prev->pid, preempt_count());
 
@@ -5608,6 +5610,13 @@ static noinline void __schedule_bug(struct task_struct *prev)
 		show_regs(regs);
 	else
 		dump_stack();
+
+#ifdef CONFIG_SMP
+    /*--- get information about all cpus ! ---*/
+    BUG();
+#else
+	panic("BUG: scheduling while atomic: %s/%d/0x%08x\n", prev->comm, prev->pid, preempt_count());
+#endif
 }
 
 /*
@@ -6362,6 +6371,7 @@ int can_nice(const struct task_struct *p, const int nice)
 	return (nice_rlim <= p->signal->rlim[RLIMIT_NICE].rlim_cur ||
 		capable(CAP_SYS_NICE));
 }
+EXPORT_SYMBOL_GPL(can_nice);
 
 #ifdef __ARCH_WANT_SYS_NICE
 
@@ -6413,7 +6423,7 @@ SYSCALL_DEFINE1(nice, int, increment)
  * RT tasks are offset by -200. Normal tasks are centered
  * around 0, value goes from -16 to +15.
  */
-int task_prio(const struct task_struct *p)
+inline int task_prio(const struct task_struct *p)
 {
 	return p->prio - MAX_RT_PRIO;
 }
@@ -6422,7 +6432,7 @@ int task_prio(const struct task_struct *p)
  * task_nice - return the nice value of a given task.
  * @p: the task in question.
  */
-int task_nice(const struct task_struct *p)
+inline int task_nice(const struct task_struct *p)
 {
 	return TASK_NICE(p);
 }
@@ -9656,7 +9666,7 @@ static void init_tg_rt_entry(struct task_group *tg, struct rt_rq *rt_rq,
 void __init sched_init(void)
 {
 	int i, j;
-	unsigned long alloc_size = 0, ptr;
+	unsigned long alloc_size = 0, ptr __maybe_unused__;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	alloc_size += 2 * nr_cpu_ids * sizeof(void **);
@@ -9869,9 +9879,9 @@ void __might_sleep(char *file, int line, int preempt_offset)
 		"BUG: sleeping function called from invalid context at %s:%d\n",
 			file, line);
 	printk(KERN_ERR
-		"in_atomic(): %d, irqs_disabled(): %d, pid: %d, name: %s\n",
+		"in_atomic(): %d, irqs_disabled(): %d, pid: %d, name: %s preempt_count=%d\n",
 			in_atomic(), irqs_disabled(),
-			current->pid, current->comm);
+			current->pid, current->comm, preempt_count());
 
 	debug_show_held_locks(current);
 	if (irqs_disabled())
@@ -9943,9 +9953,8 @@ void normalize_rt_tasks(void)
 
 #endif /* CONFIG_MAGIC_SYSRQ */
 
-#ifdef CONFIG_IA64
+#if defined(CONFIG_IA64) || defined(CONFIG_MIPS)
 /*
- * These functions are only useful for the IA64 MCA handling.
  *
  * They can only be called when the whole system has been
  * stopped - every CPU needs to be quiescent, and no scheduling
@@ -9964,7 +9973,9 @@ struct task_struct *curr_task(int cpu)
 {
 	return cpu_curr(cpu);
 }
+#endif/*--- #if defined(CONFIG_IA64) || defined(CONFIG_MIPS) ---*/
 
+#ifdef CONFIG_IA64
 /**
  * set_curr_task - set the current task for a given cpu.
  * @cpu: the processor in question.

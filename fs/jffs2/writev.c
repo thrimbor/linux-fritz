@@ -64,7 +64,7 @@ int jffs2_flash_direct_write(struct jffs2_sb_info *c, loff_t ofs, size_t len,
 	ret = c->mtd->write(c->mtd, ofs, len, retlen, buf);
 
 	if (jffs2_sum_active()) {
-		struct kvec vecs[1];
+		struct kvec vecs[1] __attribute__((unused));
 		int res;
 
 		vecs[0].iov_base = (unsigned char *) buf;

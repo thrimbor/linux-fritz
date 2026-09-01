@@ -1,0 +1,12 @@
+#
+# RTP Timestamp
+#
+
+config AVM_RTP_TIMESTAMP
+	bool "AVM RTP Timtestamp"
+	select GENERIC_CONNTRACK
+	---help---
+	  The AVM RTP timestamp can be used to measure the time of 
+	  the device in send and receive direction.
+
+	  If unsure, say N.

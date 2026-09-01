@@ -34,6 +34,7 @@
 #include <linux/init.h>
 #include <linux/security.h>
 #include <linux/mutex.h>
+#include <linux/rwsem.h>
 #include <linux/if_addr.h>
 
 #include <asm/uaccess.h>
@@ -59,15 +60,63 @@ struct rtnl_link
 	rtnl_dumpit_func	dumpit;
 };
 
+static DECLARE_RWSEM(rtnl_offload_rwsem);
+
+void rtnl_offload_read_lock(void)
+{
+    down_read(&rtnl_offload_rwsem);
+}
+EXPORT_SYMBOL(rtnl_offload_read_lock);
+
+void rtnl_offload_read_unlock(void)
+{
+    up_read(&rtnl_offload_rwsem);
+}
+EXPORT_SYMBOL(rtnl_offload_read_unlock);
+
+
+void rtnl_offload_write_lock(void)
+{
+    down_write(&rtnl_offload_rwsem);
+}
+EXPORT_SYMBOL(rtnl_offload_write_lock);
+
+void rtnl_offload_write_unlock(void)
+{
+    up_write(&rtnl_offload_rwsem);
+}
+EXPORT_SYMBOL(rtnl_offload_write_unlock);
+
+// ---------------------------------
+//
+/*--- #define DEBUG_RTNL_LOCK ---*/
+#ifdef DEBUG_RTNL_LOCK
+void *current_rtnl_owner = NULL;
+atomic_t current_rtnl_count;
+#endif /*--- #ifdef DEBUG_RTNL_LOCK ---*/
+
 static DEFINE_MUTEX(rtnl_mutex);
 
 void rtnl_lock(void)
 {
+#ifdef DEBUG_RTNL_LOCK
+    if(rtnl_is_locked()) {
+        printk(KERN_ERR "[RTNL] '%s' will block\n", current->comm);
+    }
+    atomic_inc(&current_rtnl_count);
+#endif /*--- #ifdef DEBUG_RTNL_LOCK ---*/
 	mutex_lock(&rtnl_mutex);
+#ifdef DEBUG_RTNL_LOCK
+    current_rtnl_owner = current;
+#endif /*--- #ifdef DEBUG_RTNL_LOCK ---*/
 }
 
 void __rtnl_unlock(void)
 {
+#ifdef DEBUG_RTNL_LOCK
+    current_rtnl_owner = NULL;
+    atomic_dec(&current_rtnl_count);
+#endif /*--- #ifdef DEBUG_RTNL_LOCK ---*/
 	mutex_unlock(&rtnl_mutex);
 }
 
@@ -79,7 +128,15 @@ void rtnl_unlock(void)
 
 int rtnl_trylock(void)
 {
-	return mutex_trylock(&rtnl_mutex);
+    int ret = mutex_trylock(&rtnl_mutex);
+#ifdef DEBUG_RTNL_LOCK
+    if(!ret) {
+        /*--- printk(KERN_ERR "[RTNL] '%s' would block\n", current->comm); ---*/
+        return 0;
+    }
+    atomic_inc(&current_rtnl_count);
+#endif /*--- #ifdef DEBUG_RTNL_LOCK ---*/
+	return ret;
 }
 
 int rtnl_is_locked(void)

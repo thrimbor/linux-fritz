@@ -76,6 +76,7 @@ static unsigned long ai_word;
 static unsigned long ai_dword;
 static unsigned long ai_multi;
 static int ai_usermode;
+static int ai_kernelmode = 0;
 
 #define UM_WARN		(1 << 0)
 #define UM_FIXUP	(1 << 1)
@@ -106,8 +107,8 @@ proc_alignment_read(char *page, char **start, off_t off, int count, int *eof,
 	if (cpu_architecture() >= CPU_ARCH_ARMv5TE)
 		p += sprintf(p, "DWord:\t\t%lu\n", ai_dword);
 	p += sprintf(p, "Multi:\t\t%lu\n", ai_multi);
-	p += sprintf(p, "User faults:\t%i (%s)\n", ai_usermode,
-			usermode_action[ai_usermode]);
+	p += sprintf(p, "User faults:\t%i (%s)\n", ai_usermode, usermode_action[ai_usermode]);
+	p += sprintf(p, "Kernel faults:\t%i (%s)\n", ai_kernelmode, usermode_action[ai_kernelmode ? 3 : 2]);
 
 	len = (p - page) - off;
 	if (len < 0)
@@ -127,8 +128,11 @@ static int proc_alignment_write(struct file *file, const char __user *buffer,
 	if (count > 0) {
 		if (get_user(mode, buffer))
 			return -EFAULT;
-		if (mode >= '0' && mode <= '5')
+		if (mode >= '0' && mode <= '5') {
 			ai_usermode = mode - '0';
+        } else if (mode >= '6' && mode <= '7') {
+            ai_kernelmode = mode - '6';
+        }
 	}
 	return count;
 }
@@ -646,6 +650,29 @@ thumb2arm(u16 tinstr)
 	}
 }
 
+static int 
+print_mem_config(struct mm_struct *mmm, unsigned long addr) {
+    struct vm_area_struct *vm;
+    unsigned int i = 0;
+    if(mmm == NULL) 
+        return 0;
+    vm = mmm->mmap;
+    while(vm) {
+        if((addr >= vm->vm_start) && (addr < vm->vm_end)) {
+            printk("Adresse-Segment(%d): 0x%lx: 0x%lx :0x%lx (offset 0x%lx)", 
+                    i, vm->vm_start, addr, vm->vm_end, addr - vm->vm_start);
+            if(vm->vm_file) {
+                printk(" Path='%s'", vm->vm_file->f_path.dentry->d_name.name);
+            }
+            printk("\n");
+            return 0;
+        }
+        vm = vm->vm_next;
+        i++;
+    }
+    return 1;
+}
+
 /*
  * Convert Thumb-2 32 bit LDM, STM, LDRD, STRD to equivalent instruction
  * handlable by ARM alignment handler, also find the corresponding handler,
@@ -757,7 +784,17 @@ do_alignment(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	ai_sys += 1;
 
  fixup:
+    if(ai_kernelmode && !user_mode(regs)) {
+        printk(KERN_ERR "[unaligned %d] pc=0x%8p(%pF) addr=0x%08x task=%s pid=%d lr=0x%08x(%pF)\nCode: %08x <%08x> %08x\n", 
+                      ai_sys, regs->ARM_pc, regs->ARM_pc, addr, current->comm, current->pid,
+                      regs->ARM_lr, regs->ARM_lr,
+                      *(unsigned int *)(instrptr-4), *(unsigned int *)(instrptr), *(unsigned int *)(instrptr+4)
+            );
 
+        if(print_mem_config(current->active_mm, (unsigned long)regs->ARM_pc)) {
+            print_mem_config(current->mm, (unsigned long)regs->ARM_pc); 
+        }
+    }
 	regs->ARM_pc += isize;
 
 	switch (CODING_BITS(instr)) {
@@ -868,14 +905,17 @@ do_alignment(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
  user:
 	ai_user += 1;
 
-	if (ai_usermode & UM_WARN)
+	if (ai_usermode & UM_WARN) {
 		printk("Alignment trap: %s (%d) PC=0x%08lx Instr=0x%0*lx "
 		       "Address=0x%08lx FSR 0x%03x\n", current->comm,
 			task_pid_nr(current), instrptr,
 			isize << 1,
 			isize == 2 ? tinstr : instr,
 		        addr, fsr);
-
+        if(print_mem_config(current->active_mm, (unsigned long)regs->ARM_pc)) {
+            print_mem_config(current->mm, (unsigned long)regs->ARM_pc); 
+        }
+    }
 	if (ai_usermode & UM_FIXUP)
 		goto fixup;
 

@@ -40,6 +40,7 @@ udp_manip_pkt(struct sk_buff *skb,
 	unsigned int hdroff = iphdroff + iph->ihl*4;
 	__be32 oldip, newip;
 	__be16 *portptr, newport;
+        int nat_manip_type;
 
 	if (!skb_make_writable(skb, hdroff + sizeof(*hdr)))
 		return false;
@@ -53,13 +54,18 @@ udp_manip_pkt(struct sk_buff *skb,
 		newip = tuple->src.u3.ip;
 		newport = tuple->src.u.udp.port;
 		portptr = &hdr->source;
+                nat_manip_type = 1;
 	} else {
 		/* Get rid of dst ip and dst pt */
 		oldip = iph->daddr;
 		newip = tuple->dst.u3.ip;
 		newport = tuple->dst.u.udp.port;
 		portptr = &hdr->dest;
+                nat_manip_type = 2;
 	}
+#ifdef CONFIG_MACH_ATHEROS
+        athrs_hw_nat_add_entry(oldip, oldport, newip, newport, 2, nat_manip_type);
+#endif /*--- #ifdef CONFIG_MACH_ATHEROS ---*/
 	if (hdr->check || skb->ip_summed == CHECKSUM_PARTIAL) {
 		inet_proto_csum_replace4(&hdr->check, skb, oldip, newip, 1);
 		inet_proto_csum_replace2(&hdr->check, skb, *portptr, newport,

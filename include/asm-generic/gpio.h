@@ -160,7 +160,7 @@ static inline int gpio_is_valid(int number)
  * or other blocking infrastructure can use these wrappers.
  */
 
-static inline int gpio_cansleep(unsigned gpio)
+static inline int gpio_cansleep(unsigned gpio __attribute__ ((unused)))
 {
 	return 0;
 }
@@ -183,18 +183,20 @@ static inline void gpio_set_value_cansleep(unsigned gpio, int value)
 
 /* sysfs support is only available with gpiolib, where it's optional */
 
-static inline int gpio_export(unsigned gpio, bool direction_may_change)
+static inline int gpio_export(unsigned gpio __attribute__ ((unused)),
+                              bool direction_may_change __attribute__ ((unused)))
 {
 	return -ENOSYS;
 }
 
-static inline int gpio_export_link(struct device *dev, const char *name,
-				unsigned gpio)
+static inline int gpio_export_link(struct device *dev __attribute__ ((unused)),
+                                   const char *name __attribute__ ((unused)),
+                                   unsigned gpio __attribute__ ((unused)))
 {
 	return -ENOSYS;
 }
 
-static inline void gpio_unexport(unsigned gpio)
+static inline void gpio_unexport(unsigned gpio __attribute__ ((unused)))
 {
 }
 #endif	/* CONFIG_GPIO_SYSFS */
